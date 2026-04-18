@@ -1,0 +1,3 @@
+[submodule "roslibjs"]
+	path = roslibjs
+	url = https://github.com/RobotWebTools/roslibjs.git

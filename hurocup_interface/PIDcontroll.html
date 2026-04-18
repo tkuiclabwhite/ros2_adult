@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+
+<head lang="en">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+	<link rel="SHORTCUT ICON" href="./picture/icon.png">
+
+	<link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
+	<title>PID Control Interface</title>
+	<style>
+			section {
+        		background-color:  #333;
+    	    	padding: 10px;
+        		margin: 10px;
+				width: 31%;
+				height: 500px;
+				border: 2px black solid;
+				color: white;
+       		}
+       		#control{
+       			width: 90%;
+       			margin: 20px auto;
+			   }
+			   
+			#leftbox
+			{
+				margin-left: 20%;
+			}
+
+			#rightbox
+			{
+				margin-right: 20%;
+			}
+			#Wave{
+				position:absolute;
+				left:345px;
+				top:635px;
+				background-color:  #333;
+    	    	padding: 10px;
+        		margin: 10px;
+				width: 800px;
+				height: 235px;
+				border: 2px black solid;
+				color: white;
+			}
+			body
+			{
+				width: auto;
+				min-width: 950px;
+				height: 1000px;
+				overflow: visible;
+				background-size: cover;
+			}
+
+		</style>
+	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
+	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+	<script type="text/javascript">
+
+		var ros = new ROSLIB.Ros({
+			url: "ws://172.17.121.10:9090"
+		});
+		ros.on('connection', function () {
+			console.log('Connection made!');
+			connectFlag = true;
+			createTopics();
+			document.getElementById('connected').style.display = 'inline';
+		});
+		ros.on('error', function (error) {
+			console.log('Error connecting to websocket server: ', error);
+			document.getElementById('connected').style.display = 'none';
+		});
+		ros.on('close', function () {
+			console.log('Connection to websocket server closed.');
+			document.getElementById('connected').style.display = 'none';
+		});
+        var PIDpackage_Publisher = new ROSLIB.Topic({
+			ros: ros,
+			name: '/package/pidcontroll',
+			messageType: 'tku_msgs/PIDpackage'
+		});
+        var PIDpackage = new ROSLIB.Message({
+			motor_P:  0,
+            motor_P:  0,
+            motor_P:  0,
+			Pflag    :  false,
+			Iflag    :  false,
+			Dflag    :  false,
+            motorID  : 0
+		});
+        var SensorSet_Publisher = new ROSLIB.Topic({
+			ros: ros,
+			name: '/sensorset',
+			messageType: 'tku_msgs/SensorSet'
+		});
+		var SensorSet_msg = new ROSLIB.Message({
+			sensor_modeset: 0
+		});
+		var pre_motor_P = -1;
+        var pre_motor_I = -1;
+        var pre_motor_D = -1;
+		var pre_motorID = -1;
+
+		//-----
+
+		var connectFlag = false;
+		var myAddress = "172.17.121.10";
+		
+		/* Kick Ball Variables End */	
+
+		function createTopics() {
+			if(SensorPackage_Subscriber != null)
+			{
+				SensorPackage_Subscriber.unsubscribe();
+			}
+			var SensorPackage_Subscriber = new ROSLIB.Topic({
+			ros: ros,
+			name: '/package/sensorpackage',
+			messageType: 'tku_msgs/SensorPackage'
+			});
+			SensorPackage_Subscriber.subscribe(function (msg)
+			{		
+				document.getElementById("Roll").value = msg.IMUData[0];
+				document.getElementById("Pitch").value = msg.IMUData[1];
+				document.getElementById("Yaw").value = msg.IMUData[2];
+			});
+		}
+
+		function enterAddress() {
+			if(connectFlag)
+			{
+				ros.close();
+				connectFlag = false;
+			}
+			myAddress = document.getElementById("addressSelect").value;
+			console.log("Connecting address is", myAddress)
+			ros.connect("ws://" + myAddress + ":9090");
+		}
+
+		function SendSensorSet()
+		{
+			var motor_P  = 0;
+			var motor_I  = 0;
+            var motor_D  = 0;
+            var motorID  = 0;
+			var Pflag = false;
+			var Iflag = false;
+			var Dflag = false;
+
+			
+			motor_P = Number(document.getElementById("motor_P").value);
+			motor_I = Number(document.getElementById("motor_I").value);
+			motor_D = Number(document.getElementById("motor_D").value);
+            motorID = Number(document.getElementById("motor_set").value);//parseInt(document.getElementById("motor_9_set").value);
+            console.log(document.getElementById("motor_set").value);
+			console.log(motor_P);
+			console.log(pre_motor_P);
+			if(motorID != pre_motorID)
+			{
+				pre_motor_P = -1;
+				pre_motor_P = -1;
+				pre_motor_P = -1;
+			}
+			if(document.getElementById("Pflag").checked)
+			{
+				Pflag = true;
+				PIDpackage.motor_P  = motor_P;
+			}
+			else if(document.getElementById("Iflag").checked)
+			{
+				Iflag = true;
+				PIDpackage.motor_I  = motor_I;
+			}
+			else if(document.getElementById("Dflag").checked)
+			{
+				Dflag = true;
+				PIDpackage.motor_D  = motor_D;
+			}
+
+			pre_motor_P = motor_P;
+			pre_motor_I = motor_I;
+			pre_motor_D = motor_D;
+			pre_motorID = motorID;
+			if(document.getElementById("IMU_reset_").checked)
+			{
+				sensor_modeset = 0x02;
+			}
+
+			
+				
+				
+                
+				PIDpackage.Pflag  = Pflag;
+				PIDpackage.Iflag  = Iflag;
+				PIDpackage.Dflag  = Dflag;
+
+
+                PIDpackage.motorID    = motorID;
+
+			PIDpackage_Publisher.publish(PIDpackage);
+			SensorSet_msg.sensor_modeset = sensor_modeset;
+			SensorSet_Publisher.publish(SensorSet_msg);
+		}
+		function SendGainSet()
+		{
+			
+		}
+	</script>
+</head>
+
+<body>
+	<!-- NAV BAR -->
+	<ul>
+		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+        <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="PIDcontroll.html">PIDcontroll</a></li>
+		<li class="logo" style="width: 226px;">
+			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+		</li>
+	</ul>
+	<br />
+
+	<p id="connected" style="color:#00D600; display: none; font-size: 20px;">
+		Connected
+	</p>
+	<form>
+		<div id="head" align="center">
+			<h1 align="center" id="header" style="color: white;">PID Control Interface</h1>
+			<table>
+				<tr>
+					<td>
+						<select style="height:25px; margin-right: 5px;" id="addressSelect">
+							<option value="172.17.121.10">172.17.121.10</option>
+							<option value="localhost">localhost</option>
+						</select>
+					</td>
+					<td>
+						<button type="button" style="width:110px ;height:25px;" id="changeAddressButton" onclick="enterAddress()">Enter Address</button>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<div id="control" align="center" >
+			<div align="center" style="float: center; width: 530px;  ">
+			<section id="SensorValue" align="center" style="margin-left: 0%;float: left; width: 180px">
+				<b><h align="center"style="font-size: 23px">IMU_Value</h></b>
+				<table>
+					<tr>
+						<td style="color:#888;font-size: 18px">IMU:</td>
+					</tr>
+					<tr>
+						<td>Roll:</td>
+						<td><input type="text" name="Roll" id="Roll" value="0" style="width: 70px"></td>
+					</tr>
+					<tr>
+						<td>Pitch:</td>
+						<td><input type="text" name="Pitch" id="Pitch" value="0" style="width: 70px"></td>
+					</tr>
+					<tr>
+						<td>Yaw:</td>
+						<td><input type="text" name="Yaw" id="Yaw" value="0" style="width: 70px"></td>
+					</tr>
+                    <tr>
+						<td><input style="margin-top: 10px " type="checkbox" name="sensor" id="IMU_reset_" value="IMU_reset"></td>
+						<td><label for="IMU_reset_">IMU_reset</label></td>
+					</tr>
+					<table style="margin-top: 20px "></table>
+				</table>
+				<!-- <button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 5px;display: inline-block;" onclick="SendSensorSet()">IMU reset</button> -->
+				</table>
+				
+			</section>
+			<section id="SensorValue" align="center" style="margin-left: 0%;float: left; width: 330px">
+				<b><h align="center"style="font-size: 23px">PID_Parameter</h></b>
+				<table style="margin-top: 10px ">
+					<tr>
+						<td></td>
+						<td>ID</td>
+						
+						<td><input type="text" name="motor" id="motor_set" value="-1" style="width: 50px"></td>
+					</tr>
+					<tr>
+						
+						<td><input style="margin-top: 10px " type="radio" name="flag" id="Pflag" value="flag"></td>
+						<td>P</td>
+						<td><input type="text" name="motor_P" id="motor_P" value="800" style="width: 50px"></td>
+					</tr>
+					<tr>
+						
+						<td><input style="margin-top: 10px " type="radio" name="flag" id="Iflag" value="flag"></td>
+						<td>I</td>
+						<td><input type="text" name="motor_I" id="motor_I" value="0" style="width: 50px"></td>
+					</tr>
+					<tr>
+						
+						<td><input style="margin-top: 10px " type="radio" name="flag" id="Dflag" value="flag"></td>
+						<td>D</td>
+						<td><input type="text" name="motor_D" id="motor_D" value="0" style="width: 50px"></td>
+					</tr>
+                    
+					<table style="margin-top: 20px "></table>
+				</table>
+				<button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 5px;display: inline-block;" onclick="SendSensorSet()">Sensor Set</button>
+				</table>
+			</section>
+		</div>
+		</div>
+	</form>
+</body>
+
+</html>

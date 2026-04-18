@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html>
+
+<head lang="en">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+	<link rel="SHORTCUT ICON" href="./picture/icon.png">
+
+	<link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
+	<title>Walking Interface</title>
+	<style>
+			section {
+        		background-color:  #333;
+    	    	padding: 10px;
+        		margin: 10px;
+				width: 31%;
+				height: 500px;
+				border: 2px black solid;
+				color: white;
+       		}
+       		#control{
+       			width: 90%;
+       			margin: 20px auto;
+			   }
+			   
+			#leftbox
+			{
+				margin-left: 20%;
+			}
+
+			#rightbox
+			{
+				margin-right: 20%;
+			}
+			
+			body
+			{
+				width: auto;
+				min-width: 950px;
+				height: 1000px;
+				overflow: visible;
+				background-size: cover;
+			}
+
+		</style>
+	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
+	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+	<script type="text/javascript">
+		var wasOnline = true;
+		var ros = new ROSLIB.Ros({
+		url: "ws://172.17.121.10:9090"
+		});
+
+		function checkConnection() {
+			if (ros && window.navigator.onLine) {
+				document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+				console.log('Setting background to online image');
+				if(!wasOnline){
+					console.log("Network status changed to online. Triggering enterAddress().");
+					enterAddress();
+					wasOnline = true;
+				}
+
+			}else{
+				document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+				console.log('Setting background to offline image');
+				if(wasOnline){
+					console.log("Network status changed to offline. Triggering enterAddress().");
+					enterAddress();
+					wasOnline = false;
+				}
+				wasOnline = false;
+			}	
+		}
+		
+
+		// Listen to online and offline events
+		window.addEventListener('online', checkConnection);
+		window.addEventListener('offline', checkConnection);
+
+		ros.on('connection', function () {
+			console.log('Connection made!');
+			connectFlag = true;
+			createTopics();
+			document.getElementById('connected').style.display = 'inline';
+
+			checkConnectionInterval = setInterval(checkConnection, 1000);
+		});
+		ros.on('error', function (error) {
+			console.log('Error connecting to websocket server: ', error);
+			clearInterval(checkConnectionInterval);
+			document.getElementById('connected').style.display = 'none';
+
+			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+		});
+		ros.on('close', function () {
+			console.log('Connection to websocket server closed.');
+			clearInterval(checkConnectionInterval);
+			document.getElementById('connected').style.display = 'none';
+
+			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+		});
+
+		var SendBodyAuto_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/SendBodyAuto_Topic',
+			messageType: 'tku_msgs/Interface'
+		});
+		var ChangeContinuousValue_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/ChangeContinuousValue_Topic',
+			messageType: 'tku_msgs/Interface'
+		});
+		var Walkinggait_topic = new ROSLIB.Message({
+			x: 0,
+			y: 0,
+			z: 0,
+			theta: 0,
+			walking_mode: 0,
+			walking_state: 0,
+			sensor_mode: 0
+		});
+
+		var ContinousMode_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/ContinousMode_Topic',
+			messageType: 'std_msgs/Int16'
+		});
+		var ContinousMode_msg = new ROSLIB.Message({
+			data: 0
+		});
+		var Send_parameter = new ROSLIB.Topic({
+			ros: ros,
+			name: '/Send_parameter',
+			messageType: 'std_msgs/Bool'
+		});
+		var Send_parameter_msg = new ROSLIB.Message({
+			data: false
+		});
+		var walkingParamsUpdateTopic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/walking_params_update',
+			messageType: 'std_msgs/String'
+		});
+		var Continuousback_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/walkinggait/Continuousback',
+			messageType: 'std_msgs/Bool'
+		});
+		var Continuousback_msg = new ROSLIB.Message({
+			data: false
+		});
+
+		var web_parameter_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/web/parameter_Topic',
+			messageType: 'tku_msgs/Parameter'
+		});
+
+		var parameter_msg = new ROSLIB.Message({
+			com_y_swing		: 0.0,
+			width_size		: 4.5,
+			period_t		: 360,
+			t_dsp			: 0,
+			lift_height		: 2.5,
+			stand_height	: 50,
+			com_height		: 40,
+			hip_roll   		: 0,
+			ankle_roll 		: 0,
+		});
+
+		var SensorSet_Publisher = new ROSLIB.Topic({
+			ros: ros,
+			name: '/sensorset',
+			messageType: 'tku_msgs/SensorSet'
+		});
+		var SensorSet_msg = new ROSLIB.Message({
+			reset: false,
+		});
+
+		var LoadWalkingGaitParameterClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/web/LoadWalkingGaitParameter',
+			serviceType: 'tku_msgs/WalkingGaitParameter'
+		});
+		var WalkingGaitParameter_request = new ROSLIB.ServiceRequest({
+			mode: 0
+		});
+
+		//-----
+		var SensorPackage_Subscriber = null;
+
+		var connectFlag = false;
+		var myAddress = "172.17.121.10";
+		
+		var Thetavaluetmp = 0;
+		var Xvaluetmp = 0;
+		var Yvaluetmp = 0;
+		var statetype = 0;
+		var ContinousModetmp = 0;
+
+		/* Kick Ball Variables End */
+		document.onkeydown = getKeyboard;
+
+		function getKeyboard(e) {
+			switch(window.event.keyCode)
+			{
+				case 87:	//W, Forward
+					ForwardFun();
+					break;
+				case 83:	//S, Backward
+					BackwardFun();
+					break;
+				case 65:	//A, Left Move
+					LeftFun();
+					break;
+				case 68:	//D, Right Move
+					RightFun();
+					break;
+				case 81:	//Q, Left Turn
+					LeftTurnFun();
+					break;
+				case 69:	//E, Right Turn
+					RightTurnFun();
+					break;
+			}
+		}
+
+		function createTopics() {
+			if(SensorPackage_Subscriber != null)
+			{
+				SensorPackage_Subscriber.unsubscribe();
+			}
+			var SensorPackage_Subscriber = new ROSLIB.Topic({
+			ros: ros,
+			name: '/package/sensorpackage',
+			messageType: 'tku_msgs/SensorPackage'
+			});
+			SensorPackage_Subscriber.subscribe(function (msg)
+			{		
+				document.getElementById("Roll").value  = parseInt(msg.roll);
+				document.getElementById("Pitch").value = parseInt(msg.pitch);
+				document.getElementById("Yaw").value   = parseInt(msg.yaw);
+			});
+
+		}
+
+		function enterAddress() {
+			if(connectFlag)
+			{
+				ros.close();
+				connectFlag = false;
+			}
+			myAddress = document.getElementById("addressSelect").value;
+			console.log("Connecting address is", myAddress);
+			
+			// WebSocket 連線 (9090)
+			ros.connect("ws://"+myAddress+":9090");
+		}
+
+		var location_strategy = new ROSLIB.Topic({
+			ros: ros,
+			name: '/location',
+			messageType: 'tku_msgs/location'
+		});
+
+		var location_msg = new ROSLIB.Message({
+			data: ""
+
+		});
+
+		function strategylocation() {
+			// 获取选定的值
+			location_msg.data = "/home/iclab/ros2_adult/src/strategy/strategy/"+ document.getElementById('strategy_location').value + "/Parameter";
+			console.log(`Selected strategy location: ${location_msg.data}`);
+			location_strategy.publish(location_msg);
+		}
+
+		function LeftTurnFun() {
+			Thetavaluetmp = Number(Thetavaluetmp) + 1;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
+			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+
+		function ForwardFun() {
+			Xvaluetmp = Number(Xvaluetmp) + 100;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+
+		function RightTurnFun() {
+			Thetavaluetmp = Number(Thetavaluetmp) - 1;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
+			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+
+		function LeftFun() {
+			Yvaluetmp = Number(Yvaluetmp) + 100;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+
+		function RightFun() {
+			Yvaluetmp = Number(Yvaluetmp) - 100;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+
+		function BackwardFun() {
+			Xvaluetmp = Number(Xvaluetmp) - 100;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		
+		function Generate() {
+			if (statetype == 0 && ContinousModetmp == 0) {
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 0 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 7 && ContinousModetmp == 0) 
+			{
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 7 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 8 && ContinousModetmp == 0) 
+			{
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 8 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			}
+			SendBodyAutoFun();
+		}
+
+		function ChangeContinuousValueFun() {
+			Walkinggait_topic.x = Number(Xvaluetmp);
+			Walkinggait_topic.y = Number(Yvaluetmp);
+			Walkinggait_topic.z = 0;
+			Walkinggait_topic.theta = Number(Thetavaluetmp);
+			Walkinggait_topic.walking_mode = Number(statetype);
+			Walkinggait_topic.sensor_mode = Number(document.getElementById("IMU_Control").value);
+			console.log(Walkinggait_topic.sensor_mode);
+			ChangeContinuousValue_Topic.publish(Walkinggait_topic);
+		}
+
+		function SendBodyAutoFun() {
+			Walkinggait_topic.x = Number(Xvaluetmp);
+			Walkinggait_topic.y = Number(Yvaluetmp);
+			Walkinggait_topic.z = 0;
+			Walkinggait_topic.theta = Number(Thetavaluetmp);
+			Walkinggait_topic.walking_mode = Number(statetype);
+			Walkinggait_topic.sensor_mode = Number(document.getElementById("IMU_Control").value);
+			console.log(Walkinggait_topic.sensor_mode);
+			SendBodyAuto_Topic.publish(Walkinggait_topic);
+		}
+
+		function changeXvalue(value) {
+			Xvaluetmp = value;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+		}
+
+		function changeYvalue(value) {
+			Yvaluetmp = value;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+		}
+
+		function changethetavalue(value) {
+			Thetavaluetmp = value;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
+		}
+
+		function ContinuousFun() {
+			statetype = 0;
+			Load();
+			document.getElementById("continuousstep").style.display = "inline";
+		}
+
+		function Load() {
+			if (document.getElementById("Continuousback").checked) {
+				Continuousback_msg.data = true;
+				console.log("checked");
+			}
+			else {
+				Continuousback_msg.data = false;
+				console.log("unchecked");
+			}
+			Continuousback_Topic.publish(Continuousback_msg);
+			console.log('statetype = ', statetype);
+			WalkingGaitParameter_request.mode = Number(statetype);
+			LoadWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (walkinggait_parameter) {
+				com_y_swing_tmp 	= walkinggait_parameter.com_y_swing;
+				width_size_tmp		= walkinggait_parameter.width_size;
+				period_t_tmp 	  	= walkinggait_parameter.period_t;
+				T_DSP_tmp			= walkinggait_parameter.t_dsp;
+				lift_height_tmp 	= walkinggait_parameter.lift_height;
+				stand_height_tmp 	= walkinggait_parameter.stand_height;
+				com_height_tmp 		= walkinggait_parameter.com_height;
+				hip_roll_tmp 		= walkinggait_parameter.hip_roll;
+				ankle_roll_tmp 		= walkinggait_parameter.ankle_roll;
+
+				switch (statetype) {
+					case 0:
+						document.getElementById("com_y_swing").value 	= com_y_swing_tmp;
+						document.getElementById("WidthSize").value 		= width_size_tmp;
+						document.getElementById("period_t").value 		= period_t_tmp;
+						document.getElementById("T_DSP").value 			= T_DSP_tmp;
+						document.getElementById("lift_height").value 	= lift_height_tmp;
+						document.getElementById("stand_height").value 	= stand_height_tmp;
+						document.getElementById("com_height").value 	= com_height_tmp;
+						document.getElementById("hip_roll").value 		= hip_roll_tmp;
+						document.getElementById("ankle_roll").value 	= ankle_roll_tmp;
+						break;
+				}
+			});
+		}
+
+		function Save() {
+			var s_type = Number(statetype);
+			function getVal(id, defaultVal) {
+				var el = document.getElementById(id);
+				// 如果元素存在且有值，就回傳數值；否則回傳預設值
+				if (el && el.value !== "") {
+					return Number(el.value);
+				}
+				return defaultVal;
+			}
+
+			function getChecked(id) {
+				var el = document.getElementById(id);
+				if (el) return el.checked;
+				return false;
+			}
+
+			var map = {
+				com_y_swing		: "com_y_swing",
+				width			: "width_size",
+				period			: "period_t",
+				T_DSP			: "T_DSP",
+				lift_height		: "lift_height",
+				stand_height	: "stand_height",
+				com_height		: "com_height",
+				hip_roll		: "hip_roll",
+				ankle_roll		: "ankle_roll",
+			};
+
+			// 根據模式覆寫 ID (Override)
+			switch (s_type) {
+				case 0: // Continuous
+					map.com_y_swing 	= "com_y_swing";
+					map.width 			= "WidthSize";
+					map.period 			= "period_t";
+					map.T_DSP 			= "T_DSP";
+					map.lift_height 	= "lift_height";
+					map.stand_height 	= "stand_height";
+					map.com_height 		= "com_height";
+					map.hip_roll 		= "hip_roll";
+					map.ankle_roll 		= "ankle_roll";
+					break;
+			}
+
+			// =========================================================
+			// 3. 從網頁讀取數值 (不再依賴 _tmp 全域變數)
+			// =========================================================
+			// 建立訊息封包
+			var msg_to_send = new ROSLIB.Message({
+				mode: s_type,
+				
+				// 核心參數
+				com_y_swing		: getVal(map.com_y_swing, 0),
+				width_size		: getVal(map.width, 4.5),
+				period_t		: getVal(map.period, 360),
+				t_dsp			: getVal(map.T_DSP, 0),
+				lift_height		: getVal(map.lift_height, 2.5),
+				stand_height	: getVal(map.stand_height, 50),
+				com_height		: getVal(map.com_height, 40),
+				hip_roll		: getVal(map.hip_roll, 0),
+				ankle_roll		: getVal(map.ankle_roll, 0),
+			});
+
+			console.log("Saving Parameter (From UI Input):", msg_to_send);
+			web_parameter_Topic.publish(msg_to_send);
+		}
+
+		function SendParam2FPGA() {
+			Send_parameter_msg.data = true;
+			Send_parameter.publish(Send_parameter_msg);
+
+			// 取得 HTML 上的數值
+			const COM_Y_swing  	= Number(document.getElementById("com_y_swing").value || 0);
+			const width_size   	= Number(document.getElementById("WidthSize").value || 0);
+			const period_t     	= Number(document.getElementById("period_t").value || 0);
+			const Tdsp         	= Number(document.getElementById("T_DSP").value || 0);
+			const lift_height  	= Number(document.getElementById("lift_height").value || 0);
+			const stand_height 	= Number(document.getElementById("stand_height").value || 0);
+			const COM_HEIGHT   	= Number(document.getElementById("com_height").value || 0);
+			const hip_roll   	= Number(document.getElementById("hip_roll").value || 0);
+			const ankle_roll   	= Number(document.getElementById("ankle_roll").value || 0);
+
+			const params = {
+				"period_t":    period_t,
+				"Tdsp":        Tdsp,
+				"COM_HEIGHT":  COM_HEIGHT,
+				"STAND_HEIGHT": stand_height, // ★ 修正：使用小寫的變數 stand_height
+				"lift_height": lift_height,
+				"width_size":  width_size,
+				"com_y_swing": COM_Y_swing,
+				"hip_roll": hip_roll,
+				"ankle_roll": ankle_roll,
+			};
+
+		    const msg = new ROSLIB.Message({
+		        data: JSON.stringify(params)
+		    });
+
+		    console.log("publish /walking_params_update:", params);
+		    walkingParamsUpdateTopic.publish(msg);
+		}
+		
+		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+		// 網頁端參數
+		function changecom_y_swing_value(value) {
+			com_y_swing_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("com_y_swing").value = com_y_swing_tmp;
+					break;
+			}
+		}
+
+		function changeWidthSize_value(value){
+			width_size_tmp = Number(value) || 0;
+			document.getElementById("WidthSize").value = width_size_tmp;
+		}
+
+		function changeperiod_t_value(value) {
+			period_t_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("period_t").value = period_t_tmp;
+					break;
+			}
+		}
+		
+		function changeT_DSP_value(value){
+			t_dsp_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("T_DSP").value = t_dsp_tmp;
+					break;
+			}
+		}
+
+		function changelift_height_value(value) {
+			lift_height_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("lift_height").value = lift_height_tmp;
+					break;
+			}
+		}
+
+		function change_stand_height_value(value) {
+			stand_height_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("stand_height").value = stand_height_tmp;
+					break;
+			}
+		}
+		function change_com_height_value(value) {
+			com_height_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("com_height").value = com_height_tmp;
+					break;
+			}
+		}
+
+		function change_hip_roll_value(value) {
+			hip_roll_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("hip_roll").value = hip_roll_tmp;
+					break;
+			}
+		}
+
+		function change_ankle_roll_value(value) {
+			ankle_roll_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("ankle_roll").value = ankle_roll_tmp;
+					break;
+			}
+		}
+		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+		
+		function changeContinuousback() 
+		{
+			if (document.getElementById("Continuousback").checked) {
+				Continuousback_msg.data = true;
+				console.log("checked");
+			}
+			else {
+				Continuousback_msg.data = false;
+				console.log("unchecked");
+			}
+			Continuousback_Topic.publish(Continuousback_msg);
+		}
+
+		function SendSensorSet()
+		{
+			SensorSet_msg.reset = true;
+			SensorSet_Publisher.publish(SensorSet_msg);
+			if (SensorSet_msg.reset == true)
+			{
+				SensorSet_msg.reset = false;
+			}
+		}
+	</script>
+</head>
+
+<body>
+	<!-- NAV BAR -->
+	<ul>
+		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+        <li class="logo" style="width: 226px;">
+			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+		</li>
+	</ul>
+	<br />
+
+	<p id="connected" style="color:#00D600; display: none; font-size: 20px;">
+		Connected
+	</p>
+	<form>
+		<div id="head" align="center">
+			<h1 align="center" id="header" style="color: white;">Walking Interface</h1>
+			<table>
+				<tr>
+					<td>
+						<select style="height:25px; margin-right: 5px;" id="addressSelect">
+							<option value="172.17.121.10">172.17.121.10</option>
+							<option value="localhost">localhost</option>
+						</select>
+					</td>
+					<td>
+						<button type="button" style="width:110px ;height:25px;" id="changeAddressButton" onclick="enterAddress()">Enter Address</button>
+					</td>
+					<!-- <td>
+						<select style="height:25px; margin-right: 5px;" id="strategy_location" >
+							<option value="ar">ar</option>
+							<option value="bb">bb</option>
+							<option value="mar">mar </option>
+							<option value="obs">obs </option>
+							<option value="wl">wl</option>
+							<option value="sr">sr</option>
+							<option value="sp">sp</option>
+						</select>
+					</td> -->
+					<!-- <td>
+						<button type="button" style="width:110px ;height:25px;" id="changelocationButton" onclick="strategylocation()">location_load</button> -->
+					<!-- </td> -->
+				</tr>
+			</table>
+		</div>
+		<div id="control" align="center" >
+			<section id="SensorValue" align="center" style="margin-left:calc(50% - 430px); float: left; min-width: 180px; max-width: 200px; width: 20%;">
+				<b><h align="center"style="font-size: 23px">Sensor_Value</h></b>
+				<table>
+					<tr>
+						<td style="color:#888;font-size: 18px">IMU:</td>
+					</tr>
+					<tr>
+						<td>Roll:</td>
+						<td><input type="text" name="Roll" id="Roll" value="0" style="width: 70px"></td>
+					</tr>
+					<tr>
+						<td>Pitch:</td>
+						<td><input type="text" name="Pitch" id="Pitch" value="0" style="width: 70px"></td>
+					</tr>
+					<tr>
+						<td>Yaw:</td>
+						<td><input type="text" name="Yaw" id="Yaw" value="0" style="width: 70px"></td>
+					</tr>
+				</table>
+				<button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 5px;display: inline-block;" onclick="SendSensorSet()">IMU reset</button>
+				</table>
+				
+			</section>
+			<section id="walkinggaitcontrol" style="float: left; margin-left: 0%; min-width: 320px; max-width: 400px; width: 35%;">
+				<form action="">
+					<input type="radio" name="gender" value="Continuous" onclick="ContinuousFun()"checked="checked"> Continuous
+
+				</form>
+				<form>
+					<table>
+						<tr>
+							<td>X</td>
+							<td><input type="text" name="Xvalue" id="Xvalue" value="0" onchange="changeXvalue(this.value)"></td>
+						</tr>
+						<tr>
+							<td>Y</td>
+							<td><input type="text" name="Yvalue" id="Yvalue" value="0" onchange="changeYvalue(this.value)"></td>
+						</tr>
+						<tr>
+							<td>Z</td>
+							<td><input type="text" name="Zvalue" id="Zvalue" value="0"></td>
+						</tr>
+						<tr>
+							<td>Theta</td>
+							<td><input type="text" name="Thetavalue" id="Thetavalue" value="0" onchange="changethetavalue(this.value)"></td>
+						</tr>
+					</table>
+					<br />
+					<button type="button" style="width: 132px;height: 40px; margin: 2px; display: inline-block;" onclick="Load()">Load</button>
+					<input type="button" id="Generate_Button" style="width: 132px;height: 40px; margin: 2px; display: inline-block;" onclick="Generate()" value="Generate"></input>
+					<br />
+					<button type="button" style="width: 85px;height: 40px; margin: 2px; display: inline-block;" onclick="LeftTurnFun()">Left Turn</button>
+					<button type="button" style="width: 85px;height: 40px; margin: 2px; display: inline-block;" onclick="ForwardFun()">Forward</button>
+					<button type="button" style="width: 85px;height: 40px; margin: 2px; display: inline-block;" onclick="RightTurnFun()">Right Turn</button>
+					<br>
+					<button type="button" style="width: 85px;height: 40px; margin: 2px; display: inline-block;" onclick="LeftFun()">Left Move</button>
+					<button type="button" style="width: 85px;height: 40px; margin: 2px; display: inline-block;" onclick="RightFun()">Right Move</button>
+					<br>
+					<button type="button" style="width: 85px;height: 40px; margin: 2px; display: inline-block;" onclick="BackwardFun()">Backward</button>
+					<br>
+					<form>
+						<select id="IMU_Control" style="width: 80px;height: 25px;float: right;margin-top: 40px;">
+							<option value="0">No_IMU</option>
+							<option value="1">Y_IMU</option>
+							<option value="2">X_IMU</option>
+							<option value="3">ALL_IMU</option>
+						</select>
+					</form>
+				</form>
+			</section>
+			<section id="continuousstep" style="float: left; margin-left: 0%;  min-width: 300px; max-width: 350px; width: 33%;">
+				<b style="font-size: 25px;">Continuous Step</b>
+				&nbsp;&nbsp; <input type="checkbox" name="Continuousback" id="Continuousback" onclick="changeContinuousback()">Back
+				<br /><br />
+				<table>
+					<tr>
+						<td>com_y_swing</td>
+						<td><input type="text" name="com_y_swing" id="com_y_swing" value="0" style="width: 140px" onchange="changecom_y_swing_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>width_size</td>
+						<td><input type="text" name="width_size" id="WidthSize" value="0" style="width: 140px" onchange="changeWidthSize_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>period_t</td>
+						<td><input type="text" name="period_t" id="period_t" value="0" style="width: 140px" onchange="changeperiod_t_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>T_DSP</td>
+						<td><input type="text" name="T_DSP" id="T_DSP" value="0" style="width: 140px" onchange="changeT_DSP_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>lift_height</td>
+						<td><input type="text" name="lift_height" id="lift_height" value="0" style="width: 140px" onchange="changelift_height_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>STAND_HEIGHT</td>
+						<td><input type="text" name="stand_height" id="stand_height" value="0" style="width: 140px" onchange="change_stand_height_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>COM_HEIGHT</td>
+						<td><input type="text" name="com_height" id="com_height" value="0" style="width: 140px" onchange="change_com_height_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>hip_roll</td>
+						<td><input type="text" name="hip_roll" id="hip_roll" value="0" style="width: 140px" onchange="change_hip_roll_value(this.value)"></td>
+					</tr><tr>
+						<td>ankle_roll</td>
+						<td><input type="text" name="ankle_roll" id="ankle_roll" value="0" style="width: 140px" onchange="change_ankle_roll_value(this.value)"></td>
+					</tr>
+				</table>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="Save()">Save</button>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendParam2FPGA()">Send</button>
+			</section>
+		</div>
+	</form>
+</body>
+</html>

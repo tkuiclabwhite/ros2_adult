@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content_Type" content="text/html" charset="UTF-8">
+    <link rel="SHORTCUT ICON" href="./picture/icon.png">
+    <title>MotionControl</title>
+
+    <script src="./js/jquery.min.js"></script>
+    <script src="./js/jquery-ui.min.js"></script>
+    <script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
+    <script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+    <script type="text/javascript" src="./js/Interface.js"></script>
+    <script type="text/javascript" src="./js/InterfaceTable.js"></script>
+    
+    <link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/InterfaceTable.css">
+
+    <style>
+        .button{
+            width: 1500px;
+        }
+        
+        /* --- 1. 初始狀態 (OFF - 待機模式) --- */
+        .neon-btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            width: 100%;
+            height: 60px;
+            font-size: 24px;
+            font-weight: bold;
+            text-transform: uppercase; /* 強制大寫 */
+            color: #03e9f4;            /* 霓虹青色文字 */
+            background: transparent;   /* 背景透明 */
+            border: 2px solid #03e9f4; /* 青色邊框 */
+            border-radius: 5px;        /* 輕微圓角 */
+            cursor: pointer;
+            letter-spacing: 4px;       /* 字距拉開，增加氣勢 */
+            
+            /* 製造文字和邊框的微弱光暈 */
+            text-shadow: 0 0 5px #03e9f4;
+            box-shadow: 0 0 5px #03e9f4;
+            
+            transition: 0.5s;          /* 過渡時間稍微拉長，更有呼吸感 */
+            overflow: hidden;          /* 隱藏溢出的光芒 */
+        }
+
+        /* 滑鼠移上去的特效 (Hover) - 增加互動感 */
+        .neon-btn:hover {
+            background: #03e9f4;
+            color: #050505;
+            box-shadow: 0 0 5px #03e9f4,
+                        0 0 25px #03e9f4,
+                        0 0 50px #03e9f4,
+                        0 0 200px #03e9f4;
+        }
+
+        /* --- 2. 啟動狀態 (ON - 激活模式) --- */
+        .neon-btn.active {
+            background-color: #03e9f4; /* 變實心 */
+            color: #050505;            /* 文字變黑 */
+            border-color: #03e9f4;
+            
+            /* 這裡是最帥的地方：四層陰影疊加，製造強烈光爆感 */
+            box-shadow: 0 0 10px #03e9f4, 
+                        0 0 40px #03e9f4, 
+                        0 0 80px #03e9f4;
+            
+            /* 讓按鈕稍微亮一點，並保持這個狀態 */
+            transform: scale(1.05);    /* 稍微放大，表示能量充滿 */
+        }
+    </style>
+</head>
+
+<body>
+    <ul>
+        <li class="logo" style="width: 226px;">
+            <a target="_blank" href="index.html" class="logo"><img id="logoimg"
+                    src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+        </li>
+        <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+        <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+    </ul>
+    <br>
+    <p id="connected" style="color:#00D600; display:none; font-size: 20px;">
+        Connected
+    </p>
+
+    <form id="childform" name="childform">
+        <div id="container">
+			<div style="margin-left: 180px;"> 
+				<input type="text" id="filename" name="filename" value="Your_File_Name" style="width: 179px;">
+				<input type="button" id="SaveButton" value="Save" style="width:80px;" disabled="disabled">
+				<input type="button" id="ReadButton" value="Read" onclick="Read();" style="width:80px;" disabled="disabled">
+				<input type="button" id="SaveStandButton" value="SaveStand" style="width:80px;" disabled="disabled">
+				<input type="button" id="ReadStandButton" value="ReadStand" onclick="ReadStand();" style="width:80px;" disabled="disabled">
+                <input type="button" id="resetButton" value="reset" onclick="resetfunction();" style="width:80px;" disabled="disabled">
+			</div>
+
+            <div style="width: 800px; margin-top: 16px; margin-bottom: 16px; margin-left: 180px;">
+                ID: <input type="text" id="SendID" value=-1 style="width:50px;">
+                Sector: <input type="text" id="Sector" value=-1 style="width:50px;">
+                <input type="button" id="SendButton" value="Send" onclick="Send();" style="width:80px;" disabled="disabled">
+                <input type="checkbox" id="Locked29" value="Locked" onclick="Locked();" checked>Locked 29
+                <input type="checkbox" id="Lockedstand" value="LockedStand" onclick="Locked2()" checked>Locked Stand
+                <input type="button" id="executeButton" value="execute" onclick="execute();" style="width:80px; margin-left:5px;" disabled="disabled">
+                <input type="button" id="standButton" value="stand" onclick="stand();" style="width:80px;" disabled="disabled">
+            </div>
+
+            <div style="width: 800px; margin-top: 16px; margin-bottom: 16px; margin-left: 180px;">
+                ID:&nbsp;<input type="text" id="chose_multiple" value= "-1" style="width:50px">
+                multipy&nbsp;<input type="text" id="times" value= "-1" style="width:50px">
+				times&nbsp;<input type="button" id="MultipleButton" value="Multiple" onclick="Multiple();" style="width:80px; margin-right:23px;" disabled="disabled">
+                ID1:&nbsp;<input type="text" id="Merge1" value="-1" style="width:50px;">&nbsp;merge&nbsp;to&nbsp;ID2:&nbsp;<input type="text" id="Merge2" value="-1" style="width:50px;">
+				<input type="button" id="MergeButton" value="Merge" onclick="Merge();" style="width:80px;" disabled="disabled">
+            </div>
+
+            <div style="margin-left: 120px;">
+                <div id="head">
+                    <table>
+                        <tr>
+                            <td>
+                                <select style="height:25px; margin-right: 5px;" id="addressSelect">
+                                    <option value="172.17.121.10">172.17.121.10</option>
+                                    <option value="localhost">localhost</option>
+                                </select>
+                            </td>
+                            <td>
+                                <button type="button" style="width:110px ;height:25px;" id="changeAddressButton" onclick="enterAddress()">Enter Address</button>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+			<div id="label" style="width: 900px; margin-left:180px; margin-top:10px;"></div>
+			<div id="stand_label" style="width: 900px; margin-left:180px; margin-top:10px;"></div>
+            
+            <div style="float: left; width: 1010px;">
+				<div id="leftbox" style="margin-left: 30px; margin-top:50px;">
+                    <input type="button" id="AddButton" value="Add" onclick="Add();" style="width: 65px;" disabled="disabled">
+                    <input type="button" id="DeleteButton" value="Delete" onclick="Delete();" style="width:65px" disabled="disabled"></input> : <input type="text" id="chose_delete" value="-1" style="width:50px;">
+                    <input type="button" id="ReverseButton" value="Reverse" onclick="Reverse();" style="width:65px" disabled="disabled"> : <input type="text" id="chose_reverse" value="-1" style="width:50px;">
+                    <input type="button" id="CopyButton" value="Copy" onclick="Copy();" style="width:65px" disabled="disabled"> : <input type="text" id="chose_copy" value="-1" style="width:50px;">
+                	<input type="button" id="CheckSumButton" value="CheckSum" onclick="CheckSum();" style=" margin-top:20px;" disabled="disabled"><br>
+					ID: <input type="text" id="CheckSumID" value=-1 style="width:50px; margin-top:5px;">
+					<div id="CheckSumBox" style="height: 240px; margin-top:30px;">
+                        <div class="checksumsmallbox">M1: </div>
+                        <div class="checksumsmallbox">M2: </div>
+                        <div class="checksumsmallbox">M3: </div>
+                        <div class="checksumsmallbox">M4: </div>
+                        <div class="checksumsmallbox">M5: </div>
+                        <div class="checksumsmallbox">M6: </div>
+                        <div class="checksumsmallbox">M7: </div>
+                        <div class="checksumsmallbox">M8: </div>
+                        <div class="checksumsmallbox">M9: </div>
+                        <div class="checksumsmallbox">M10:</div>
+                        <div class="checksumsmallbox">M11:</div>
+                        <div class="checksumsmallbox">M12:</div>
+                        <div class="checksumsmallbox">M13:</div>
+                        <div class="checksumsmallbox">M14:</div>
+                        <div class="checksumsmallbox">M15:</div>
+                        <div class="checksumsmallbox">M16:</div>
+                        <div class="checksumsmallbox">M17:</div>
+                        <div class="checksumsmallbox">M18:</div>
+                        <div class="checksumsmallbox">M19:</div>
+                        <div class="checksumsmallbox">M20:</div>
+                        <div class="checksumsmallbox">M21:</div>
+                        <div class="checksumsmallbox">M22:</div>
+                        <div class="checksumsmallbox">M23:</div>
+                        <div class="checksumsmallbox">M24:</div>
+                        <div class="checksumsmallbox">M25:</div>
+                        <div class="checksumsmallbox">M26:</div>
+                        <div class="checksumsmallbox">M27:</div>
+                    </div>
+                </div>
+
+                <section style=" float: left; margin-left: 20px; margin-top: 10px;">
+                    <input type="radio" name="List" value="0" onclick="MotionList(this.value);" checked> MotionList
+                    <input type="radio" name="List" value="1" onclick="MotionList(this.value);"> RelativePosition
+                    <input type="radio" name="List" value="2" onclick="MotionList(this.value);"> RelativeSpeed
+                    <input type="radio" name="List" value="3" onclick="MotionList(this.value);"> AbsolutePosition
+                    <input type="radio" name="List" value="4" onclick="MotionList(this.value);"> AbsoluteSpeed
+                </section>
+
+                <div class="box" id="MotionList" style="display: initial; overflow-x : scroll; overflow-y : hidden">
+                    <div class="smallbox" style=" width: 2300px; position: relative;">
+                        <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">Name</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A1</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D1</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A2</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D2</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A3</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D3</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A4</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D4</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A5</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D5</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A6</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D6</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A7</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D7</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A8</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D8</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A9</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D9</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A10</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D10</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A11</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D11</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A12</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D12</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A13</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D13</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A14</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D14</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A15</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D15</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A16</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D16</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A17</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D17</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A18</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D18</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A19</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D19</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A20</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D20</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A21</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D21</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">A22</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">D22</div>
+                    </div>
+                    <div class="smallbox" style="margin-top: 2px; width: 2300px; height: 305px; overflow-y: auto; overflow-x: hidden;">
+                        <div id="MotionTable"></div>
+                    </div>
+                </div>
+                <div class="box" id="RelativePosition" style="display: none; overflow-x: scroll; overflow-y: hidden">
+                    <div class="smallbox" style=" width: 1450px; position: relative;">
+                        <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">Name</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M1</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M2</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M3</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M4</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M5</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M6</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M7</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M8</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M9</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M10</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M11</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M12</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M13</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M14</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M15</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M16</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M17</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M18</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M19</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M20</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M21</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M22</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M23</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M24</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M25</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M26</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M27</div>
+                    </div>
+                    <div class="smallbox" style="margin-top: 2px; width: 1450px;height: 305px; overflow-y: auto; overflow-x: hidden;">
+                        <div id="RelativePositionTable" style="width: 1450px;"></div>
+                    </div>
+                </div>
+                <div class="box" id="RelativeSpeed" style="display: none; overflow-x: scroll; overflow-y: hidden">
+                    <div class="smallbox" style=" width: 1450px; position: relative;">
+                        <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">Name</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M1</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M2</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M3</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M4</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M5</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M6</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M7</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M8</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M9</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M10</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M11</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M12</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M13</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M14</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M15</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M16</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M17</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M18</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M19</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M20</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M21</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M22</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M23</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M24</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M25</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M26</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M27</div>
+                    </div>
+                    <div class="smallbox" style="margin-top: 2px; width: 1450px;height: 305px; overflow-y: auto; overflow-x: hidden;">
+                        <div id="RelativeSpeedTable" style=" width: 1450px;"></div>
+                    </div>
+                </div>
+                <div class="box" id="AbsolutePosition" style="display: none; overflow-x: scroll; overflow-y: hidden">
+                    <div class="smallbox" style=" width: 1450px; position: relative;">
+                        <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">Name</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M1</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M2</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M3</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M4</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M5</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M6</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M7</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M8</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M9</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M10</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M11</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M12</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M13</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M14</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M15</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M16</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M17</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M18</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M19</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M20</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M21</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M22</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M23</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M24</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M25</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M26</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M27</div>
+                    </div>
+                    <div class="smallbox" style="margin-top: 2px; width: 1450px;height: 305px; overflow-y: auto; overflow-x: hidden;">
+                        <div id="AbsolutePositionTable" style="width: 1450px;"></div>
+                    </div>
+                </div>
+                <div class="box" id="AbsoluteSpeed" style="display: none; overflow-x: scroll; overflow-y: hidden">
+                    <div class="smallbox" style=" width: 1450px; position: relative;">
+                        <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">Name</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M1</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M2</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M3</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M4</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M5</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M6</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M7</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M8</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M9</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M10</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M11</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M12</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M13</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M14</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M15</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M16</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M17</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M18</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M19</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M20</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M21</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M22</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M23</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M24</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M25</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M26</div>
+                        <div class="inthesmallbox" id="headercolumn" align="center">M27</div>
+                    </div>
+                    <div class="smallbox" style="margin-top: 2px; width: 1450px;height: 305px; overflow-y: auto; overflow-x: hidden;">
+                        <div id="AbsoluteSpeedTable" style="width: 1450px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div> 
+        <div id="rightarea">
+            <div id="robotpic">
+                <div style="float: left; height: 470px ; width: 300px"> 
+                    <button type="button" id="TorqueButton" onclick="TorqueSwitch();" class="neon-btn">扭力關閉</button>
+                    <img src="./picture/towen.webp" style="margin-top: 1px;width:100%; height: 110%; border: solid black 2px;">
+                </div> 
+            </div>
+        </div>
+        <div id="motor_area" style="width: 450px;">
+            <div>
+                <input type="button" id="btn_left_hand" class="button_choose" onclick="Torque_Choose('left_hand', 'btn_left_hand');" value="left_hand" style="width: 80px;">
+                <input type="button" id="btn_right_hand" class="button_choose" onclick="Torque_Choose('right_hand', 'btn_right_hand');" value="right_hand" style="width: 80px;">
+                <input type="button" id="btn_waist" class="button_choose" onclick="Torque_Choose('waist', 'btn_waist');" value="waist" style="width: 80px;">
+                <input type="button" id="btn_left_leg" class="button_choose" onclick="Torque_Choose('left_leg', 'btn_left_leg');" value="left_leg" style="width: 80px;">
+                <input type="button" id="btn_right_leg" class="button_choose" onclick="Torque_Choose('right_leg', 'btn_right_leg');" value="right_leg" style="width: 80px;">
+            </div>
+            <div style="background-color: rgba(46, 58, 61, 0.637); padding: 5px;">
+                <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; width: 450px;">
+                    <div id="div_wrapper_left_hand" class="motor-group">
+                        <div class="header" id="header_left_hand">LEFT HAND</div>
+                        <table>
+                            <thead><tr><th>ID</th><th>Position</th></tr></thead>
+                            <tbody>
+                                <tr><td>1</td><td><input type="text" id="motor_val_1" value="0" readonly></td></tr>
+                                <tr><td>2</td><td><input type="text" id="motor_val_2" value="0" readonly></td></tr>
+                                <tr><td>3</td><td><input type="text" id="motor_val_3" value="0" readonly></td></tr>
+                                <tr><td>4</td><td><input type="text" id="motor_val_4" value="0" readonly></td></tr>
+                                <tr><td>5</td><td><input type="text" id="motor_val_5" value="0" readonly></td></tr>
+                                <tr><td>6</td><td><input type="text" id="motor_val_6" value="0" readonly></td></tr>
+                                <tr><td>7</td><td><input type="text" id="motor_val_7" value="0" readonly></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="div_wrapper_right_hand" class="motor-group">
+                        <div class="header" id="header_right_hand">RIGHT HAND</div>
+                        <table>
+                            <thead><tr><th>ID</th><th>Position</th></tr></thead>
+                            <tbody>
+                                <tr><td>8</td><td><input type="text" id="motor_val_8" value="0" readonly></td></tr>
+                                <tr><td>9</td><td><input type="text" id="motor_val_9" value="0" readonly></td></tr>
+                                <tr><td>10</td><td><input type="text" id="motor_val_10" value="0" readonly></td></tr>
+                                <tr><td>11</td><td><input type="text" id="motor_val_11" value="0" readonly></td></tr>
+                                <tr><td>12</td><td><input type="text" id="motor_val_12" value="0" readonly></td></tr>
+                                <tr><td>13</td><td><input type="text" id="motor_val_13" value="0" readonly></td></tr>
+                                <tr><td>14</td><td><input type="text" id="motor_val_14" value="0" readonly></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="div_wrapper_waist" class="motor-group">
+                        <div class="header" id="header_waist">WAIST</div>
+                        <table>
+                            <thead><tr><th>ID</th><th>Position</th></tr></thead>
+                            <tbody>
+                                <tr><td>15</td><td><input type="text" id="motor_val_15" value="0" readonly></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; width: 450px; margin-top: 20px;">
+                    
+                    <div id="div_wrapper_left_leg" class="motor-group">
+                        <div class="header" id="header_left_leg">LEFT LEG</div>
+                        <table>
+                            <thead><tr><th>ID</th><th>Position</th></tr></thead>
+                            <tbody>
+                                <tr><td>16</td><td><input type="text" id="motor_val_16" value="0" readonly></td></tr>
+                                <tr><td>17</td><td><input type="text" id="motor_val_17" value="0" readonly></td></tr>
+                                <tr><td>18</td><td><input type="text" id="motor_val_18" value="0" readonly></td></tr>
+                                <tr><td>19</td><td><input type="text" id="motor_val_19" value="0" readonly></td></tr>
+                                <tr><td>20</td><td><input type="text" id="motor_val_20" value="0" readonly></td></tr>
+                                <tr><td>21</td><td><input type="text" id="motor_val_21" value="0" readonly></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="div_wrapper_right_leg" class="motor-group">
+                        <div class="header" id="header_right_leg">RIGHT LEG</div>
+                        <table>
+                            <thead><tr><th>ID</th><th>Position</th></tr></thead>
+                            <tbody>
+                                <tr><td>22</td><td><input type="text" id="motor_val_22" value="0" readonly></td></tr>
+                                <tr><td>23</td><td><input type="text" id="motor_val_23" value="0" readonly></td></tr>
+                                <tr><td>24</td><td><input type="text" id="motor_val_24" value="0" readonly></td></tr>
+                                <tr><td>25</td><td><input type="text" id="motor_val_25" value="0" readonly></td></tr>
+                                <tr><td>26</td><td><input type="text" id="motor_val_26" value="0" readonly></td></tr>
+                                <tr><td>27</td><td><input type="text" id="motor_val_27" value="0" readonly></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="display: flex; justify-content: center; width: 100%; margin-top: 15px; margin-bottom: 10px;">
+                    <input type="button" id="btn_copy_to_abs" value="Copy To Absolute" onclick="CopyToAbsolute();" style="width: 140px; font-weight:bold; background-color:#03e9f4; color:#050505; border-radius:5px; cursor:pointer; padding: 5px;">
+
+                </div>
+                                            <div id="robotpic">
+                <div style="float: left; margin-left: 70px;"> 
+                    X_Series&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Pro_Series
+                </div> 
+                <div style="float: left;margin-top: 10px;"> 
+                    Position: &nbsp;<input type="text" id="X_series_position" value=10 style="width:50px;margin-left: 5px;" onclick="Position();" onkeydown="if (event.key === 'Enter') Position(this.value)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    <input type="text" id="Pro_series_position" value=742 style="width:50px;margin-left: 12px;" >
+                </div> 
+                <div style="float: left;"> 
+                    Speed &nbsp;&nbsp;&nbsp;: &nbsp;<input type="text" id="X_series_speed" value=10 style="width:50px;margin-left: 4px;" onclick="Speed();" onkeydown="if (event.key === 'Enter') Speed(this.value)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    <input type="text" id="Pro_series_speed" value=696 style="width:50px;margin-left: 12px">
+                </div>
+            </div>
+                </div>
+
+            </div>
+            
+        </div>
+            
+
+    </form>
+
+    <dialog id="infoModal">
+        <p>確認是否儲存!!!!!</p>
+        <input type="button" id="savestanddata" value="Yes" onclick="SaveStand();" style="width:80px;">
+        <input type="button" id="nosavedata1" value="no" style="width:80px;">
+    </dialog>
+    <dialog id="infoModal2">
+        <p>確認是否儲存!!!!!</p>
+        <input type="button" id="savedata" value="Yes" onclick="Save();" style="width:80px;">
+        <input type="button" id="nosavedata2" value="no" style="width:80px;">
+    </dialog>
+    
+    <script type="text/javascript" src="./js/Interface2.js"></script>
+
+    <script>
+        const btn = document.getElementById('TorqueButton');
+
+        btn.addEventListener('click', function() {
+            // 切換 active class
+            btn.classList.toggle('active');
+
+            // 改變文字內容
+            if (btn.classList.contains('active')) {
+                btn.innerText = "扭力已開啟";
+            } else {
+                btn.innerText = "扭力已關閉";
+            }
+        });
+    </script>
+</body>
+</html>

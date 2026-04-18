@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html>
+
+<head lang="en">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+	<link rel="SHORTCUT ICON" href="./picture/icon.png">
+
+	<link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
+	<title>Balance Control Interface</title>
+	<style>
+			section {
+        		background-color:  #333;
+    	    	padding: 10px;
+        		margin: 10px;
+				width: 31%;
+				height: 500px;
+				border: 2px black solid;
+				color: white;
+       		}
+       		#control{
+       			width: 90%;
+       			margin: 20px auto;
+			   }
+			   
+			#leftbox
+			{
+				margin-left: 20%;
+			}
+
+			#rightbox
+			{
+				margin-right: 20%;
+			}
+			#Wave{
+				position:absolute;
+				left:345px;
+				top:635px;
+				background-color:  #333;
+    	    	padding: 10px;
+        		margin: 10px;
+				width: 800px;
+				height: 235px;
+				border: 2px black solid;
+				color: white;
+			}
+			body
+			{
+				width: auto;
+				min-width: 950px;
+				height: 1000px;
+				overflow: visible;
+				background-size: cover;
+			}
+
+		</style>
+	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
+	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+	<script type="text/javascript">
+
+		var ros = new ROSLIB.Ros({
+			url: "ws://172.17.121.10:9090"
+		});
+		ros.on('connection', function () {
+			console.log('Connection made!');
+			connectFlag = true;
+			createTopics();
+			document.getElementById('connected').style.display = 'inline';
+
+			document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+		});
+		ros.on('error', function (error) {
+			console.log('Error connecting to websocket server: ', error);
+			document.getElementById('connected').style.display = 'none';
+
+			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+		});
+		ros.on('close', function () {
+			console.log('Connection to websocket server closed.');
+			document.getElementById('connected').style.display = 'none';
+
+			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+		});
+
+		var SendBodyAuto_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/SendBodyAuto_Topic',
+			messageType: 'tku_msgs/Interface'
+		});
+		var ChangeContinuousValue_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/ChangeContinuousValue_Topic',
+			messageType: 'tku_msgs/Interface'
+		});
+		var Walkinggait_topic = new ROSLIB.Message({
+			x: 0,
+			y: 0,
+			z: 0,
+			theta: 0,
+			walking_mode: 0,
+			walking_state: 0,
+			sensor_mode: 0
+		});
+
+		var ContinousMode_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/ContinousMode_Topic',
+			messageType: 'std_msgs/Int16'
+		});
+		var ContinousMode_msg = new ROSLIB.Message({
+			data: 0
+		});
+
+		var Continuousback_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/walkinggait/Continuousback',
+			messageType: 'std_msgs/Bool'
+		});
+		var Continuousback_msg = new ROSLIB.Message({
+			data: false
+		});
+
+		var web_parameter_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/web/parameter_Topic',
+			messageType: 'tku_msgs/parameter'
+		});
+		var parameter_msg = new ROSLIB.Message({
+			X_Swing_Range: 0,
+			Y_Swing_Range: 2.9,
+			Z_Swing_Range: 0,
+			Period_T: 1200,
+			Period_T2: 600,
+			Sample_Time: 40,
+			OSC_LockRange: 0.56,
+			BASE_Default_Z: 3.2,
+			Y_Swing_Shift: 0.6,
+			X_Swing_COM: 0.0,
+			BASE_LIFT_Z: 0.0,
+			B_SplineParam: {
+				Kick_Point_X: 0.0,
+				Kick_Point_Y: 0.0,
+				Kick_Point_Z: 0.0,
+				Back_Point_X: 0.0,
+				Back_Point_Z: 0.0,
+				Support_Foot_Hip_Upper_Pitch: 0.0,
+				Kick_Foot_Ankle_Upper_Pitch: 0.0,
+				Support_Foot_Ankle_Upper_Pitch: 0.0
+			}
+		});
+
+		var WaveRequest_Topic = new ROSLIB.Topic({
+				ros: ros,
+				name: '/WaveRequest_Topic',
+				messageType: 'std_msgs/Bool'
+		});
+		var WaveRequest_msg = new ROSLIB.Message({
+			data: true
+		});
+
+		var SensorSet_Publisher = new ROSLIB.Topic({
+			ros: ros,
+			name: '/sensorset',
+			messageType: 'tku_msgs/SensorSet'
+		});
+		var SensorSet_msg = new ROSLIB.Message({
+			sensor_P: 0,
+			sensor_I: 0,
+			sensor_D: 0,
+			Roll: 0,
+			Pitch: 0,
+			Yaw: 0,
+			sup_f: 0,
+			nsup_f: 0,
+			// DesireSet: false,
+			// IMUReset: false,
+			// ForceState: false,
+			// GainSet: false,
+			// Roll_set: false,
+			// Pitch_set: false,
+			// CoM_set: false,
+			// Foot_Offset_set: false,
+			sensor_modeset: 0
+		});
+
+		var LoadWalkingGaitParameterClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/web/LoadWalkingGaitParameter',
+			serviceType: 'tku_msgs/WalkingGaitParameter'
+		});
+		var WalkingGaitParameter_request = new ROSLIB.ServiceRequest({
+			mode: 0
+		});
+
+		//-----
+		var SensorPackage_Subscriber = null;
+		var Wave_Topic = null;
+
+		var connectFlag = false;
+		var myAddress = "172.17.121.10";
+		
+		var Thetavaluetmp = 0;
+		var Xvaluetmp = 0;
+		var Yvaluetmp = 0;
+		var statetype = 0;
+		var ContinousModetmp = 0;
+		
+		/* Kick Ball Variables Start */
+		var X_Swing_Range_tmp = 0;
+		var Y_Swing_Range_tmp = 2.9;
+		var Z_Swing_Range_tmp = 0;
+		var Period_T_tmp = 1200;
+		var Period_T2_tmp = 600;
+		var Sample_Time_tmp = 40;
+		var OSC_LockRange_tmp = 0.56;
+		var BASE_Default_Z_tmp = 3.2;
+		var Y_Swing_Shift_tmp = 0.6;
+		var X_Swing_COM_tmp = 0.0;
+		var BASE_LIFT_Z_tmp = 0.0;
+		var Kick_Point_X_temp = 0.0;
+		var Kick_Point_Y_temp = 0.0;
+		var Kick_Point_Z_temp = 0.0;
+		var Back_Point_X_temp = 0.0;
+		var Back_Point_Z_temp = 0.0;
+		var Support_Foot_Hip_Upper_Pitch_temp = 0.0;
+		var Kick_Foot_Ankle_Upper_Pitch_temp = 0.0;
+		var Support_Foot_Ankle_Upper_Pitch_temp = 0.0;
+		var r_move_x=[];
+		var l_move_x=[];
+		var r_move_y=[];
+		var l_move_y=[];
+		var r_move_z=[];
+		var l_move_z=[];
+		var move_com_x=[];
+		var move_com_y=[];
+		var move_com_z=[];
+		var r_Theta=[];
+		var l_Theta=[];
+		var point=[];
+		var r_move_x_tmp=[];
+		var l_move_x_tmp=[];
+		var r_move_y_tmp=[];
+		var l_move_y_tmp=[];
+		var r_move_z_tmp=[];
+		var l_move_z_tmp=[];
+		var move_com_x_tmp=[];
+		var move_com_y_tmp=[];
+		var move_com_z_tmp=[];
+		var r_Theta_tmp=[];
+		var l_Theta_tmp=[];
+		var point_tmp=[];
+		var datalong = 0;
+		var wavecolor = 0;
+		var waveinitflag = true;
+		var xpointvalue_tmp = 0;
+		var ypointvalue_tmp = 0;
+		/* Kick Ball Variables End */
+		document.onkeydown = getKeyboard;
+
+		function getKeyboard(e) {
+			switch(window.event.keyCode)
+			{
+				case 87:	//W, Forward
+					ForwardFun();
+					break;
+				case 83:	//S, Backward
+					BackwardFun();
+					break;
+				case 65:	//A, Left Move
+					LeftFun();
+					break;
+				case 68:	//D, Right Move
+					RightFun();
+					break;
+				case 81:	//Q, Left Turn
+					LeftTurnFun();
+					break;
+				case 69:	//E, Right Turn
+					RightTurnFun();
+					break;
+				// case 32:	//Space, Generate
+				// 	Generate();
+				// 	break;
+			}
+		}
+
+		function createTopics() {
+			if(SensorPackage_Subscriber != null)
+			{
+				SensorPackage_Subscriber.unsubscribe();
+			}
+			var SensorPackage_Subscriber = new ROSLIB.Topic({
+			ros: ros,
+			name: '/package/sensorpackage',
+			messageType: 'tku_msgs/SensorPackage'
+			});
+			SensorPackage_Subscriber.subscribe(function (msg)
+			{		
+				document.getElementById("Roll").value = msg.IMUData[0];
+				document.getElementById("Pitch").value = msg.IMUData[1];
+				document.getElementById("Yaw").value = msg.IMUData[2];
+				/*document.getElementById("Left_1").value = msg.ForceSensorData[0];
+				document.getElementById("Left_2").value = msg.ForceSensorData[1];
+				document.getElementById("Left_3").value = msg.ForceSensorData[2];
+				document.getElementById("Left_4").value = msg.ForceSensorData[3];
+				document.getElementById("Right_1").value = msg.ForceSensorData[4];
+				document.getElementById("Right_2").value = msg.ForceSensorData[5];
+				document.getElementById("Right_3").value = msg.ForceSensorData[6];
+				document.getElementById("Right_4").value = msg.ForceSensorData[7];*/
+			});
+
+			if(Wave_Topic != null)
+			{
+				Wave_Topic.unsubscribe();
+			}
+			Wave_Topic = new ROSLIB.Topic({
+				ros: ros,
+				name: '/wave',
+				messageType: 'tku_msgs/wavelist'
+			});
+			Wave_Topic.subscribe(function (msg) 
+			{
+				msg.wavelist.clear;
+				point.clear;
+				r_move_x.clear;
+				l_move_x.clear;
+				for (var i = 0; i < msg.wavelist.length; i++) 
+				{
+					r_move_x[i] = msg.wavelist[i].R_move_X;
+					l_move_x[i] = msg.wavelist[i].L_move_X;
+					r_move_y[i] = msg.wavelist[i].R_move_Y;
+					l_move_y[i] = msg.wavelist[i].L_move_Y;
+					r_move_z[i] = msg.wavelist[i].R_move_Z;
+					l_move_z[i] = msg.wavelist[i].L_move_Z;
+					move_com_x[i] = msg.wavelist[i].move_COM_X;
+					move_com_y[i] = msg.wavelist[i].move_COM_Y;
+					move_com_z[i] = msg.wavelist[i].move_COM_Z;
+					r_Theta[i] = msg.wavelist[i].R_Theta;
+					l_Theta[i] = msg.wavelist[i].L_Theta;
+					point[i] = msg.wavelist[i].Point;
+				}
+				datalong = msg.wavelist.length;
+				console.log(datalong);
+			});
+		}
+
+		function enterAddress() {
+			if(connectFlag)
+			{
+				ros.close();
+				connectFlag = false;
+			}
+			myAddress = document.getElementById("addressSelect").value;
+			console.log("Connecting address is", myAddress)
+			ros.connect("ws://" + myAddress + ":9090");
+		}
+
+		function LeftTurnFun() {
+			Thetavaluetmp = Number(Thetavaluetmp) + 1;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function ForwardFun() {
+			Xvaluetmp = Number(Xvaluetmp) + 100;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function RightTurnFun() {
+			Thetavaluetmp = Number(Thetavaluetmp) - 1;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function LeftFun() {
+			Yvaluetmp = Number(Yvaluetmp) + 100;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function RightFun() {
+			Yvaluetmp = Number(Yvaluetmp) - 100;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function BackwardFun() {
+			Xvaluetmp = Number(Xvaluetmp) - 100;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function Generate() {
+			ClearDrawFun();
+			if (statetype == 1 && ContinousModetmp == 0) {
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 1 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 7 && ContinousModetmp == 0) 
+			{
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 7 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 8 && ContinousModetmp == 0) 
+			{
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 8 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			}
+			SendBodyAutoFun();
+		}
+
+		function ChangeContinuousValueFun() {
+			Walkinggait_topic.x = Number(Xvaluetmp);
+			Walkinggait_topic.y = Number(Yvaluetmp);
+			Walkinggait_topic.z = 0;
+			Walkinggait_topic.theta = Number(Thetavaluetmp);
+			Walkinggait_topic.walking_mode = Number(statetype);
+			Walkinggait_topic.sensor_mode = Number(document.getElementById("IMU_Control").value);
+			console.log(Walkinggait_topic.sensor_mode);
+			ChangeContinuousValue_Topic.publish(Walkinggait_topic);
+		}
+		function SendBodyAutoFun() {
+			Walkinggait_topic.x = Number(Xvaluetmp);
+			Walkinggait_topic.y = Number(Yvaluetmp);
+			Walkinggait_topic.z = 0;
+			Walkinggait_topic.theta = Number(Thetavaluetmp);
+			Walkinggait_topic.walking_mode = Number(statetype);
+			Walkinggait_topic.sensor_mode = Number(document.getElementById("IMU_Control").value);
+			console.log(Walkinggait_topic.sensor_mode);
+			SendBodyAuto_Topic.publish(Walkinggait_topic);
+		}
+		function changeXvalue(value) {
+			Xvaluetmp = value;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+		}
+		function changeYvalue(value) {
+			Yvaluetmp = value;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+		}
+		function changethetavalue(value) {
+			Thetavaluetmp = value;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
+		}
+		function singleFun() {
+			statetype = 0;
+			document.getElementById("singlestep").style.display = "inline";
+			document.getElementById("continuousstep").style.display = "none";
+			document.getElementById("lcupstep").style.display = "none";
+			document.getElementById("lcdownstep").style.display = "none";
+			document.getElementById("LongJumpTitle").style.display = "none";
+			document.getElementById("KickBall").style.display = "none";
+			document.getElementById("RKickB").style.display = "none";
+			document.getElementById("LKickB").style.display = "none";
+		}
+		function ContinuousFun() {
+			statetype = 1;
+			document.getElementById("singlestep").style.display = "none";
+			document.getElementById("continuousstep").style.display = "inline";
+			document.getElementById("lcupstep").style.display = "none";
+			document.getElementById("lcdownstep").style.display = "none";
+			document.getElementById("LongJumpTitle").style.display = "none";
+			document.getElementById("KickBall").style.display = "none";
+			document.getElementById("RKickB").style.display = "none";
+			document.getElementById("LKickB").style.display = "none";
+		}
+		function LC_upFun() {
+			statetype = 2;
+			document.getElementById("singlestep").style.display = "none";
+			document.getElementById("continuousstep").style.display = "none";
+			document.getElementById("lcupstep").style.display = "inline";
+			document.getElementById("lcdownstep").style.display = "none";
+			document.getElementById("LongJumpTitle").style.display = "none";
+			document.getElementById("KickBall").style.display = "none";
+			document.getElementById("RKickB").style.display = "none";
+			document.getElementById("LKickB").style.display = "none";
+		}
+		function LC_downFun() {
+			statetype = 3;
+			document.getElementById("singlestep").style.display = "none";
+			document.getElementById("continuousstep").style.display = "none";
+			document.getElementById("lcupstep").style.display = "none";
+			document.getElementById("lcdownstep").style.display = "inline";
+			document.getElementById("LongJumpTitle").style.display = "none";
+			document.getElementById("KickBall").style.display = "none";
+			document.getElementById("RKickB").style.display = "none";
+			document.getElementById("LKickB").style.display = "none";
+		}
+		function LongJumpFun() {
+			statetype = 4;
+			document.getElementById("singlestep").style.display = "inline";
+			document.getElementById("continuousstep").style.display = "none";
+			document.getElementById("lcupstep").style.display = "none";
+			document.getElementById("lcdownstep").style.display = "none";
+			document.getElementById("LongJumpTitle").style.display = "inline";
+			document.getElementById("KickBall").style.display = "none";
+			document.getElementById("RKickB").style.display = "none";
+			document.getElementById("LKickB").style.display = "none";
+		}
+		function RKickBallFun() {
+			statetype = 9;
+			document.getElementById("singlestep").style.display = "none";
+			document.getElementById("continuousstep").style.display = "none";
+			document.getElementById("lcupstep").style.display = "none";
+			document.getElementById("lcdownstep").style.display = "none";
+			document.getElementById("LongJumpTitle").style.display = "none";
+			document.getElementById("KickBall").style.display = "inline";
+			document.getElementById("RKickB").style.display = "inline";
+			document.getElementById("LKickB").style.display = "none";
+		}
+		function LKickBallFun() {
+			statetype = 10;
+			document.getElementById("singlestep").style.display = "none";
+			document.getElementById("continuousstep").style.display = "none";
+			document.getElementById("lcupstep").style.display = "none";
+			document.getElementById("lcdownstep").style.display = "none";
+			document.getElementById("LongJumpTitle").style.display = "none";
+			document.getElementById("KickBall").style.display = "inline";
+			document.getElementById("RKickB").style.display = "none";
+			document.getElementById("LKickB").style.display = "inline";
+		}
+		function Load() {
+			if (document.getElementById("Continuousback").checked) {
+				Continuousback_msg.data = true;
+				console.log("checked");
+			}
+			else {
+				Continuousback_msg.data = false;
+				console.log("unchecked");
+			}
+			Continuousback_Topic.publish(Continuousback_msg);
+			console.log('statetype = ', statetype);
+			WalkingGaitParameter_request.mode = Number(statetype);
+			LoadWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (walkinggait_parameter) {
+				X_Swing_Range_tmp = walkinggait_parameter.X_Swing_Range;
+				Y_Swing_Range_tmp = walkinggait_parameter.Y_Swing_Range;
+				Z_Swing_Range_tmp = walkinggait_parameter.Z_Swing_Range;
+				Period_T_tmp = walkinggait_parameter.Period_T;
+				Period_T2_tmp = walkinggait_parameter.Period_T2;
+				Sample_Time_tmp = walkinggait_parameter.Sample_Time;
+				OSC_LockRange_tmp = walkinggait_parameter.OSC_LockRange;
+
+				T_DSP_tmp = walkinggait_parameter.OSC_LockRange;
+
+				BASE_Default_Z_tmp = walkinggait_parameter.BASE_Default_Z;
+				Y_Swing_Shift_tmp = walkinggait_parameter.Y_Swing_Shift;
+				X_Swing_COM_tmp = walkinggait_parameter.X_Swing_COM;
+				BASE_LIFT_Z_tmp = walkinggait_parameter.BASE_LIFT_Z;
+				Kick_Point_X_temp = walkinggait_parameter.B_SplineParam.Kick_Point_X;
+				Kick_Point_Y_temp = walkinggait_parameter.B_SplineParam.Kick_Point_Y;
+				Kick_Point_Z_temp = walkinggait_parameter.B_SplineParam.Kick_Point_Z;
+				Back_Point_X_temp = walkinggait_parameter.B_SplineParam.Back_Point_X;
+				Back_Point_Z_temp = walkinggait_parameter.B_SplineParam.Back_Point_Z;
+				Support_Foot_Hip_Upper_Pitch_temp = walkinggait_parameter.B_SplineParam.Support_Foot_Hip_Upper_Pitch;
+				Kick_Foot_Ankle_Upper_Pitch_temp = walkinggait_parameter.B_SplineParam.Kick_Foot_Ankle_Upper_Pitch;
+				Support_Foot_Ankle_Upper_Pitch_temp = walkinggait_parameter.B_SplineParam.Support_Foot_Ankle_Upper_Pitch;
+				switch (statetype) {
+					case 0:
+						document.getElementById("Period_T").value = Period_T_tmp;
+						document.getElementById("T_DSP").value = T_DSP_tmp;
+						document.getElementById("BASE_Default_Z").value = BASE_Default_Z_tmp;
+						break;
+					case 1:
+						document.getElementById("cPeriod_T").value = Period_T_tmp;
+						document.getElementById("cT_DSP").value = T_DSP_tmp;
+						document.getElementById("cBASE_Default_Z").value = BASE_Default_Z_tmp;
+						break;
+
+					case 4:
+						document.getElementById("X_Swing").value = X_Swing_Range_tmp;
+						document.getElementById("Y_Swing").value = Y_Swing_Range_tmp;
+						document.getElementById("Z_Swing").value = Z_Swing_Range_tmp;
+						document.getElementById("Period_T").value = Period_T_tmp;
+						document.getElementById("Period_T2").value = Period_T2_tmp;
+						document.getElementById("Sample_Time").value = Sample_Time_tmp;
+						document.getElementById("OSC_LockRange").value = OSC_LockRange_tmp;
+						document.getElementById("BASE_Default_Z").value = BASE_Default_Z_tmp;
+						document.getElementById("Y_Swing_Shift").value = Y_Swing_Shift_tmp;
+						break;
+					case 2:
+						document.getElementById("luX_Swing").value = X_Swing_Range_tmp;
+						document.getElementById("luY_Swing").value = Y_Swing_Range_tmp;
+						document.getElementById("luZ_Swing").value = Z_Swing_Range_tmp;
+						document.getElementById("luPeriod_T").value = Period_T_tmp;
+						document.getElementById("luPeriod_T2").value = Period_T2_tmp;
+						document.getElementById("luSample_Time").value = Sample_Time_tmp;
+						document.getElementById("luOSC_LockRange").value = OSC_LockRange_tmp;
+						document.getElementById("luBASE_Default_Z").value = BASE_Default_Z_tmp;
+						document.getElementById("luX_Swing_COM").value = X_Swing_COM_tmp;
+						document.getElementById("luBASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
+						break;
+					case 3:
+						document.getElementById("ldX_Swing").value = X_Swing_Range_tmp;
+						document.getElementById("ldY_Swing").value = Y_Swing_Range_tmp;
+						document.getElementById("ldZ_Swing").value = Z_Swing_Range_tmp;
+						document.getElementById("ldPeriod_T").value = Period_T_tmp;
+						document.getElementById("ldPeriod_T2").value = Period_T2_tmp;
+						document.getElementById("ldSample_Time").value = Sample_Time_tmp;
+						document.getElementById("ldOSC_LockRange").value = OSC_LockRange_tmp;
+						document.getElementById("ldBASE_Default_Z").value = BASE_Default_Z_tmp;
+						document.getElementById("ldX_Swing_COM").value = X_Swing_COM_tmp;
+						document.getElementById("ldBASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
+						break;
+					case 9:
+					case 10:
+						document.getElementById("KiY_Swing").value = Y_Swing_Range_tmp;
+						document.getElementById("KiPeriod_T").value = Period_T_tmp;
+						document.getElementById("Kick_Point_X").value = Kick_Point_X_temp;
+						document.getElementById("Kick_Point_Y").value = Kick_Point_Y_temp;
+						document.getElementById("Kick_Point_Z").value = Kick_Point_Z_temp;
+						document.getElementById("Back_Point_X").value = Back_Point_X_temp;
+						document.getElementById("Back_Point_Z").value = Back_Point_Z_temp;
+						document.getElementById("Support_Foot_Hip_Upper_Pitch").value = Support_Foot_Hip_Upper_Pitch_temp;
+						document.getElementById("Kick_Foot_Ankle_Upper_Pitch").value = Kick_Foot_Ankle_Upper_Pitch_temp;
+						document.getElementById("Support_Foot_Ankle_Upper_Pitch").value = Support_Foot_Ankle_Upper_Pitch_temp;
+						break;
+				}
+			});
+		}
+		function Save() {
+			parameter_msg.mode = Number(statetype);
+			parameter_msg.X_Swing_Range = Number(X_Swing_Range_tmp);
+			parameter_msg.Y_Swing_Range = Number(Y_Swing_Range_tmp);
+			parameter_msg.Z_Swing_Range = Number(Z_Swing_Range_tmp);
+			parameter_msg.Period_T = Number(Period_T_tmp);
+			parameter_msg.Period_T2 = Number(Period_T2_tmp);
+			parameter_msg.Sample_Time = Number(Sample_Time_tmp);
+			parameter_msg.OSC_LockRange = Number(OSC_LockRange_tmp);
+			parameter_msg.BASE_Default_Z = Number(BASE_Default_Z_tmp);
+			parameter_msg.Y_Swing_Shift = Number(Y_Swing_Shift_tmp);
+			parameter_msg.X_Swing_COM = Number(X_Swing_COM_tmp);
+			parameter_msg.BASE_LIFT_Z = Number(BASE_LIFT_Z_tmp);
+			parameter_msg.B_SplineParam.Kick_Point_X = Number(Kick_Point_X_temp);
+			parameter_msg.B_SplineParam.Kick_Point_Y = Number(Kick_Point_Y_temp);
+			parameter_msg.B_SplineParam.Kick_Point_Z = Number(Kick_Point_Z_temp);
+			parameter_msg.B_SplineParam.Back_Point_X = Number(Back_Point_X_temp);
+			parameter_msg.B_SplineParam.Back_Point_Z = Number(Back_Point_Z_temp);
+			parameter_msg.B_SplineParam.Support_Foot_Hip_Upper_Pitch = Number(Support_Foot_Hip_Upper_Pitch_temp);
+			parameter_msg.B_SplineParam.Kick_Foot_Ankle_Upper_Pitch = Number(Kick_Foot_Ankle_Upper_Pitch_temp);
+			parameter_msg.B_SplineParam.Support_Foot_Ankle_Upper_Pitch = Number(Support_Foot_Ankle_Upper_Pitch_temp);
+			web_parameter_Topic.publish(parameter_msg);
+		}
+		function changeX_Swing_value(value) {
+			X_Swing_Range_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("X_Swing").value = X_Swing_Range_tmp;
+					break;
+				case 1:
+					document.getElementById("cX_Swing").value = X_Swing_Range_tmp;
+					break;
+				case 2:
+					document.getElementById("luX_Swing").value = X_Swing_Range_tmp;
+					break;
+				case 3:
+					document.getElementById("ldX_Swing").value = X_Swing_Range_tmp;
+					break;
+			}
+		}
+		function changeY_Swing_value(value) {
+			Y_Swing_Range_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Y_Swing").value = Y_Swing_Range_tmp;
+					break;
+				case 1:
+					document.getElementById("cY_Swing").value = Y_Swing_Range_tmp;
+					break;
+				case 2:
+					document.getElementById("luY_Swing").value = Y_Swing_Range_tmp;
+					break;
+				case 3:
+					document.getElementById("ldY_Swing").value = Y_Swing_Range_tmp;
+					break;
+				case 9:
+				case 10:
+					document.getElementById("KiY_Swing").value = Y_Swing_Range_tmp;
+					break;
+			}
+		}
+		function changeZ_Swing_value(value) {
+			Z_Swing_Range_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Z_Swing").value = Z_Swing_Range_tmp;
+					break;
+				case 1:
+					document.getElementById("cZ_Swing").value = Z_Swing_Range_tmp;
+					break;
+				case 2:
+					document.getElementById("luZ_Swing").value = Z_Swing_Range_tmp;
+					break;
+				case 3:
+					document.getElementById("ldZ_Swing").value = Z_Swing_Range_tmp;
+					break;
+			}
+		}
+		function changePeriod_T_value(value) {
+			Period_T_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Period_T").value = Period_T_tmp;
+					break;
+				case 1:
+					document.getElementById("cPeriod_T").value = Period_T_tmp;
+					break;
+				case 2:
+					document.getElementById("luPeriod_T").value = Period_T_tmp;
+					break;
+				case 3:
+					document.getElementById("ldPeriod_T").value = Period_T_tmp;
+					break;
+				case 9:
+				case 10:
+					document.getElementById("KiPeriod_T").value = Period_T_tmp;
+					break;
+			}
+		}
+		function changePeriod_T2_value(value) {
+			Period_T2_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Period_T2").value = Period_T2_tmp;
+					break;
+				case 1:
+					document.getElementById("cPeriod_T2").value = Period_T2_tmp;
+					break;
+				case 2:
+					document.getElementById("luPeriod_T2").value = Period_T2_tmp;
+					break;
+				case 3:
+					document.getElementById("ldPeriod_T2").value = Period_T2_tmp;
+					break;
+			}
+		}
+		function changeSample_Time_value(value) {
+			Sample_Time_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Sample_Time").value = Sample_Time_tmp;
+					break;
+				case 1:
+					document.getElementById("cSample_Time").value = Sample_Time_tmp;
+					break;
+				case 2:
+					document.getElementById("luSample_Time").value = Sample_Time_tmp;
+					break;
+				case 3:
+					document.getElementById("ldSample_Time").value = Sample_Time_tmp;
+					break;
+			}
+		}
+		function changeOSC_LockRange_value(value) {
+			OSC_LockRange_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("T_DSP").value = OSC_LockRange_tmp;
+					break;
+				case 1:
+					document.getElementById("cT_DSP").value = OSC_LockRange_tmp;
+					break;				
+				case 4:
+					document.getElementById("OSC_LockRange").value = OSC_LockRange_tmp;
+					break;
+				case 2:
+					document.getElementById("luOSC_LockRange").value = OSC_LockRange_tmp;
+					break;
+				case 3:
+					document.getElementById("ldOSC_LockRange").value = OSC_LockRange_tmp;
+					break;
+			}
+		}
+		function changeT_DSP_value(value){
+			OSC_LockRange_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("T_DSP").value = OSC_LockRange_tmp;
+					break;
+				case 1:
+					document.getElementById("cT_DSP").value = OSC_LockRange_tmp;
+					break;
+			}
+		}
+		function changeBASE_Default_Z_value(value) {
+			BASE_Default_Z_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("BASE_Default_Z").value = BASE_Default_Z_tmp;
+					break;
+				case 1:
+					document.getElementById("cBASE_Default_Z").value = BASE_Default_Z_tmp;
+					break;
+				case 2:
+					document.getElementById("luBASE_Default_Z").value = BASE_Default_Z_tmp;
+					break;
+				case 3:
+					document.getElementById("ldBASE_Default_Z").value = BASE_Default_Z_tmp;
+					break;
+			}
+		}
+		function changeY_Swing_Shift_value(value) {
+			Y_Swing_Shift_tmp = value;
+			document.getElementById("Y_Swing_Shift").value = Y_Swing_Shift_tmp;
+		}
+		function changeX_Swing_COM_value(value) {
+			X_Swing_COM_tmp = value;
+			switch (statetype) {
+				case 2:
+					document.getElementById("luX_Swing_COM").value = X_Swing_COM_tmp;
+					break;
+				case 3:
+					document.getElementById("ldX_Swing_COM").value = X_Swing_COM_tmp;
+					break;
+			}
+		}
+		function changeBASE_LIFT_Z_value(value) {
+			BASE_LIFT_Z_tmp = value;
+			switch (statetype) {
+				case 2:
+					document.getElementById("luBASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
+					break;
+				case 3:
+					document.getElementById("ldBASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
+					break;
+			}
+		}
+		function changeKick_Point_X_value(value) {
+			Kick_Point_X_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Kick_Point_X").value = Kick_Point_X_temp;
+					break;
+			}
+		}
+		function changeKick_Point_Y_value(value) {
+			Kick_Point_Y_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Kick_Point_Y").value = Kick_Point_Y_temp;
+					break;
+			}
+		}
+		function changeKick_Point_Z_value(value) {
+			Kick_Point_Z_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Kick_Point_Z").value = Kick_Point_Z_temp;
+					break;
+			}
+		}
+		function changeBack_Point_X_value(value) {
+			Back_Point_X_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Back_Point_X").value = Back_Point_X_temp;
+					break;
+			}
+		}
+		function changeBack_Point_Z_value(value) {
+			Back_Point_Z_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Back_Point_Z").value = Back_Point_Z_temp;
+					break;
+			}
+		}
+		function changeSupport_Foot_Hip_Upper_Pitch_value(value) {
+			Support_Foot_Hip_Upper_Pitch_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Support_Foot_Hip_Upper_Pitch_temp").value = Support_Foot_Hip_Upper_Pitch_temp;
+					break;
+			}
+		}
+		function changeKick_Foot_Ankle_Upper_Pitch_value(value) {
+			Kick_Foot_Ankle_Upper_Pitch_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Kick_Foot_Ankle_Upper_Pitch_temp").value = Kick_Foot_Ankle_Upper_Pitch_temp;
+					break;
+			}
+		}
+		function changeSupport_Foot_Ankle_Upper_Pitch_value(value) {
+			Support_Foot_Ankle_Upper_Pitch_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Support_Foot_Ankle_Upper_Pitch_temp").value = Support_Foot_Ankle_Upper_Pitch_temp;
+					break;
+			}
+		}
+		function changeContinuousback() 
+		{
+			if (document.getElementById("Continuousback").checked) {
+				Continuousback_msg.data = true;
+				console.log("checked");
+			}
+			else {
+				Continuousback_msg.data = false;
+				console.log("unchecked");
+			}
+			Continuousback_Topic.publish(Continuousback_msg);
+		}
+
+		function DrawaXYaxisfun()
+		{
+			var onepoint = document.getElementById("myCanvas");
+			var cxt = onepoint.getContext("2d");
+			cxt.strokeStyle = '#FFF2F2';
+			cxt.lineWidth = 3;
+			cxt.beginPath();
+			cxt.moveTo(0, 200);
+			cxt.lineTo(0, 0);
+			cxt.stroke();
+			cxt.beginPath();
+			cxt.moveTo(0, 100);
+			cxt.lineTo(1000, 100);
+			cxt.stroke();
+			cxt.moveTo(0, 200);
+			cxt.beginPath();
+		}
+
+		function DrawPointfun(xpointvalue,ypointvalue)
+		{
+			var onepoint = document.getElementById("myCanvas");
+			var cxt = onepoint.getContext("2d");
+			if(waveinitflag==true)
+			{
+				DrawaXYaxisfun()
+				waveinitflag=false;
+			}
+			switch(wavecolor)
+			{
+				case 0:
+					if(document.getElementById("checkRmoveX").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#EB0000";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);			
+					}
+					break;
+				case 1:
+					if(document.getElementById("checkRmoveY").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#F09C00";
+						cxt.lineTo(xpointvalue,ypointvalue);					
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}
+					break;
+				case 2:
+					if(document.getElementById("checkRmoveZ").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#FFFF3B";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle ="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);				
+					}
+					break;
+				case 3:
+					if(document.getElementById("checkRTheta").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#4FFF4F";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}
+					break;
+				case 4:
+					if(document.getElementById("checkLmoveX").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#008A00";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}
+					break;
+				case 5:
+					if(document.getElementById("checkLmoveY").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#45FFFF";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}
+					break;
+				case 6:
+					if(document.getElementById("checkLmoveZ").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#00B2B2";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}
+					break;
+				case 7:
+					if(document.getElementById("checkLTheta").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#8C8CFF";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}
+					break;
+				case 8:
+					if(document.getElementById("checkmoveCOMX").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#0000DB";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}
+					break;
+				case 9:
+					if(document.getElementById("checkmoveCOMY").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#8D00F5";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}
+					break;
+				case 10:
+					if(document.getElementById("checkmoveCOMZ").checked)
+					{
+						cxt.lineWidth = 1;
+						cxt.strokeStyle="#E8E8E8";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}else{
+						cxt.lineWidth = 4;
+						cxt.strokeStyle="#333";
+						cxt.lineTo(xpointvalue,ypointvalue);
+					}
+					break;
+			}	
+			cxt.stroke();
+		}
+		function DrawRmoveXFun(){
+			wavecolor=0;
+			if(document.getElementById("checkRmoveX").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 15 * r_move_x[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveY").checked) 
+					DrawRmoveYFun();
+				if (document.getElementById("checkRmoveZ").checked) 
+					DrawRmoveZFun();
+				if (document.getElementById("checkRTheta").checked)
+					DrawRThetaFun();
+				if (document.getElementById("checkLmoveX").checked)
+					DrawLmoveXFun();
+				if (document.getElementById("checkLmoveY").checked)
+					DrawLmoveYFun();
+				if (document.getElementById("checkLmoveZ").checked)
+					DrawLmoveZFun();
+				if (document.getElementById("checkLTheta").checked)
+					DrawLThetaFun();
+				if (document.getElementById("checkmoveCOMX").checked)
+					DrawmoveCOMXFun();
+				if (document.getElementById("checkmoveCOMY").checked)
+					DrawmoveCOMYFun();
+				if (document.getElementById("checkmoveCOMZ").checked)
+					DrawmoveCOMZFun();
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-15*r_move_x[i]);
+					r_move_x_tmp[i] = r_move_x[i];
+				}
+				datalong_tmp = datalong;
+			}
+			waveinitflag=true;
+		}
+
+		function DrawRmoveYFun(){
+			wavecolor=1;
+			if(document.getElementById("checkRmoveY").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 15 * r_move_y[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveX").checked)
+					DrawRmoveXFun();
+				if (document.getElementById("checkRmoveZ").checked)
+					DrawRmoveZFun();
+				if (document.getElementById("checkRTheta").checked)
+					DrawRThetaFun();
+				if (document.getElementById("checkLmoveX").checked)
+					DrawLmoveXFun();
+				if (document.getElementById("checkLmoveY").checked)
+					DrawLmoveYFun();
+				if (document.getElementById("checkLmoveZ").checked)
+					DrawLmoveZFun();
+				if (document.getElementById("checkLTheta").checked)
+					DrawLThetaFun();
+				if (document.getElementById("checkmoveCOMX").checked)
+					DrawmoveCOMXFun();
+				if (document.getElementById("checkmoveCOMY").checked)
+					DrawmoveCOMYFun();
+				if (document.getElementById("checkmoveCOMZ").checked)
+					DrawmoveCOMZFun();
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-15* r_move_y[i]);
+					r_move_y_tmp[i] = r_move_y[i];
+				}
+				datalong_tmp = datalong;
+			}
+			waveinitflag=true;
+		}
+
+		function DrawRmoveZFun(){
+			wavecolor=2;
+			if(document.getElementById("checkRmoveZ").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 15 * r_move_z[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveX").checked)
+					DrawRmoveXFun();
+				if (document.getElementById("checkRmoveY").checked)
+					DrawRmoveYFun();
+				if (document.getElementById("checkRTheta").checked)
+					DrawRThetaFun();
+				if (document.getElementById("checkLmoveX").checked)
+					DrawLmoveXFun();
+				if (document.getElementById("checkLmoveY").checked)
+					DrawLmoveYFun();
+				if (document.getElementById("checkLmoveZ").checked)
+					DrawLmoveZFun();
+				if (document.getElementById("checkLTheta").checked)
+					DrawLThetaFun();
+				if (document.getElementById("checkmoveCOMX").checked)
+					DrawmoveCOMXFun();
+				if (document.getElementById("checkmoveCOMY").checked)
+					DrawmoveCOMYFun();
+				if (document.getElementById("checkmoveCOMZ").checked)
+					DrawmoveCOMZFun();
+					console.log("d");
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-15* r_move_z[i]);
+					r_move_z_tmp[i] = r_move_z[i];
+				}
+				datalong_tmp = datalong;
+				console.log("c");
+			}
+			waveinitflag=true;
+		}
+
+		function DrawRThetaFun(){
+			wavecolor=3;
+			if(document.getElementById("checkRTheta").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 15 * r_Theta[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveX").checked)
+					DrawRmoveXFun();
+				if (document.getElementById("checkRmoveY").checked)
+					DrawRmoveYFun();
+				if (document.getElementById("checkRmoveZ").checked)
+					DrawRmoveZFun();
+				if (document.getElementById("checkLmoveX").checked)
+					DrawLmoveXFun();
+				if (document.getElementById("checkLmoveY").checked)
+					DrawLmoveYFun();
+				if (document.getElementById("checkLmoveZ").checked)
+					DrawLmoveZFun();
+				if (document.getElementById("checkLTheta").checked)
+					DrawLThetaFun();
+				if (document.getElementById("checkmoveCOMX").checked)
+					DrawmoveCOMXFun();
+				if (document.getElementById("checkmoveCOMY").checked)
+					DrawmoveCOMYFun();
+				if (document.getElementById("checkmoveCOMZ").checked)
+					DrawmoveCOMZFun();
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-15* r_Theta[i]);
+					r_Theta_tmp[i] = r_Theta[i];
+				}
+				datalong_tmp = datalong;
+			}
+			waveinitflag=true;
+		}
+
+		function DrawLmoveXFun(){
+			wavecolor=4;
+			if(document.getElementById("checkLmoveX").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 15 * l_move_x[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveX").checked)
+					DrawRmoveXFun();
+				if (document.getElementById("checkRmoveY").checked)
+					DrawRmoveYFun();
+				if (document.getElementById("checkRmoveZ").checked)
+					DrawRmoveZFun();
+				if (document.getElementById("checkRTheta").checked)
+					DrawRThetaFun();
+				if (document.getElementById("checkLmoveY").checked)
+					DrawLmoveYFun();
+				if (document.getElementById("checkLmoveZ").checked)
+					DrawLmoveZFun();
+				if (document.getElementById("checkLTheta").checked)
+					DrawLThetaFun();
+				if (document.getElementById("checkmoveCOMX").checked)
+					DrawmoveCOMXFun();
+				if (document.getElementById("checkmoveCOMY").checked)
+					DrawmoveCOMYFun();
+				if (document.getElementById("checkmoveCOMZ").checked)
+					DrawmoveCOMZFun();
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-15* l_move_x[i]);
+					l_move_x_tmp[i] = l_move_x[i];
+				}
+				datalong_tmp = datalong;
+			}
+			waveinitflag=true;
+		}
+
+		function DrawLmoveYFun(){
+			wavecolor=5;
+			if(document.getElementById("checkLmoveY").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 15 * l_move_y[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveX").checked)
+					DrawRmoveXFun();
+				if (document.getElementById("checkRmoveY").checked)
+					DrawRmoveYFun();
+				if (document.getElementById("checkRmoveZ").checked)
+					DrawRmoveZFun();
+				if (document.getElementById("checkRTheta").checked)
+					DrawRThetaFun();
+				if (document.getElementById("checkLmoveX").checked)
+					DrawLmoveXFun();
+				if (document.getElementById("checkLmoveZ").checked)
+					DrawLmoveZFun();
+				if (document.getElementById("checkLTheta").checked)
+					DrawLThetaFun();
+				if (document.getElementById("checkmoveCOMX").checked)
+					DrawmoveCOMXFun();
+				if (document.getElementById("checkmoveCOMY").checked)
+					DrawmoveCOMYFun();
+				if (document.getElementById("checkmoveCOMZ").checked)
+					DrawmoveCOMZFun();
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-15* l_move_y[i]);
+					l_move_y_tmp[i] = l_move_y[i];
+				}
+				datalong_tmp = datalong;
+			}
+			waveinitflag=true;
+		}
+		function DrawLmoveZFun(){
+			wavecolor=6;
+			if(document.getElementById("checkLmoveZ").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 15 * l_move_z[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveX").checked)
+					DrawRmoveXFun();
+				if (document.getElementById("checkRmoveY").checked)
+					DrawRmoveYFun();
+				if (document.getElementById("checkRmoveZ").checked)
+					DrawRmoveZFun();
+				if (document.getElementById("checkRTheta").checked)
+					DrawRThetaFun();
+				if (document.getElementById("checkLmoveX").checked)
+					DrawLmoveXFun();
+				if (document.getElementById("checkLmoveY").checked)
+					DrawLmoveYFun();
+				if (document.getElementById("checkLTheta").checked)
+					DrawLThetaFun();
+				if (document.getElementById("checkmoveCOMX").checked)
+					DrawmoveCOMXFun();
+				if (document.getElementById("checkmoveCOMY").checked)
+					DrawmoveCOMYFun();
+				if (document.getElementById("checkmoveCOMZ").checked)
+					DrawmoveCOMZFun();
+					console.log("a");
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-15* l_move_z[i]);
+					l_move_z_tmp[i] = l_move_z[i];
+				}
+				datalong_tmp = datalong;
+				console.log("b");
+			}
+			waveinitflag=true;
+		}
+		function DrawLThetaFun(){
+			wavecolor=7;
+			if(document.getElementById("checkLTheta").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 15 * l_Theta[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveX").checked)
+					DrawRmoveXFun();
+				if (document.getElementById("checkRmoveY").checked)
+					DrawRmoveYFun();
+				if (document.getElementById("checkRmoveZ").checked)
+					DrawRmoveZFun();
+				if (document.getElementById("checkRTheta").checked)
+					DrawRThetaFun();
+				if (document.getElementById("checkLmoveX").checked)
+					DrawLmoveXFun();
+				if (document.getElementById("checkLmoveY").checked)
+					DrawLmoveYFun();
+				if (document.getElementById("checkLmoveZ").checked)
+					DrawLmoveZFun();
+				if (document.getElementById("checkmoveCOMX").checked)
+					DrawmoveCOMXFun();
+				if (document.getElementById("checkmoveCOMY").checked)
+					DrawmoveCOMYFun();
+				if (document.getElementById("checkmoveCOMZ").checked)
+					DrawmoveCOMZFun();
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-15* l_Theta[i]);
+					l_Theta_tmp[i] = l_Theta[i];
+				}
+				datalong_tmp = datalong;
+			}
+			waveinitflag=true;
+		}
+		function DrawmoveCOMXFun(){
+			wavecolor=8;
+			if(document.getElementById("checkmoveCOMX").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 15 * move_com_x[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveX").checked)
+					DrawRmoveXFun();
+				if (document.getElementById("checkRmoveY").checked)
+					DrawRmoveYFun();
+				if (document.getElementById("checkRmoveZ").checked)
+					DrawRmoveZFun();
+				if (document.getElementById("checkRTheta").checked)
+					DrawRThetaFun();
+				if (document.getElementById("checkLmoveX").checked)
+					DrawLmoveXFun();
+				if (document.getElementById("checkLmoveY").checked)
+					DrawLmoveYFun();
+				if (document.getElementById("checkLmoveZ").checked)
+					DrawLmoveZFun();
+				if (document.getElementById("checkLTheta").checked)
+					DrawLThetaFun();
+				if (document.getElementById("checkmoveCOMY").checked)
+					DrawmoveCOMYFun();
+				if (document.getElementById("checkmoveCOMZ").checked)
+					DrawmoveCOMZFun();
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-15* move_com_x[i]);
+					move_com_x_tmp[i] = move_com_x[i];
+				}
+				datalong_tmp = datalong;
+			}
+			waveinitflag=true;
+		}
+		function DrawmoveCOMYFun(){
+			wavecolor=9;
+			if(document.getElementById("checkmoveCOMY").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 15 * move_com_y[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveX").checked)
+					DrawRmoveXFun();
+				if (document.getElementById("checkRmoveY").checked)
+					DrawRmoveYFun();
+				if (document.getElementById("checkRmoveZ").checked)
+					DrawRmoveZFun();
+				if (document.getElementById("checkRTheta").checked)
+					DrawRThetaFun();
+				if (document.getElementById("checkLmoveX").checked)
+					DrawLmoveXFun();
+				if (document.getElementById("checkLmoveY").checked)
+					DrawLmoveYFun();
+				if (document.getElementById("checkLmoveZ").checked)
+					DrawLmoveZFun();
+				if (document.getElementById("checkLTheta").checked)
+					DrawLThetaFun();
+				if (document.getElementById("checkmoveCOMX").checked)
+					DrawmoveCOMXFun();
+				if (document.getElementById("checkmoveCOMZ").checked)
+					DrawmoveCOMZFun();
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-15* move_com_y[i]);
+					move_com_y_tmp[i] = move_com_y[i];
+				}
+				datalong_tmp = datalong;
+			}
+			waveinitflag=true;
+		}
+		function DrawmoveCOMZFun(){
+			wavecolor=10;
+			if(document.getElementById("checkmoveCOMZ").checked == false)
+			{
+				for (var i = 2; i < datalong; i++) 
+				{
+					DrawPointfun(i, 100 - 3 * move_com_z[i]);
+				}
+				DrawaXYaxisfun();
+				if (document.getElementById("checkRmoveX").checked)
+					DrawRmoveXFun();
+				if (document.getElementById("checkRmoveY").checked)
+					DrawRmoveYFun();
+				if (document.getElementById("checkRmoveZ").checked)
+					DrawRmoveZFun();
+				if (document.getElementById("checkRTheta").checked)
+					DrawRThetaFun();
+				if (document.getElementById("checkLmoveX").checked)
+					DrawLmoveXFun();
+				if (document.getElementById("checkLmoveY").checked)
+					DrawLmoveYFun();
+				if (document.getElementById("checkLmoveZ").checked)
+					DrawLmoveZFun();
+				if (document.getElementById("checkLTheta").checked)
+					DrawLThetaFun();
+				if (document.getElementById("checkmoveCOMX").checked)
+					DrawmoveCOMXFun();
+				if (document.getElementById("checkmoveCOMY").checked)
+					DrawmoveCOMYFun();
+			}
+			else
+			{
+				for(var i=2;i<datalong;i++)
+				{	
+					DrawPointfun(i,100-3* move_com_z[i]);
+					move_com_z_tmp[i] = move_com_z[i];
+				}
+				datalong_tmp = datalong;
+			}
+			waveinitflag=true;
+		}
+
+		function showwavefun()
+		{
+			if(document.getElementById("wavebutton").checked == true)
+			{
+				document.getElementById("Wave").style.display = "inline";
+			}
+			else
+			{
+				document.getElementById("Wave").style.display = "none";
+				WaveRequest_msg.data = false;
+				WaveRequest_Topic.publish(WaveRequest_msg);
+			}
+		}
+
+		function GenerateWaveFun()
+		{
+			WaveRequest_msg.data = true;
+			WaveRequest_Topic.publish(WaveRequest_msg);
+		}
+
+		function SendSensorSet()
+		{
+			// var roll = Number(document.getElementById("Set_Roll").value);
+			// var pitch = Number(document.getElementById("Set_Pitch").value);
+			// var yaw = Number(document.getElementById("Set_Yaw").value);
+			// var GainRoll = Number(document.getElementById("Gain_Roll").value);
+			// var GainPitch = Number(document.getElementById("Gain_Pitch").value);
+			// var GainKP = Number(document.getElementById("Gain_KP").value);
+			// var GainKD = Number(document.getElementById("Gain_KD").value);
+			// SensorSet_msg.Roll = parseInt(roll * 100);
+			// SensorSet_msg.Pitch = parseInt(pitch * 100);
+			// SensorSet_msg.Yaw = parseInt(yaw * 100);
+			// SensorSet_msg.GainRoll = parseInt(GainRoll * 10000);
+			// SensorSet_msg.GainPitch = parseInt(GainPitch * 10000);
+			// SensorSet_msg.GainKP = parseInt(GainKP * 100);
+			// SensorSet_msg.GainKD = parseInt(GainKD * 10000);
+			var sensor_P = 0;
+			var sensor_I = 0;
+			var sensor_D = 0;
+			var set_roll = 0;
+			var set_pitch = 0;
+			var sup_f = 0;
+			var nsup_f = 0;
+			var sensor_modeset = 0;
+			if(document.getElementById("Set_chase_").checked)
+			{
+				sensor_modeset += 0x08;
+				// SensorSet_msg.GainSet = true;
+				// set_roll = Number(document.getElementById("Set_Roll").value);
+				// set_pitch = Number(document.getElementById("Set_Pitch").value);
+				// SensorSet_msg.Roll = parseInt(set_roll * 100);
+				// SensorSet_msg.Pitch = parseInt(set_pitch * 100);
+			}
+			// else
+			// {
+			// 	SensorSet_msg.GainSet = false;
+			// }
+			
+			if(document.getElementById("Roll_set").checked)
+			{
+				sensor_modeset += 0x10;
+				// SensorSet_msg.Roll_set = true;
+				sensor_P = Number(document.getElementById("Roll_P").value);
+				sensor_I = Number(document.getElementById("Roll_I").value);
+				sensor_D = Number(document.getElementById("Roll_D").value);
+				// SensorSet_msg.sensor_P = parseInt(sensor_P * 1000);
+				// SensorSet_msg.sensor_I = parseInt(sensor_I * 1000);
+				// SensorSet_msg.sensor_D = parseInt(sensor_D * 1000);
+			}
+			// else 
+			// {
+			// 	SensorSet_msg.Roll_set = false;
+			// }
+
+			if(document.getElementById("Pitch_set").checked)
+			{
+				sensor_modeset += 0x20;
+				// SensorSet_msg.Pitch_set = true;
+				sensor_P = Number(document.getElementById("Pitch_P").value);
+				sensor_I = Number(document.getElementById("Pitch_I").value);
+				sensor_D = Number(document.getElementById("Pitch_D").value);
+				// SensorSet_msg.sensor_P = parseInt(sensor_P * 1000);
+				// SensorSet_msg.sensor_I = parseInt(sensor_I * 1000);
+				// SensorSet_msg.sensor_D = parseInt(sensor_D * 1000);
+			}
+			// else 
+			// {
+			// 	SensorSet_msg.Pitch_set = false;
+			// }
+			if(document.getElementById("CoM_set").checked)
+			{
+				sensor_modeset += 0x40;
+				// SensorSet_msg.CoM_set = true;
+				sensor_P = Number(document.getElementById("CoM_P").value);
+				sensor_I = Number(document.getElementById("CoM_I").value);
+				sensor_D = Number(document.getElementById("CoM_D").value);
+				// SensorSet_msg.sensor_P = parseInt(sensor_P * 1000);
+				// SensorSet_msg.sensor_I = parseInt(sensor_I * 1000);
+				// SensorSet_msg.sensor_D = parseInt(sensor_D * 1000);
+			}
+			// else 
+			// {
+			// 	SensorSet_msg.CoM_set = false;
+			// }
+			if(document.getElementById("Foot_Offset_set").checked)
+			{
+				sensor_modeset += 0x80;
+				// SensorSet_msg.Foot_Offset_set = true;
+				// sup_f = Number(document.getElementById("sup_f").value);
+				// nsup_f = Number(document.getElementById("nsup_f").value);
+				// SensorSet_msg.sup_f = parseInt(sup_f * 100);
+				// SensorSet_msg.nsup_f = parseInt(nsup_f * 100);
+			}
+			// else 
+			// {
+			// 	SensorSet_msg.Foot_Offset_set = false;
+			// }
+			if(document.getElementById("IMU_reset_").checked)
+			{
+				sensor_modeset += 0x02;
+				// SensorSet_msg.IMUReset = true;
+			}
+			// else
+			// {
+			// 	SensorSet_msg.IMUReset = false;
+			// }
+
+				set_roll = Number(document.getElementById("Set_Roll").value);
+				set_pitch = Number(document.getElementById("Set_Pitch").value);
+				SensorSet_msg.Roll = parseInt(set_roll * 1000);
+				SensorSet_msg.Pitch = parseInt(set_pitch * 1000);
+			
+				SensorSet_msg.sensor_P = parseInt(sensor_P * 1000);
+				SensorSet_msg.sensor_I = parseInt(sensor_I * 1000);
+				SensorSet_msg.sensor_D = parseInt(sensor_D * 1000);
+				console.log(document.getElementById("Set_Roll").value);
+				sup_f = Number(document.getElementById("sup_f").value);
+				nsup_f = Number(document.getElementById("nsup_f").value);
+				SensorSet_msg.sup_f = parseInt(sup_f * 1000);
+				SensorSet_msg.nsup_f = parseInt(nsup_f * 1000);
+			// SensorSet_msg.DesireSet = true;
+			// sensor_modeset += 0x01;
+			SensorSet_msg.sensor_modeset = sensor_modeset;
+			SensorSet_Publisher.publish(SensorSet_msg);
+		}
+		function SendGainSet()
+		{
+			
+		}
+		function ClearDrawFun(){
+			document.getElementById("checkRmoveX").checked=false;
+			document.getElementById("checkRmoveY").checked=false;
+			document.getElementById("checkRmoveZ").checked=false;
+			document.getElementById("checkRTheta").checked=false;
+			document.getElementById("checkLmoveX").checked=false;
+			document.getElementById("checkLmoveY").checked=false;
+			document.getElementById("checkLmoveZ").checked=false;
+			document.getElementById("checkLTheta").checked=false;
+			document.getElementById("checkmoveCOMX").checked=false;
+			document.getElementById("checkmoveCOMY").checked=false;
+			document.getElementById("checkmoveCOMZ").checked=false;
+			var onepoint = document.getElementById("myCanvas");
+			var cxt = onepoint.getContext("2d");
+			cxt.fillStyle = "#333";
+			cxt.fillRect(0, 0, 350, 200);
+			cxt.strokeStyle = '#FFF2F2';
+			cxt.lineWidth = 3;
+			cxt.beginPath();
+			cxt.moveTo(0, 200);
+			cxt.lineTo(0, 0);
+			cxt.stroke();
+			cxt.beginPath();
+			cxt.moveTo(0, 100);
+			cxt.lineTo(1000, 100);
+			cxt.stroke();
+			cxt.moveTo(0, 200);
+			cxt.beginPath();
+		}
+	</script>
+</head>
+
+<body>
+	<!-- NAV BAR -->
+	<ul>
+		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+		<li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+		<li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+		<li><a target="_blank" class="navbarright" href="index.html">Home</a></li>
+		<li class="logo" style="width: 226px;">
+			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+		</li>
+	</ul>
+	<br />
+
+	<p id="connected" style="color:#00D600; display: none; font-size: 20px;">
+		Connected
+	</p>
+	<form>
+		<div id="head" align="center">
+			<h1 align="center" id="header" style="color: white;">Balance Control Interface</h1>
+			<table>
+				<tr>
+					<td>
+						<select style="height:25px; margin-right: 5px;" id="addressSelect">
+							<option value="172.17.121.10">172.17.121.10</option>
+							<option value="localhost">localhost</option>
+						</select>
+					</td>
+					<td>
+						<button type="button" style="width:110px ;height:25px;" id="changeAddressButton" onclick="enterAddress()">Enter Address</button>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<div id="control" align="center" >
+			<div align="center" style="float: center; width: 530px;  ">
+			<section id="SensorValue" align="center" style="margin-left: 0%;float: left; width: 180px">
+				<b><h align="center"style="font-size: 23px">Sensor_Value</h></b>
+				<table>
+					<tr>
+						<td style="color:#888;font-size: 18px">IMU:</td>
+					</tr>
+					<tr>
+						<td>Roll:</td>
+						<td><input type="text" name="Roll" id="Roll" value="0" style="width: 70px"></td>
+					</tr>
+					<tr>
+						<td>Pitch:</td>
+						<td><input type="text" name="Pitch" id="Pitch" value="0" style="width: 70px"></td>
+					</tr>
+					<tr>
+						<td>Yaw:</td>
+						<td><input type="text" name="Yaw" id="Yaw" value="0" style="width: 70px"></td>
+					</tr>
+					<table style="margin-top: 20px "></table>
+				</table>
+				<!-- <button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 5px;display: inline-block;" onclick="SendSensorSet()">IMU reset</button> -->
+				</table>
+				
+			</section>
+			<section id="SensorValue" align="center" style="margin-left: 0%;float: left; width: 330px">
+				<b><h align="center"style="font-size: 23px">Sensor_Parameter</h></b>
+				<table style="margin-top: 10px ">
+					<tr>
+						<td></td>
+						<td></td>
+						<td>P</td>
+						<td>I</td>
+						<td>D</td>
+					</tr>
+					<tr>
+						<td><input style="margin-top: 10px " type="radio" name="sensor" id="Roll_set" value="Roll"></td>
+						<td><label for="Roll_set">Roll:</label></td>
+						<td><input type="text" name="Roll_P" id="Roll_P" value="0" style="width: 50px"></td>
+						<td><input type="text" name="Roll_I" id="Roll_I" value="0" style="width: 50px"></td>
+						<td><input type="text" name="Roll_D" id="Roll_D" value="0" style="width: 50px"></td>
+					</tr>
+					<tr>
+						<td><input style="margin-top: 10px " type="radio" name="sensor" id="Pitch_set" value="Pitch"></td>
+						<td><label for="Pitch_set">Pitch:</label></td>
+						<td><input type="text" name="Pitch_P" id="Pitch_P" value="0" style="width: 50px"></td>
+						<td><input type="text" name="Pitch_I" id="Pitch_I" value="0" style="width: 50px"></td>
+						<td><input type="text" name="Pitch_D" id="Pitch_D" value="0" style="width: 50px"></td>
+					</tr>
+					<tr>
+						<td><input style="margin-top: 10px " type="radio" name="sensor" id="CoM_set" value="CoM"></td>
+						<td><label for="CoM_set">CoM:</label></td>
+						<td><input type="text" name="CoM_P" id="CoM_P" value="0" style="width: 50px"></td>
+						<td><input type="text" name="CoM_I" id="CoM_I" value="0" style="width: 50px"></td>
+						<td><input type="text" name="CoM_D" id="CoM_D" value="0" style="width: 50px"></td>
+					</tr>
+					<tr>
+						<td></td>
+						<td></td>
+						<td>Roll</td>
+						<td>Pitch</td>
+					</tr>
+					<tr>
+						<td><input style="margin-top: 10px " type="radio" name="sensor" id="Set_chase_" value="Set_chase"></td>
+						<td><label for="Set_chase_">Set_chase:</label></td>
+						<td><input type="text" name="Set_Roll" id="Set_Roll" value="0" style="width: 50px"></td>
+						<td><input type="text" name="Set_Pitch" id="Set_Pitch" value="0" style="width: 50px"></td>
+					</tr>
+					<tr>
+						<td></td>
+						<td></td>
+						<td>sup</td>
+						<td>nsup</td>
+					</tr>
+					<tr>
+						<td><input style="margin-top: 10px " type="radio" name="sensor" id="Foot_Offset_set" value="Foot_Offset"></td>
+						<td><label for="Foot_Offset_set">Foot_Offset:</label></td>
+						<td><input type="text" name="sup_f" id="sup_f" value="0" style="width: 50px"></td>
+						<td><input type="text" name="nsup_f" id="nsup_f" value="0" style="width: 50px"></td>
+					</tr>
+					<!-- <tr>
+						<td><input style="margin-top: 10px " type="radio" name="sensor" id="Para_reset_" value="Para_reset"></td>
+						<td><label for="Para_reset_">Para_reset</label></td>
+					</tr> -->
+					<tr>
+						<td><input style="margin-top: 10px " type="checkbox" name="sensor" id="IMU_reset_" value="IMU_reset"></td>
+						<td><label for="IMU_reset_">IMU_reset</label></td>
+					</tr>
+					<table style="margin-top: 20px "></table>
+				</table>
+				<button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 5px;display: inline-block;" onclick="SendSensorSet()">Sensor Set</button>
+				</table>
+			</section>
+		</div>
+		</div>
+	</form>
+</body>
+
+</html>

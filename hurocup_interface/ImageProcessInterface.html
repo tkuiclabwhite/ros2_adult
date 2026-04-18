@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8" />
+	<link rel="SHORTCUT ICON" href="./picture/icon.png">
+
+	<!-- CSS References -->
+	<link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
+
+	<!-- JavaScript References -->
+	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
+	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+	<script type="text/javascript" type="text/javascript">
+
+		var wasOnline = true;
+		var checkConnectionInterval = null;
+		var ros = new ROSLIB.Ros({
+		url: "ws://172.17.121.10:9090"
+		});
+
+		function checkConnection() {
+			if (ros && window.navigator.onLine) {
+				document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+				// console.log('Setting background to online image');
+				if(!wasOnline){
+					console.log("Network status changed to online. Triggering enterAddress().");
+					enterAddress();
+					wasOnline = true;
+				}
+
+			}else{
+				document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+				console.log('Setting background to offline image');
+				if(wasOnline){
+					console.log("Network status changed to offline. Triggering enterAddress().");
+					enterAddress();
+					wasOnline = false;
+				}
+				wasOnline = false;
+			}	
+		}
+		
+
+		// Listen to online and offline events
+		window.addEventListener('online', checkConnection);
+		window.addEventListener('offline', checkConnection);
+		
+		ros.on('connection', function () {
+			console.log('Connection made!');
+			connectFlag = true;
+			document.getElementById('connected').style.display = 'inline';
+			document.getElementById("orign_image").style.display = 'inline';
+			document.getElementById("color_image").style.display = 'inline';
+			// document.getElementById("filter_image").style.display = 'inline';
+			locationBack_Subscriber.subscribe(function (msg) {
+				console.log("locationBack:", msg.data);
+
+				let loc = msg.data;
+
+				// 如果是 "/ar/Parameter" 這種格式，拆出中間那段 "ar"
+				if (typeof loc === 'string' && loc.startsWith('/')) {
+					const parts = loc.split('/');
+					// parts 可能是 ["", "ar", "Parameter"]
+					if (parts.length > 1 && parts[1].length > 0) {
+						loc = parts[1].trim();
+					}
+				}
+
+				const select = document.getElementById('strategy_location');
+
+				// 確認這個值真的在選單裡才設定，避免設錯
+				const hasOption = Array.from(select.options).some(
+					opt => opt.value.trim() === loc
+				);
+
+				if (hasOption) {
+					select.value = loc;   // ex: "ar"
+					console.log("Set strategy_location to:", loc);
+				} else {
+					console.warn("locationBack value not in select options:", loc);
+				}
+
+				// 下面照原本邏輯
+				changecolorlabel(document.getElementById("colorlabel").value);
+				// changeYUVcolorlabel 有實作才叫，避免沒有定義直接噴錯
+				if (typeof changeYUVcolorlabel === 'function' && document.getElementById("yuv_colorlabel")) {
+					changeYUVcolorlabel(document.getElementById("yuv_colorlabel").value);
+				}
+			});
+
+			checkConnectionInterval = setInterval(checkConnection, 10);
+		});
+		ros.on('error', function (error) {
+			console.log('Error connecting to websocket server: ', error);
+			document.getElementById('connected').style.display = 'none';
+			
+			document.body.style.backgroundImage = 'url(./picture/Gray_Background.jpg)';
+			clearInterval(checkConnectionInterval);
+		});
+		ros.on('close', function () {
+			console.log('Connection to websocket server closed.');
+			B_Measure_Flag = true;
+			document.getElementById("color_image").style.display = 'none';
+			document.getElementById("orign_image").style.display = 'none';
+			document.getElementById('connected').style.display = 'none';
+			
+			document.body.style.backgroundImage = 'url(./picture/Gray_Background.jpg)';
+			clearInterval(checkConnectionInterval);
+		});
+		
+        var locationBack_Subscriber = new ROSLIB.Topic({
+			ros: ros,
+			name: '/locationBack',
+			messageType: 'tku_msgs/msg/Location'
+		});
+
+		var ColorModelForm_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/ColorModelForm_Topic',
+			messageType: 'tku_msgs/ButtonColorForm'
+		});
+		// 定義扭力控制的 Topic (對應 Python 的 Int16MultiArray)
+		var Torque_Topic = new ROSLIB.Topic({
+			ros : ros, // 確保你的 ros 物件名稱是對的
+			name : '/set_torque',
+			messageType : 'std_msgs/Int16MultiArray'
+		});
+
+		// 紀錄頭部扭力狀態 (預設為 true/開啟)
+		var isHeadTorqueOn = false;
+
+		var ColorFormcmd = new ROSLIB.Message({
+			buildingmodel: false
+		});
+
+		var HSVValue_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/HSVValue_Topic',
+			messageType: 'tku_msgs/HSVValue'
+		});
+		var HSVValuecmd = new ROSLIB.Message({
+			hmax: 180,
+			hmin: 0,
+			smax: 255,
+			smin: 0,
+			vmax: 255,
+			vmin: 0
+		});
+
+		var Head_Topic = new ROSLIB.Topic({
+			ros : ros,               // 你的 ros 連線物件
+			name : '/Head_Topic',    // 必須跟 Python 的訂閱名稱一模一樣 (有斜線)
+			messageType : 'tku_msgs/HeadPackage' // 必須完全正確，大小寫敏感
+		});
+		var HeadPackagecmd = new ROSLIB.Message({
+			id: 0,
+			position: 511,
+			speed: 10
+		});
+		var SaveCamera = new ROSLIB.Topic({
+			ros: ros,
+			name: '/Camera_Save',
+			messageType: 'tku_msgs/msg/CameraSave',   // ✅ 改成 ROS2 介面格式
+			compress: false
+		});
+
+		var SaveCameraMsg = new ROSLIB.Message({
+			brightness: 0.5,
+			contrast: 0.5,
+			saturation: 0.5,
+			whitebalance: 0.5,
+			autowhitebalance: false,
+			auto_exposure: false
+			// 如果你的 msg 裡有其他欄位記得補齊
+		});
+
+
+		var Camera = new ROSLIB.Topic({
+			ros: ros,
+			name: '/Camera_Topic',
+			messageType: 'tku_msgs/Camera'
+		});
+		var CameraMsg = new ROSLIB.Message({
+			brightness: 0.5,
+			contrast: 0.5,
+			saturation: 0.5,
+			whitebalance: 0.5,
+			autowhitebalance: false,
+			auto_exposure: false,
+			// autoBacklightCompensation: false
+		});
+
+		var WebStart_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/web/start',
+			messageType: 'std_msgs/Bool'
+		});
+		var WebStartcmd = new ROSLIB.Message({
+			data: false
+		});
+		
+		var CameraId_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/CameraId',
+			messageType: 'std_msgs/Int16'
+		});
+		var CameraId_msg = new ROSLIB.Message({
+			data: 0
+		});
+
+		var BuildStatus_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/BuildStatus',
+			messageType: 'std_msgs/Int16'
+		});
+		var BuildStatus_msg = new ROSLIB.Message({
+			data: 0
+		});
+
+		var HSVClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/LoadHSVInfo',
+			serviceType: 'tku_msgs/HSVInfo'
+		});
+		var HSVreqrest = new ROSLIB.ServiceRequest({
+			colorlabel: "orange"
+		});
+
+		var BuildClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/BuildModel',
+			serviceType: 'tku_msgs/BuildModel'
+		});
+		var Buildreqrest = new ROSLIB.ServiceRequest({
+			build: true
+		});
+
+		// var paramClient = new ROSLIB.Param({
+		// 	ros: ros,
+		// 	name: '/location'
+		// });
+
+		// var SaveHSVClient
+		// var SaveHSVreqrest
+
+		// paramClient.get(function(value) {
+		// 	console.log('/location 參數的值：', value);
+
+		var SaveHSVClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/SaveHSV',
+			serviceType: 'tku_msgs/SaveHSV'
+		});
+		var SaveHSVreqrest = new ROSLIB.ServiceRequest({
+			save: true,
+			// location:value
+		});
+		// });
+
+		var CameraInfoClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/CameraInfo',
+			serviceType: 'tku_msgs/CameraInfo'
+		});
+		var LoadCamerareqrest = new ROSLIB.ServiceRequest({
+			load: true
+		});
+
+		//-----
+		var connectFlag = false;
+		var myAddress = "172.17.121.10";
+		// var myAddress = "0.0.0.0";
+
+		var B_SetupCamera_Flag = true;
+		var B_Start_Flag = true;
+
+		var hmin = 0;
+		var hmax = 180;
+		var smin = 0;
+		var smax = 255;
+		var bmin = 0;
+		var bmax = 255;
+
+		var CamBrightnessValue = 1;
+		var CamContrastValue = 100;
+		var CamSaturationValue = 50;
+		var CamWhiteBalanceValue = 4000;
+		var CamautowhitebalanceValue = false;
+		var Camauto_exposureValue = false;
+
+		function enterAddress() {
+			if (connectFlag) {
+				ros.close();
+				connectFlag = false;
+			}
+
+			console.log("connect is", connectFlag);
+			myAddress = document.getElementById("addressSelect").value;
+			console.log("Connecting address is", myAddress);
+			
+
+			const state = ros.socket ? ros.socket.readyState : WebSocket.CLOSED;
+			// WebSocket.readyState: 0 CONNECTING, 1 OPEN, 2 CLOSING, 3 CLOSED
+			if (state === WebSocket.OPEN || state === WebSocket.CONNECTING || state === WebSocket.CLOSING) {				
+				ros.close();
+				console.log("state is",state);
+				ros.once('close', () => ros.connect("ws://"+myAddress+":9090")); // 等真正關完再連						
+		    } else{
+				// WebSocket 連線 (9090)
+				ros.connect("ws://"+myAddress+":9090");
+			}						
+
+			// 所有影像流都改用 myAddress（不要再用 0.0.0.0）
+			document.getElementById("orign_image").src = "http://" + myAddress + ":8080/stream?topic=/zoom_in";
+			// document.getElementById("orign_image").src = "http://" + myAddress + ":8080/stream?topic=/camera1/image_raw";
+			// document.getElementById("orign_image").src = "http://" + myAddress + ":8080/stream?topic=/zed/zed_node/rgb_raw/image_raw_color";
+			
+			// document.getElementById("filter_image").src = "http://" + myAddress + ":8080/stream?topic=/build_image";
+			document.getElementById("color_image").src = "http://" + myAddress + ":8080/stream?topic=/processed_image";
+
+			// document.getElementById("zoomin_image").src = "http://" + myAddress + ":8080/stream?topic=/zoom_in";
+			
+			strategylocation();
+		}
+
+		
+
+		var location_strategy = new ROSLIB.Topic({
+			ros: ros,
+			name: '/location',
+			messageType: 'tku_msgs/Location'
+		});
+		var location_msg = new ROSLIB.Message({
+			data: ""
+
+		});
+		function strategylocation() {
+			// 获取选定的值
+			location_msg.data = "/" + document.getElementById('strategy_location').value + "/Parameter";
+			console.log(`Selected strategy location: ${location_msg.data}`);
+			location_strategy.publish(location_msg);
+			changecolorlabel(document.getElementById("colorlabel").value);
+			// changeYUVcolorlabel(document.getElementById("yuv_colorlabel").value);
+			// if (typeof loadOpenCvToUI === "function") {
+       	 		// loadOpenCvToUI();
+    		// }
+			// loadOpenCvToUI();
+			// 这里可以根据需要发送请求或执行其他操作
+			CameraInfoClient.callService(LoadCamerareqrest, function (LoadCameraresult) {
+				console.log("white_balance: ", LoadCameraresult.white_balance);
+				console.log("auto_white_balance: ", LoadCameraresult.auto_white_balance);
+				console.log("auto_exposure: ", LoadCameraresult.auto_exposure);
+				console.log("LoadCameraresult: ", LoadCameraresult);
+				CamBrightnessValue = LoadCameraresult.brightness;
+				CamContrastValue = LoadCameraresult.contrast;
+				CamSaturationValue = LoadCameraresult.saturation;
+				CamWhiteBalanceValue = LoadCameraresult.white_balance;
+				CamautowhitebalanceValue = LoadCameraresult.auto_white_balance;
+				Camauto_exposureValue = LoadCameraresult.auto_exposure;
+				
+				document.getElementById("CamBrightness").value = CamBrightnessValue;
+				document.getElementById("CamBrightnessValue").value = CamBrightnessValue;
+				document.getElementById("CamContrast").value = CamContrastValue;
+				document.getElementById("CamContrastValue").value = CamContrastValue;
+				document.getElementById("CamSaturation").value = CamSaturationValue;
+				document.getElementById("CamSaturationValue").value = CamSaturationValue;
+				document.getElementById("CamWhiteBalance").value = CamWhiteBalanceValue;
+				document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
+				document.getElementById("AutoWhitBlance").checked = CamautowhitebalanceValue;
+				document.getElementById("auto_exposure").checked = Camauto_exposureValue;
+
+				CameraMsg.brightness = Number(CamBrightnessValue);
+				CameraMsg.contrast = Number(CamContrastValue);
+				CameraMsg.saturation = Number(CamSaturationValue);
+				CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+				CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+				CameraMsg.auto_exposure = Camauto_exposureValue;
+				Camera.publish(CameraMsg);
+			});
+		}
+
+		// function locationBack(){
+		// 	locationBack_Subscriber.subscribe(function (msg)
+		// 	{
+		// 		console.log("locationBack:"+ msg.data)
+		// 		document.getElementById('strategy_location').value = msg.data;
+		// 		changecolorlabel(document.getElementById("colorlabel").value);
+		// 		changeYUVcolorlabel(document.getElementById("yuv_colorlabel").value)
+		// 	});			
+		// }
+		
+		// http://0.0.0.0:8080/stream_viewer?topic=/image_raw
+
+		function LoadCamera(){
+			changecolorlabel(document.getElementById("colorlabel").value);
+			// changeYUVcolorlabel(document.getElementById("yuv_colorlabel").value)
+			// 这里可以根据需要发送请求或执行其他操作
+			CameraInfoClient.callService(LoadCamerareqrest, function (LoadCameraresult) {
+				console.log("white_balance: ", LoadCameraresult.white_balance);
+				console.log("auto_white_balance: ", LoadCameraresult.auto_white_balance);
+				console.log("auto_exposure: ", LoadCameraresult.auto_exposure);
+				console.log("LoadCameraresult: ", LoadCameraresult);
+				CamBrightnessValue = LoadCameraresult.brightness;
+				CamContrastValue = LoadCameraresult.contrast;
+				CamSaturationValue = LoadCameraresult.saturation;
+				CamWhiteBalanceValue = LoadCameraresult.white_balance;
+				CamautowhitebalanceValue = LoadCameraresult.auto_white_balance;
+				Camauto_exposureValue = LoadCameraresult.auto_exposure;
+				
+				document.getElementById("CamBrightness").value = CamBrightnessValue;
+				document.getElementById("CamBrightnessValue").value = CamBrightnessValue;
+				document.getElementById("CamContrast").value = CamContrastValue;
+				document.getElementById("CamContrastValue").value = CamContrastValue;
+				document.getElementById("CamSaturation").value = CamSaturationValue;
+				document.getElementById("CamSaturationValue").value = CamSaturationValue;
+				document.getElementById("CamWhiteBalance").value = CamWhiteBalanceValue;
+				document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
+				document.getElementById("AutoWhitBlance").checked = CamautowhitebalanceValue;
+				document.getElementById("auto_exposure").checked = Camauto_exposureValue;
+
+				CameraMsg.brightness = Number(CamBrightnessValue);
+				CameraMsg.contrast = Number(CamContrastValue);
+				CameraMsg.saturation = Number(CamSaturationValue);
+				CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+				CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+				CameraMsg.auto_exposure = Camauto_exposureValue;
+				Camera.publish(CameraMsg);
+			});
+		}
+
+		function SelectBuildFunction(){
+			var build_value = document.getElementById("build-select").value;
+			console.log("SelectBuildFunction value is ", build_value);
+			if(build_value == "All_color_build"){
+				BuildStatus_msg.data = 0;
+				BuildStatus_Topic.publish(BuildStatus_msg);
+				console.log("All_color_build");
+			}
+			else if(build_value == "Single_color_build"){
+				BuildStatus_msg.data = 1;
+				BuildStatus_Topic.publish(BuildStatus_msg);
+				console.log("Single_color_build");
+			}
+		}
+
+		function ResetColorModelFunction() {
+			document.getElementById("hminRange").value = 0;
+			document.getElementById("sminRange").value = 0;
+			document.getElementById("bminRange").value = 0;
+			document.getElementById("hmaxRange").value = 180;
+			document.getElementById("smaxRange").value = 255;
+			document.getElementById("bmaxRange").value = 255;
+			document.getElementById("hminValue").value = 0;
+			document.getElementById("sminValue").value = 0;
+			document.getElementById("bminValue").value = 0;
+			document.getElementById("hmaxValue").value = 180;
+			document.getElementById("smaxValue").value = 255;
+			document.getElementById("bmaxValue").value = 255;
+			hmin = 0;
+			hmax = 180;
+			smin = 0;
+			smax = 255;
+			bmin = 0;
+			bmax = 255;
+			HSVValuecmd.hmax = Number(hmax);
+			HSVValuecmd.hmin = Number(hmin);
+			HSVValuecmd.smax = Number(smax);
+			HSVValuecmd.smin = Number(smin);
+			HSVValuecmd.vmax = Number(bmax);
+			HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+			console.log("ResetColorModelFunction");
+		}
+		function CloseColorModelFunction() {
+			document.getElementById("hminRange").value = 0;
+			document.getElementById("sminRange").value = 0;
+			document.getElementById("bminRange").value = 0;
+			document.getElementById("hmaxRange").value = 0;
+			document.getElementById("smaxRange").value = 0;
+			document.getElementById("bmaxRange").value = 0;
+			document.getElementById("hminValue").value = 0;
+			document.getElementById("sminValue").value = 0;
+			document.getElementById("bminValue").value = 0;
+			document.getElementById("hmaxValue").value = 0;
+			document.getElementById("smaxValue").value = 0;
+			document.getElementById("bmaxValue").value = 0;
+			hmin = 0;
+			hmax = 0;
+			smin = 0;
+			smax = 0;
+			bmin = 0;
+			bmax = 0;
+			HSVValuecmd.hmax = Number(hmax);
+			HSVValuecmd.hmin = Number(hmin);
+			HSVValuecmd.smax = Number(smax);
+			HSVValuecmd.smin = Number(smin);
+			HSVValuecmd.vmax = Number(bmax);
+			HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+			console.log("CloseColorModelFunction");
+		}
+		function SaveColorModelFunction() {
+			// SaveHSVreqrest = new ROSLIB.ServiceRequest({
+			// 	save: true,
+			// 	location: value
+			// });
+			console.log("SaveColorModelFunction");
+			SaveHSVreqrest.save = true;
+			document.getElementById("SaveColorModel").disabled = "disabled";
+			SaveHSVClient.callService(SaveHSVreqrest, function (SaveHSVresult) {
+				if (SaveHSVresult.already == true) {
+					document.getElementById("SaveColorModel").disabled = false;
+				}
+			});
+		}
+		function BuildColorModelFunction() {
+			console.log("BuildColorModelFunction");
+			Buildreqrest.build = true;
+			console.log("build is = ", Buildreqrest.already);
+			document.getElementById("BuildColorModel").disabled = "disabled";
+			BuildClient.callService(Buildreqrest, function (Buildresult) {
+				if (Buildresult.already == true) {
+					document.getElementById("BuildColorModel").disabled = false;
+				}
+			});
+		}
+		function HeadTorqueSwitch() {
+			// 1. 切換狀態 (Toggle)
+			isHeadTorqueOn = !isHeadTorqueOn;
+			
+			// 轉換成 Python driver 看得懂的數字 (1=On, 0=Off)
+			var state = isHeadTorqueOn ? 1 : 0;
+
+			// 2. 準備訊息 (Int16MultiArray 格式: [ID, State])
+			
+			// 針對 ID 22 (水平)
+			var msg_pan = new ROSLIB.Message({
+				data: [22, state]
+			});
+
+			// 針對 ID 23 (垂直)
+			var msg_tilt = new ROSLIB.Message({
+				data: [23, state]
+			});
+
+			// 3. 發送指令 (連發兩次，分別給兩顆馬達)
+			Torque_Topic.publish(msg_pan);
+			Torque_Topic.publish(msg_tilt);
+
+			// 4. UI 與 Log 回饋
+			if (isHeadTorqueOn) {
+				console.log("[Head Torque] ON (ID 22, 23)");
+				// 如果你有按鈕的文字要改，可以解開下面這行
+				// document.getElementById("你的按鈕ID").value = "Torque OFF"; 
+				// document.getElementById("你的按鈕ID").style.backgroundColor = "green";
+			} else {
+				console.log("[Head Torque] OFF (ID 22, 23)");
+				// 如果你有按鈕的文字要改，可以解開下面這行
+				// document.getElementById("你的按鈕ID").value = "Torque ON";
+				// document.getElementById("你的按鈕ID").style.backgroundColor = "red";
+			}
+		}
+		function CameraSave() {
+			console.log("CameraSave");
+			document.getElementById("CamBrightness").value = CamBrightnessValue;
+			document.getElementById("CamBrightnessValue").value = CamBrightnessValue;
+			document.getElementById("CamContrast").value = CamContrastValue;
+			document.getElementById("CamContrastValue").value = CamContrastValue;
+			document.getElementById("CamSaturation").value = CamSaturationValue;
+			document.getElementById("CamSaturationValue").value = CamSaturationValue;
+			document.getElementById("CamWhiteBalance").value = CamWhiteBalanceValue;
+			document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
+			document.getElementById("AutoWhitBlance").checked = CamautowhitebalanceValue;
+			document.getElementById("auto_exposure").checked = Camauto_exposureValue;			
+			SaveCameraMsg.brightness = Number(CamBrightnessValue);
+			SaveCameraMsg.contrast = Number(CamContrastValue);
+			SaveCameraMsg.saturation = Number(CamSaturationValue);
+			SaveCameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			SaveCameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			SaveCameraMsg.auto_exposure = Camauto_exposureValue;
+			console.log("Publish /Camera_Save:", SaveCameraMsg);
+			SaveCamera.publish(SaveCameraMsg);
+		}
+		function saveAll(){
+			CameraSave();
+			SaveYUVColorModelFunction();
+			SaveColorModelFunction();
+			opencvSave();
+		}
+		
+		function changebuild(newValue) {
+			console.log(newValue)
+			var build_value = document.getElementById("build-select").value;
+			console.log("SelectBuildFunction value is ", build_value);
+			if(build_value == "All_color_build"){
+				BuildStatus_msg.data = 0;
+				BuildStatus_Topic.publish(BuildStatus_msg);
+				console.log("All_color_build");
+			}
+			else if(build_value == "Single_color_build"){
+				BuildStatus_msg.data = 1;
+				BuildStatus_Topic.publish(BuildStatus_msg);
+				console.log("Single_color_build");
+			}
+		}
+
+		function changecolorlabel(newValue) {
+			console.log(newValue);
+			HSVreqrest.colorlabel = String(newValue); // 直接轉換為字串
+			console.log(typeof HSVreqrest.colorlabel, HSVreqrest.colorlabel);
+			// console.log(HSVreqrest.colorlabel);
+			HSVClient.callService(HSVreqrest, function (HSVresult) {
+				document.getElementById("hminRange").value = HSVresult.hmin;
+				console.log("hminRange = ", HSVresult.hmin);
+				document.getElementById("sminRange").value = HSVresult.smin;
+				console.log("sminRange = ", HSVresult.smin);
+				document.getElementById("bminRange").value = HSVresult.vmin;
+				console.log("bminRange = ", HSVresult.vmin);
+				document.getElementById("hmaxRange").value = HSVresult.hmax;
+				console.log("hmaxRange = ", HSVresult.hmax);
+				document.getElementById("smaxRange").value = HSVresult.smax;
+				console.log("smaxRange = ", HSVresult.smax);
+				document.getElementById("bmaxRange").value = HSVresult.vmax;
+				console.log("bmaxRange = ", HSVresult.vmax);
+				document.getElementById("hminValue").value = HSVresult.hmin;
+				document.getElementById("sminValue").value = HSVresult.smin;
+				document.getElementById("bminValue").value = HSVresult.vmin;
+				document.getElementById("hmaxValue").value = HSVresult.hmax;
+				document.getElementById("smaxValue").value = HSVresult.smax;
+				document.getElementById("bmaxValue").value = HSVresult.vmax;
+				HSVValuecmd.hmin = Number(document.getElementById("hminValue").value);
+				HSVValuecmd.hmax = Number(document.getElementById("hmaxValue").value);
+				HSVValuecmd.smin = Number(document.getElementById("sminValue").value);
+				HSVValuecmd.smax = Number(document.getElementById("smaxValue").value);
+				HSVValuecmd.vmin = Number(document.getElementById("bminValue").value);
+				HSVValuecmd.vmax = Number(document.getElementById("bmaxValue").value);
+				HSVValue_Topic.publish(HSVValuecmd);
+			});
+		}
+		function showhminValue(newValue) {
+			document.getElementById("hminValue").value = newValue;
+			hmin = newValue;
+			//HSVValuecmd.hmax = Number(hmax);
+			HSVValuecmd.hmin = Number(hmin);
+			//HSVValuecmd.smax = Number(smax);
+			//HSVValuecmd.smin = Number(smin);
+			//HSVValuecmd.vmax = Number(bmax);
+			//HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangehminValue(newValue) {
+			document.getElementById("hminRange").value = newValue;
+			hmin = newValue;
+			//HSVValuecmd.hmax = Number(hmax);
+			HSVValuecmd.hmin = Number(hmin);
+			//HSVValuecmd.smax = Number(smax);
+			//HSVValuecmd.smin = Number(smin);
+			//HSVValuecmd.vmax = Number(bmax);
+			//HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showhmaxValue(newValue) {
+			document.getElementById("hmaxValue").value = newValue;
+			hmax = newValue;
+			HSVValuecmd.hmax = Number(hmax);
+			//HSVValuecmd.hmin = Number(hmin);
+			//HSVValuecmd.smax = Number(smax);
+			//HSVValuecmd.smin = Number(smin);
+			//HSVValuecmd.vmax = Number(bmax);
+			//HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangehmaxValue(newValue) {
+			document.getElementById("hmaxRange").value = newValue;
+			hmax = newValue;
+			HSVValuecmd.hmax = Number(hmax);
+			//HSVValuecmd.hmin = Number(hmin);
+			//HSVValuecmd.smax = Number(smax);
+			//HSVValuecmd.smin = Number(smin);
+			//HSVValuecmd.vmax = Number(bmax);
+			//HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showsminValue(newValue) {
+			document.getElementById("sminValue").value = newValue;
+			smin = newValue;
+			//HSVValuecmd.hmax = Number(hmax);
+			//HSVValuecmd.hmin = Number(hmin);
+			//HSVValuecmd.smax = Number(smax);
+			HSVValuecmd.smin = Number(smin);
+			//HSVValuecmd.vmax = Number(bmax);
+			//HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangesminValue(newValue) {
+			document.getElementById("sminRange").value = newValue;
+			smin = newValue;
+			//HSVValuecmd.hmax = Number(hmax);
+			//HSVValuecmd.hmin = Number(hmin);
+			//HSVValuecmd.smax = Number(smax);
+			HSVValuecmd.smin = Number(smin);
+			//HSVValuecmd.vmax = Number(bmax);
+			//HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showsmaxValue(newValue) {
+			document.getElementById("smaxValue").value = newValue;
+			smax = newValue;
+			//HSVValuecmd.hmax = Number(hmax);
+			//HSVValuecmd.hmin = Number(hmin);
+			HSVValuecmd.smax = Number(smax);
+			//HSVValuecmd.smin = Number(smin);
+			//HSVValuecmd.vmax = Number(bmax);
+			//HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangesmaxValue(newValue) {
+			document.getElementById("smaxRange").value = newValue;
+			smax = newValue;
+			//HSVValuecmd.hmax = Number(hmax);
+			//HSVValuecmd.hmin = Number(hmin);
+			HSVValuecmd.smax = Number(smax);
+			//HSVValuecmd.smin = Number(smin);
+			//HSVValuecmd.vmax = Number(bmax);
+			//HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showbminValue(newValue) {
+			document.getElementById("bminValue").value = newValue;
+			bmin = newValue;
+			//HSVValuecmd.hmax = Number(hmax);
+			//HSVValuecmd.hmin = Number(hmin);
+			//HSVValuecmd.smax = Number(smax);
+			//HSVValuecmd.smin = Number(smin);
+			//HSVValuecmd.vmax = Number(bmax);
+			HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangebminValue(newValue) {
+			document.getElementById("bminRange").value = newValue;
+			bmin = newValue;
+			//HSVValuecmd.hmax = Number(hmax);
+			//HSVValuecmd.hmin = Number(hmin);
+			//HSVValuecmd.smax = Number(smax);
+			//HSVValuecmd.smin = Number(smin);
+			//HSVValuecmd.vmax = Number(bmax);
+			HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showbmaxValue(newValue) {
+			document.getElementById("bmaxValue").value = newValue;
+			bmax = newValue;
+			//HSVValuecmd.hmax = Number(hmax);
+			//HSVValuecmd.hmin = Number(hmin);
+			//HSVValuecmd.smax = Number(smax);
+			//HSVValuecmd.smin = Number(smin);
+			HSVValuecmd.vmax = Number(bmax);
+			//HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangebmaxValue(newValue) {
+			document.getElementById("bmaxRange").value = newValue;
+			bmax = newValue;
+			//HSVValuecmd.hmax = Number(hmax);
+			//HSVValuecmd.hmin = Number(hmin);
+			//HSVValuecmd.smax = Number(smax);
+			//HSVValuecmd.smin = Number(smin);
+			HSVValuecmd.vmax = Number(bmax);
+			//HSVValuecmd.vmin = Number(bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showCamBrightness(newValue) {
+			document.getElementById("CamBrightnessValue").value = newValue;
+			CamBrightnessValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			CameraMsg.auto_exposure = Camauto_exposureValue;
+			Camera.publish(CameraMsg);
+
+		}
+		function rangeCamBrightnessValue(newValue) {
+			document.getElementById("CamBrightness").value = newValue;
+			CamBrightnessValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			CameraMsg.auto_exposure = Camauto_exposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function showCamContrast(newValue) {
+			document.getElementById("CamContrastValue").value = newValue;
+			CamContrastValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			CameraMsg.auto_exposure = Camauto_exposureValue;
+			Camera.publish(CameraMsg);
+
+		}
+		function rangeCamContrastValue(newValue) {
+			document.getElementById("CamContrast").value = newValue;
+			CamContrastValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			CameraMsg.auto_exposure = Camauto_exposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function showCamSaturation(newValue) {
+			document.getElementById("CamSaturationValue").value = newValue;
+			CamSaturationValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			CameraMsg.auto_exposure = Camauto_exposureValue;
+			Camera.publish(CameraMsg);
+
+		}
+		function rangeCamSaturationValue(newValue) {
+			document.getElementById("CamSaturation").value = newValue;
+			CamSaturationValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			CameraMsg.auto_exposure = Camauto_exposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function showCamWhiteBalance(newValue) {
+			document.getElementById("CamWhiteBalanceValue").value = newValue;
+			CamWhiteBalanceValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			CameraMsg.auto_exposure = Camauto_exposureValue;
+			Camera.publish(CameraMsg);
+
+		}
+		function rangeCamWhiteBalanceValue(newValue) {
+			document.getElementById("CamWhiteBalance").value = newValue;
+			CamWhiteBalanceValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			CameraMsg.auto_exposure = Camauto_exposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function changeAutoWhitBlance() {
+			if (document.getElementById("AutoWhitBlance").checked) {
+				CamautowhitebalanceValue = true;
+			} else {
+				CamautowhitebalanceValue = false;
+			}
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			CameraMsg.auto_exposure = Camauto_exposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function changeauto_exposure() {
+			if (document.getElementById("auto_exposure").checked) {
+				Camauto_exposureValue = true;
+			} else {
+				Camauto_exposureValue = false;
+			}
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
+			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
+			CameraMsg.auto_exposure = Camauto_exposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function WebStart() {
+			if (B_Start_Flag) {
+				document.getElementById("B_Start").value = "Finsh";
+				changecolorlabel(document.getElementById("colorlabel").value);
+				B_Start_Flag = false;
+				WebStartcmd.data = true;
+				WebStart_Topic.publish(WebStartcmd);
+			} else {
+				document.getElementById("B_Start").value = "Start";
+				B_Start_Flag = true;
+				WebStartcmd.data = false;
+				WebStart_Topic.publish(WebStartcmd);
+			}
+		}
+
+		// ==== 最終極簡版：滑桿直通馬達 ====
+		function updateHeadMotion(axis, val) {
+			var isHorizontal = (axis === 'Horizontal');
+			var web_id = isHorizontal ? 1 : 2; 
+
+			// 更新網頁顯示
+			var posInput = document.getElementById(axis + "PositionValue");
+			if (posInput) posInput.value = val;
+
+			// 抓速度
+			var speedInput = document.getElementById(axis + "SpeedValue");
+			var speedVal = parseInt(speedInput.value);
+			if (!speedVal || speedVal <= 0) speedVal = 50; // 速度防呆
+
+			// ==== 關鍵修正：直接讀取，不做任何數學放大 ====
+			var sliderVal = parseInt(val); 
+			
+			// 如果你的馬達極限是 4096，這裡做個安全限制，避免撞壞機構
+			// (例如限制在 500 ~ 3500 之間，視你的機構而定)
+			if (sliderVal > 4095) sliderVal = 4095;
+			if (sliderVal < 0) sliderVal = 0;
+
+			var finalPos = sliderVal;
+			// ===========================================
+
+			if (typeof HeadPackagecmd !== 'undefined') {
+				HeadPackagecmd.id = web_id;
+				HeadPackagecmd.position = finalPos;
+				HeadPackagecmd.speed = speedVal;
+				
+				Head_Topic.publish(HeadPackagecmd);
+				
+				// Debug: 現在 Int 的數值應該要跟 Raw 一模一樣才對
+				console.log(`[Head] ID:${web_id} Raw:${val} -> Int:${finalPos}`);
+			}
+		}
+
+		// ==== 對應原本 HTML 的 8 個介面函式 ====
+		// 這樣你的 HTML 不需要改任何東西，直接呼叫這些函式即可
+
+		// 水平 (Horizontal)
+		function showHorizontalPosition(newValue) { updateHeadMotion('Horizontal', newValue); }
+		function rangeHorizontalPosition(newValue) { updateHeadMotion('Horizontal', newValue); }
+		function showHorizontalSpeed(newValue) { 
+			// 速度改變時，通常不需移動，只更新 UI 即可；
+			// 但如果你希望改速度也立刻觸發一次移動，可以取消下面註解
+			document.getElementById("HorizontalSpeedValue").value = newValue;
+			// updateHeadMotion('Horizontal', document.getElementById("HorizontalPositionValue").value);
+		}
+		function rangeHorizontalSpeed(newValue) { 
+			document.getElementById("HorizontalSpeedValue").value = newValue;
+		}
+
+		// 垂直 (Vertical)
+		function showVerticalPosition(newValue) { updateHeadMotion('Vertical', newValue); }
+		function rangeVerticalPosition(newValue) { updateHeadMotion('Vertical', newValue); }
+		function showVerticalSpeed(newValue) { 
+			document.getElementById("VerticalSpeedValue").value = newValue;
+		}
+		function rangeVerticalSpeed(newValue) { 
+			document.getElementById("VerticalSpeedValue").value = newValue;
+		}
+
+		function changeCamera() {
+			CameraId_msg.data = Number(document.getElementById("Camera_Select").value);
+			CameraId_Topic.publish(CameraId_msg);
+		}
+
+	</script>
+	<style type="text/css">
+		body {
+			width: 1520px;
+			height: 1000px;
+			overflow: visible;
+			background-image: url(./picture/Gray_Background.jpg);
+			background-size: cover;
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+		}
+
+
+		#container {
+			background-color: #333;
+			border: 2px black solid;
+			width: 850px;
+			height: 710px;
+			margin: 20px auto;
+			overflow: visible;
+			color: white;
+		}
+
+		#div_orign_image {
+			width: 320px;
+			height: 240px;
+			border: 1px #FFF solid;
+			margin: 25px 32px 24px 32px;
+			float: left;
+			display: inline;
+		}
+
+		#div_color_image {
+			width: 320px;
+			height: 240px;
+			border: 1px #FFF solid;
+			margin: 25px 32px 24px 32px;
+			float: right;
+			display: inline;
+		}
+
+		/* #div_filter_image {
+			width: 320px;
+			height: 240px;
+			border: 1px #FFF solid;
+			margin: 25px 42px 24px 32px;
+			float: right;
+			display: inline;
+		} */
+
+		#HSV_Range {
+			width: 320px;
+			height: 400px;
+			border: 1px #FFF solid;
+			margin: 10px 32px 0px 32px;/*上右下左*/
+			float: right;
+			display: inline;
+		}
+
+		#select {
+			width: 320px;
+			height: 400px;
+			margin: 10px 32px 0px 32px;
+			float: left;
+			display: inline;
+		}
+
+
+		#build_select {
+			width: 320px;
+			height: 400px;
+			margin: 10px 40px 0px 30px;
+			float: right;
+			display: inline;
+		}
+
+		#header {
+			text-align: center;
+			color: #FFFFFF;
+			margin-top: 13px;
+		}
+
+		.text {
+			margin: 1px 1px 1px 5px;
+			font-size: 12px;
+		}
+
+		.ValueText {
+			width: 38px;
+			height: 20px;
+		}
+
+		.Range {
+			width: 225px;
+			height: 10px;
+			margin: 6px 2px 6px 2px;
+
+		}
+
+		#B_ColorModelForm {
+			width: 200px;
+		}
+
+		#Camera {
+			display: inline;
+		}
+
+		#B_Start {
+			width: 50px;
+		}
+	</style>
+	<title>HumanoidInterface</title>
+	<script src="../src/strategy/strategy/strategy.js"></script>
+
+<script>
+	window.addEventListener('DOMContentLoaded', function () {
+		let loc = window.currentStrategy || "";
+		console.log('Raw loaded strategy:', loc);
+		
+		// 1. 把 "ar/Parameter" 或 "/ar/Parameter" 轉成單純的 "ar"
+		if (typeof loc === 'string') {
+			// 移除開頭所有可能的斜線
+			loc = loc.replace(/^\/+/, '');
+			// 用斜線切割，並只取第一段 (ar, bb 等)
+			loc = loc.split('/')[0].trim();
+		}
+
+		// 2. 檢查下拉選單有沒有這個選項
+		const select = document.getElementById('strategy_location');
+		const hasOption = Array.from(select.options).some(opt => opt.value === loc);
+		
+		if (hasOption) {
+			select.value = loc;
+		} else {
+			console.warn("讀取到的位置不在選單內，預設回 ar");
+			select.value = "ar"; // 防呆，預設給 ar
+		}
+		
+		console.log('UI Set to:', select.value);
+		LoadCamera();
+	});
+	</script>
+</head>
+
+<body>
+	<!-- NAV BAR -->
+	<ul>
+		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
+        <li><a target="_blank" class="navbarright" href="PIDcontroll.html">PIDcontroll</a></li>
+		<li class="logo">
+			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+		</li>
+	</ul>
+	<br />
+	<p id="connected" style="color:#00D600; display:none; font-size: 20px;">
+		Connected
+	</p>
+	<form>
+
+		<div id="head" align="center">
+			<h1 id="header">Humanoid Interface</h1>
+			<table>
+				<tr>
+					<td>
+						<select style="height:25px; margin-right: 5px;" id="addressSelect">
+							<!-- <option value="172.17.121.10">172.17.121.10</option> -->
+							<option value="172.17.121.10">172.17.121.10</option>
+							<option value="localhost">localhost</option>
+
+						</select>
+					</td>
+					<td>
+						<button type="button" style="width:110px ;height:25px;" id="changeAddressButton" onclick="enterAddress()">Enter Address</button>
+					</td>
+					<td>
+						<select style="height:25px; margin-right: 5px;" id="strategy_location" >
+							<option value="ar">ar</option>
+							<option value="bb">bb</option>
+							<option value="mar">mar </option>
+							<option value="obs">obs </option>
+							<option value="wl">wl</option>
+							<option value="sr">sr</option>
+							<option value="sp">sp</option>
+							<option value="bm">bm</option>
+							<option value="lc">lc</option>
+						</select>
+					</td>
+					<td>
+						<button type="button" style="width:110px ;height:25px;" id="changelocationButton" onclick="strategylocation()">location_load</button>
+					</td>
+					<td>
+						<button type="button" style="width:70px ;height:25px;margin-left: 10px;" id="saveAllButton" onclick="saveAll()">SaveAll</button>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<div id="container" align="center">
+			<!-- <div id="div_orign_image"> -->
+				<!-- <img id="orign_image" style="-webkit-user-select: none; display:inline;" src="http://0.0.0.0:8080/stream_viewer?topic=/image_raw"> -->
+				<!-- <img id="orign_image" style="-webkit-user-select: none; display:inline;" src="http://localhost:8080/stream_viewer?topic=/zed/zed_node/left/image_rect_color/compressed"/> -->
+			<div id="div_orign_image">
+				<img
+					id="orign_image"
+					style="width:320px; height:240px; display:inline-block;"
+					src="http://172.17.121.10:8080/stream?topic=/zoom_in"					
+				/>
+				<!-- src="http://0.0.0.0:8080/stream?topic=/zed/zed_node/right/image_rect_color&image_transport=compressed"					 -->
+
+			</div>
+			<!-- </div> -->
+
+
+			<!-- <div id="div_color_image">
+				<img id="color_image" style="-webkit-user-select: none; display:inline;" src="http://172.17.121.10:8080/stream?topic=/processed_image&image_transport=compressed">
+			</div> -->
+			<div id="div_color_image">
+				<img 
+					id="color_image" 
+					style="width:320px; height:240px; display:inline-block;" 
+					src="http://172.17.121.10:8080/stream?topic=/processed_image&image_transport=compressed"
+					alt="Processed Image Stream"
+				/>
+			</div>
+
+
+
+			<div id="HSV_Range">
+				<style>
+				table.control { border-collapse: collapse; width: auto; }
+				table.control td { padding: 4px; vertical-align: middle; }
+				td.label { width: 110px; white-space: nowrap; }   
+				td.controls { width: 230px; }                     
+				td.actions  { white-space: nowrap; }              
+				p.text { margin: 0; }
+				.select-lg { height: 26px; width: 100px; }        
+				.select-sm { height: 26px; width: 80px; }        
+				.Button { height: 26px; margin-left: 6px; }
+				</style>
+
+				<table class="control">
+				<tr>
+					<td class="label"><p class="text">Build Status:</p></td>
+					<td class="controls">
+					<select id="build-select" class="select-lg" onChange="changebuild(this.value)">
+						<option value="All_color_build">All_color</option>
+						<option value="Single_color_build">Single_color</option>
+					</select>
+					</td>
+					<!-- <td class="actions">
+					<input type="button" class="Button" value="Select" onClick="SelectBuildFunction()">
+					</td> -->
+				</tr>
+
+				<tr>
+					<td class="label"><p class="text">Color Select :</p></td>
+					<td class="controls">
+					<select id="colorlabel" class="select-sm" onChange="changecolorlabel(this.value)">
+						<option value="orange">Orange</option>
+						<option value="yellow">Yellow</option>
+						<option value="blue">Blue</option>
+						<option value="green">green</option>
+						<option value="black">Black</option>
+						<option value="red">Red</option>
+						<option value="white">White</option>
+						<option value="others">Others</option>
+					</select>
+					</td>
+					<td class="actions">
+					<input type="button" class="Button" value="Reset" onClick="ResetColorModelFunction()"><input type="button" class="Button" value="Close" onClick="CloseColorModelFunction()">
+					</td>
+				</tr>
+				</table>
+
+				<table>
+					<tr>
+						<td>
+							<p class="text">Hue:</p>
+						</td>
+						<td><img src="./picture/HSVS255.jpg" width="230" height="20">
+						</td>
+					</tr>
+					<tr>
+						<td rowspan="2"><input type="text" class="ValueText" id="hminValue" size="12" value="0" onchange="rangehminValue(this.value)" /></td>
+						<td><input class="Range" id="hminRange" name="hminRange" type="range" min="0" max="180" value="0" oninput="showhminValue(this.value)" /></td>
+						<td rowspan="2"><input type="text" class="ValueText" id="hmaxValue" size="12" value="180" onchange="rangehmaxValue(this.value)" /></td>
+					</tr>
+					<tr>
+						<td><input class="Range" id="hmaxRange" name="hmaxRange" type="range" min="0" max="180" value="180" oninput="showhmaxValue(this.value)" /></td>
+					</tr>
+					<tr>
+						<td colspan="3">
+							<p class="text">Saturation:</p>
+						</td>
+					</tr>
+					<tr>
+						<td rowspan="2"><input type="text" class="ValueText" id="sminValue" size="12" value="0" onchange="rangesminValue(this.value)" /></td>
+						<td><input class="Range" id="sminRange" name="sminRange" type="range" min="0" max="255" value="0" oninput="showsminValue(this.value)" /></td>
+						<td rowspan="2"><input type="text" class="ValueText" id="smaxValue" size="12" value="255" onchange="rangesmaxValue(this.value)" /></td>
+					</tr>
+					<tr>
+						<td><input class="Range" id="smaxRange" name="smaxRange" type="range" min="0" max="255" value="255" oninput="showsmaxValue(this.value)" /></td>
+					</tr>
+					<tr>
+						<td colspan="3">
+							<p class="text">Brightness:</p>
+						</td>
+					</tr>
+					<tr>
+						<td rowspan="2"><input type="text" class="ValueText" id="bminValue" size="12" value="0" onchange="rangebminValue(this.value)" /></td>
+						<td><input class="Range" id="bminRange" name="bminRange" type="range" min="0" max="255" value="0" oninput="showbminValue(this.value)" /></td>
+						<td rowspan="2"><input type="text" class="ValueText" id="bmaxValue" size="12" value="255" onchange="rangebmaxValue(this.value)" /></td>
+					</tr>
+					<tr>
+						<td><input class="Range" id="bmaxRange" name="bmaxRange" type="range" min="0" max="255" value="255" oninput="showbmaxValue(this.value)" /></td>
+					</tr>
+				</table>
+				<table width="320">
+					<tr>
+						<td align="center">
+							<input type="button" class="Button" id="SaveColorModel" value="Save" onClick="SaveColorModelFunction()" style="width:100px; height:30px"></input>
+						</td>
+						<td align="center">
+							<input type="button" class="Button" id="BuildColorModel" value="Build" onClick="BuildColorModelFunction()" style="width:100px;height:30px"></input>
+						</td>
+					</tr>
+				</table>
+			</div>
+
+			<div id="select">
+				<div>
+					<table width="320">
+						<tr>
+							<!-- <td>
+								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_Start" value="Start" onClick="WebStart()"></input>
+							</td> -->
+							<td>
+								<input style="margin-right: 10px; height:25px;" type="button" class="Button" id="B_ColorModelForm" value=" No Torque?  Push me ʕ•ᴥ•ʔ  "
+								 onClick="HeadTorqueSwitch()"></input>
+							</td>
+							<td>
+								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_Camera" value="Camera Save"
+								 onClick="CameraSave()"></input>
+							</td>
+						</tr>
+					</table>
+				</div>
+				<div>
+					<table width="320">
+						<tr>
+							<td colspan="3">
+								<p class="text" style="font-size: 15px;">Horizontal:</p>
+							</td>
+						</tr>
+						<tr>
+							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="HorizontalPositionValue" size="12" value="2048" onchange="rangeHorizontalPosition(this.value)" /></td>
+							<td><input class="Range" id="HorizontalPositionRange" name="HorizontalPositionRange" type="range" min="1024" max="3096"
+								 value="2048" oninput="showHorizontalPosition(this.value)"/></td>
+							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="HorizontalSpeedValue" size="12" value="1" onchange="rangeHorizontalSpeed(this.value)" /></td>
+						</tr>
+						<tr>
+							<td><input class="Range" id="HorizontalSpeedRange" name="HorizontalSpeedRange" type="range" min="1" max="200"
+								 value="1" oninput="showHorizontalSpeed(this.value)"/></td>
+						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text" style="font-size: 15px;">Vertical:</p>
+							</td>
+						</tr>
+						<tr>
+							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="VerticalPositionValue" size="12" value="2048" onchange="rangeVerticalPosition(this.value)" /></td>
+							<td><input class="Range" id="VerticalPositionRange" name="VerticalPositionRange" type="range" min="1023" max="2548"
+								 value="2048" oninput="showVerticalPosition(this.value)" /></td>
+							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="VerticalSpeedValue" size="12" value="1" onchange="rangeVerticalSpeed(this.value)" /></td>
+						</tr>
+						<tr>
+							<td><input class="Range" id="VerticalSpeedRange" name="VerticalSpeedRange" type="range" min="1" max="200" value="1"
+								 oninput="showVerticalSpeed(this.value)" /></td>
+						</tr>
+					</table>
+				</div>
+				<div id="Camera">
+					<div style="float:left; margin-left:8px;">
+						<input type="checkbox" name="AutoWhitBlance" id="AutoWhitBlance" onclick="changeAutoWhitBlance()">Auto White_blance
+					</div>
+					<div style="float:right; margin-right:12px;">
+						<input type="checkbox" name="auto_exposure" id="auto_exposure" onclick="changeauto_exposure()">Auto Exposure
+					</div>
+					<table width="320">
+						<tr>
+							<td colspan="3">
+								<p class="text">Camera Brightness:</p>
+							</td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="CamBrightness" name="CamBrightness" type="range" min="-60" max="60" value="-15"
+								 oninput="showCamBrightness(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamBrightnessValue" size="12" value="50" onchange="rangeCamBrightnessValue(this.value)" /></td>
+						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text">Camera Contrast:</p>
+							</td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="CamContrast" name="CamContrast" type="range" min="0" max="200" value="50" oninput="showCamContrast(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamContrastValue" size="12" value="5" onchange="rangeCamContrastValue(this.value)" /></td>
+						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text">Camera Saturation:</p>
+							</td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="CamSaturation" name="CamSaturation" type="range" min="0" max="100" value="50"
+								 oninput="showCamSaturation(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamSaturationValue" size="12" value="50" onchange="rangeCamSaturationValue(this.value)" /></td>
+						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text">Camera WhiteBalance:</p>
+							</td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="CamWhiteBalance" name="CamWhiteBalance" type="range" min="0" max="8000" value="4000"
+								 oninput="showCamWhiteBalance(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamWhiteBalanceValue" size="12" value="4000" onchange="rangeCamWhiteBalanceValue(this.value)" /></td>
+						</tr>
+					</table>
+				</div>
+			</div>
+
+
+			
+		</div>
+
+	</form>
+</body>
+
+</html>

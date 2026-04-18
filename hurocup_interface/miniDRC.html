@@ -1,0 +1,1905 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8" />
+	<link rel="SHORTCUT ICON" href="./picture/icon.png">
+
+	<!-- CSS References -->
+	<link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
+
+	<!-- JavaScript References -->
+	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
+	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+	<script type="text/javascript" src="./js/Interface.js"></script>
+	<script type="text/javascript" type="text/javascript">
+
+		var wasOnline = true;
+		var ros = new ROSLIB.Ros({
+		url: "ws://172.17.121.10:9090"
+		});
+
+		function checkConnection() {
+			if (ros && window.navigator.onLine) {
+				document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+				console.log('Setting background to online image');
+				if(!wasOnline){
+					console.log("Network status changed to online. Triggering enterAddress().");
+					enterAddress();
+					wasOnline = true;
+				}
+
+			}else{
+				document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+				console.log('Setting background to offline image');
+				if(wasOnline){
+					console.log("Network status changed to offline. Triggering enterAddress().");
+					enterAddress();
+					wasOnline = false;
+				}
+				wasOnline = false;
+			}	
+		}
+		
+
+		// Listen to online and offline events
+		window.addEventListener('online', checkConnection);
+		window.addEventListener('offline', checkConnection);
+
+		ros.on('connection', function () {
+			console.log('Connection made!');
+			connectFlag = true;
+			createTopicsDRC();
+			document.getElementById('connected').style.display = 'inline';
+			document.getElementById("orign_image").style.display = 'inline';
+			// document.getElementById("color_image").style.display = 'inline';
+			checkConnectionInterval = setInterval(checkConnection, 1000);
+		});
+		ros.on('error', function (error) {
+			console.log('Error connecting to websocket server: ', error);
+			document.getElementById('connected').style.display = 'none';
+			
+			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+			clearInterval(checkConnectionInterval);
+		});
+		ros.on('close', function () {
+			console.log('Connection to websocket server closed.');
+			B_Measure_Flag = true;
+			// document.getElementById("color_image").style.display = 'none';
+			document.getElementById("orign_image").style.display = 'none';
+			document.getElementById('connected').style.display = 'none';
+			
+			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+			clearInterval(checkConnectionInterval);
+		});
+		
+		var SendBodyAuto_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/SendBodyAuto_Topic',
+			messageType: 'tku_msgs/Interface'
+		});
+		var ChangeContinuousValue_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/ChangeContinuousValue_Topic',
+			messageType: 'tku_msgs/Interface'
+		});
+		var Walkinggait_topic = new ROSLIB.Message({
+			x: 0,
+			y: 0,
+			z: 0,
+			theta: 0,
+			walking_mode: 0,
+			walking_state: 0,
+			sensor_mode: 0
+		});
+
+		var ContinousMode_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/ContinousMode_Topic',
+			messageType: 'std_msgs/Int16'
+		});
+		var ContinousMode_msg = new ROSLIB.Message({
+			data: 0
+		});
+
+		var Continuousback_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/walkinggait/Continuousback',
+			messageType: 'std_msgs/Bool'
+		});
+		var Continuousback_msg = new ROSLIB.Message({
+			data: false
+		});
+
+		var web_parameter_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/web/parameter_Topic',
+			messageType: 'tku_msgs/parameter'
+		});
+		var paradata_Publisher = new ROSLIB.Topic({
+			ros: ros,
+			name: '/package/parameterdata',
+			messageType: 'tku_msgs/Parameter_message'
+		});
+		var parameter_msg = new ROSLIB.Message({
+			X_Swing_Range: 0,
+			Y_Swing_Range: 2.9,
+			Z_Swing_Range: 0,
+			Period_T: 1200,
+			Period_T2: 600,
+			Sample_Time: 40,
+			OSC_LockRange: 0.56,
+			BASE_Default_Z: 3.2,
+			Y_Swing_Shift: 0.6,
+			X_Swing_COM: 0.0,
+			BASE_LIFT_Z: 0.0,
+			// Stand_Balance: false,
+			B_SplineParam: {
+				Kick_Point_X: 0.0,
+				Kick_Point_Y: 0.0,
+				Kick_Point_Z: 0.0,
+				Back_Point_X: 0.0,
+				Back_Point_Z: 0.0,
+				Support_Foot_Hip_Upper_Pitch: 0.0,
+				Kick_Foot_Ankle_Upper_Pitch: 0.0,
+				Support_Foot_Ankle_Upper_Pitch: 0.0
+			}
+		});
+
+		var Parameter_message_msg = new ROSLIB.Message({
+			Walking_Mode: 1,
+			X_Swing_Range: 0,
+			Y_Swing_Range: 2.9,
+			Z_Swing_Range: 0,
+			Period_T: 1200,
+			Period_T2: 600,
+			Sample_Time: 40,
+			OSC_LockRange: 0.56,
+			BASE_Default_Z: 3.2,
+			Y_Swing_Shift: 0.6,
+			X_Swing_COM: 0.0,
+			BASE_LIFT_Z: 0.0,
+			Stand_Balance: false,
+			B_SplineParam: {
+				Kick_Point_X: 0.0,
+				Kick_Point_Y: 0.0,
+				Kick_Point_Z: 0.0,
+				Back_Point_X: 0.0,
+				Back_Point_Z: 0.0,
+				Support_Foot_Hip_Upper_Pitch: 0.0,
+				Kick_Foot_Ankle_Upper_Pitch: 0.0,
+				Support_Foot_Ankle_Upper_Pitch: 0.0
+			}
+		});
+
+		var SensorSet_Publisher = new ROSLIB.Topic({
+			ros: ros,
+			name: '/sensorset',
+			messageType: 'tku_msgs/SensorSet'
+		});
+		var SensorSet_msg = new ROSLIB.Message({
+			sensor_P: 0,
+			sensor_I: 0,
+			sensor_D: 0,
+			Roll: 0,
+			Pitch: 0,
+			Yaw: 0,
+			sup_f: 0,
+			nsup_f: 0,
+			sensor_modeset: 0,
+			// GainRoll: 0,
+			// GainPitch: 0,
+			// GainKP: 0,
+			// GainKD: 0,
+			// DesireSet: false,
+			// IMUReset: false,
+			// ForceState: true
+			// GainSet: false
+		});
+
+		var LoadWalkingGaitParameterClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/web/LoadWalkingGaitParameter',
+			serviceType: 'tku_msgs/WalkingGaitParameter'
+		});
+		var WalkingGaitParameter_request = new ROSLIB.ServiceRequest({
+			mode: 0
+		});
+
+		var ColorModelForm_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/ColorModelForm_Topic',
+			messageType: 'tku_msgs/ButtonColorForm'
+		});
+		var ColorFormcmd = new ROSLIB.Message({
+			BuildingModel: false
+		});
+
+		var HSVValue_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/HSVValue_Topic',
+			messageType: 'tku_msgs/HSVValue'
+		});
+		var HSVValuecmd = new ROSLIB.Message({
+			HMax: 360,
+			HMin: 0,
+			SMax: 100,
+			SMin: 0,
+			VMax: 100,
+			VMin: 0
+		});
+
+		var Head_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/package/HeadMotor',
+			messageType: 'tku_msgs/HeadPackage'
+		});
+		var HeadPackagecmd = new ROSLIB.Message({
+			ID: 0,
+			Position: 511,
+			Speed: 1
+		});
+
+		var Camera = new ROSLIB.Topic({
+			ros: ros,
+			name: '/Camera_Topic',
+			messageType: 'tku_msgs/camera'
+		});
+		var CameraMsg = new ROSLIB.Message({
+			brightness: 0.5,
+			contrast: 0.5,
+			saturation: 0.5,
+			white_balance: 0.5,
+			auto_white_balance: false,
+			auto_exposure: false,
+			auto_Backlight_Compensation: false
+		});
+
+		var WebStart_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/web/start',
+			messageType: 'std_msgs/Bool'
+		});
+		var WebStartcmd = new ROSLIB.Message({
+			data: false
+		});
+		
+		var CameraId_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/CameraId',
+			messageType: 'std_msgs/Int16'
+		});
+		var CameraId_msg = new ROSLIB.Message({
+			data: 0
+		});
+
+		var HSVClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/LoadHSVInfo',
+			serviceType: 'tku_msgs/HSVInfo'
+		});
+		var HSVreqrest = new ROSLIB.ServiceRequest({
+			ColorLabel: 1
+		});
+
+		var BuildClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/BuildModel',
+			serviceType: 'tku_msgs/BuildModel'
+		});
+		var Buildreqrest = new ROSLIB.ServiceRequest({
+			Build: true
+		});
+
+		var paramClient = new ROSLIB.Param({
+			ros: ros,
+			name: '/location'
+		});
+
+		var SaveHSVClient
+		var SaveHSVreqrest
+
+		paramClient.get(function(value) {
+			console.log('/location 參數的值：', value);
+
+			SaveHSVClient = new ROSLIB.Service({
+				ros: ros,
+				name: '/SaveHSV',
+				serviceType: 'tku_msgs/SaveHSV'
+			});
+			SaveHSVreqrest = new ROSLIB.ServiceRequest({
+				Save: true,
+				location:value
+			});
+		});
+
+		var CameraInfoClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/CameraInfo',
+			serviceType: 'tku_msgs/CameraInfo'
+		});
+		var LoadCamerareqrest = new ROSLIB.ServiceRequest({
+			Load: true
+		});
+
+		//-----
+		var connectFlag = false;
+		var myAddress = "172.17.121.10";
+
+		/* Kick Ball Variables Start */
+		var X_Swing_Range_tmp = 0;
+		var Y_Swing_Range_tmp = 2.9;
+		var Z_Swing_Range_tmp = 0;
+		var Period_T_tmp = 1200;
+		var Period_T2_tmp = 600;
+		var Sample_Time_tmp = 40;
+		var OSC_LockRange_tmp = 0.56;
+		var BASE_Default_Z_tmp = 3.2;
+		var Y_Swing_Shift_tmp = 0.6;
+		var X_Swing_COM_tmp = 0.0;
+		var BASE_LIFT_Z_tmp = 0.0;
+		var Kick_Point_X_temp = 0.0;
+		var Kick_Point_Y_temp = 0.0;
+		var Kick_Point_Z_temp = 0.0;
+		var Back_Point_X_temp = 0.0;
+		var Back_Point_Z_temp = 0.0;
+		// var Balance_tmp = false;
+		var Support_Foot_Hip_Upper_Pitch_temp = 0.0;
+		var Kick_Foot_Ankle_Upper_Pitch_temp = 0.0;
+		var Support_Foot_Ankle_Upper_Pitch_temp = 0.0;
+		var r_move_x=[];
+		var l_move_x=[];
+		var r_move_y=[];
+		var l_move_y=[];
+		var r_move_z=[];
+		var l_move_z=[];
+		var move_com_x=[];
+		var move_com_y=[];
+		var move_com_z=[];
+		var r_Theta=[];
+		var l_Theta=[];
+		var point=[];
+		var r_move_x_tmp=[];
+		var l_move_x_tmp=[];
+		var r_move_y_tmp=[];
+		var l_move_y_tmp=[];
+		var r_move_z_tmp=[];
+		var l_move_z_tmp=[];
+		var move_com_x_tmp=[];
+		var move_com_y_tmp=[];
+		var move_com_z_tmp=[];
+		var r_Theta_tmp=[];
+		var l_Theta_tmp=[];
+		var point_tmp=[];
+		var datalong = 0;
+		var wavecolor = 0;
+		var waveinitflag = true;
+		var xpointvalue_tmp = 0;
+		var ypointvalue_tmp = 0;
+
+        var Thetavaluetmp = 0;
+		var Xvaluetmp = 0;
+		var Yvaluetmp = 0;
+		var statetype = 1;
+        var horizontaltmp = 2048;
+        var verticaltmp = 2048;
+		var ContinousModetmp = 0;
+
+		var B_ColorModelForm_Flag = true;
+		var B_SetupCamera_Flag = true;
+		var B_Start_Flag = true;
+
+		var Hmin = 0;
+		var Hmax = 360;
+		var Smin = 0;
+		var Smax = 100;
+		var Bmin = 0;
+		var Bmax = 100;
+
+		var CamBrightnessValue = 0;
+		var CamContrastValue = 0;
+		var CamSaturationValue = 0;
+		var CamWhiteBalanceValue = 0;
+		var CamAuto_WhiteBalanceValue = false;
+		var CamAuto_ExposureValue = false;
+
+		function SendSensorSet()
+		{
+			var sensor_modeset = 0;
+			sensor_modeset += 0x02;
+			SensorSet_msg.sensor_modeset = sensor_modeset;
+			SensorSet_msg.sensor_P = 1;
+			SensorSet_msg.sensor_I = 1;
+			SensorSet_msg.sensor_D = 1;
+			SensorSet_Publisher.publish(SensorSet_msg);
+		}
+
+		function createTopics() {
+			if(SensorPackage_Subscriber != null)
+			{
+				SensorPackage_Subscriber.unsubscribe();
+			}
+			var SensorPackage_Subscriber = new ROSLIB.Topic({
+			ros: ros,
+			name: '/package/sensorpackage',
+			messageType: 'tku_msgs/SensorPackage'
+			});
+			SensorPackage_Subscriber.subscribe(function (msg)
+			{		
+				document.getElementById("Roll").value = msg.IMUData[0];
+				document.getElementById("Pitch").value = msg.IMUData[1];
+				document.getElementById("Yaw").value = msg.IMUData[2];
+				// document.getElementById("Left_1").value = msg.ForceSensorData[0];
+				// document.getElementById("Left_2").value = msg.ForceSensorData[1];
+				// document.getElementById("Left_3").value = msg.ForceSensorData[2];
+				// document.getElementById("Left_4").value = msg.ForceSensorData[3];
+				// document.getElementById("Right_1").value = msg.ForceSensorData[4];
+				// document.getElementById("Right_2").value = msg.ForceSensorData[5];
+				// document.getElementById("Right_3").value = msg.ForceSensorData[6];
+				// document.getElementById("Right_4").value = msg.ForceSensorData[7];
+			});
+
+		}
+		
+		function ContinuousFun() {
+			document.getElementById("Xvalue").value = 0;
+			statetype = 1;
+			Load();
+		}
+		function LC_upFun() {
+			document.getElementById("Xvalue").value = 16000;
+			statetype = 2;
+			Load();
+		}
+		function LC_downFun() {
+			document.getElementById("Xvalue").value = 16000;
+			statetype = 3;
+			Load();
+		}
+
+		function Load() {
+			if (document.getElementById("Continuousback").checked) {
+				Continuousback_msg.data = true;
+				console.log("checked");
+			}
+			else {
+				Continuousback_msg.data = false;
+				console.log("unchecked");
+			}
+			Continuousback_Topic.publish(Continuousback_msg);
+			console.log('statetype = ', statetype);
+			WalkingGaitParameter_request.mode = Number(statetype);
+			LoadWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (walkinggait_parameter) {
+				X_Swing_Range_tmp = walkinggait_parameter.X_Swing_Range;
+				Y_Swing_Range_tmp = walkinggait_parameter.Y_Swing_Range;
+				Z_Swing_Range_tmp = walkinggait_parameter.Z_Swing_Range;
+				Period_T_tmp = walkinggait_parameter.Period_T;
+				Period_T2_tmp = walkinggait_parameter.Period_T2;
+				Sample_Time_tmp = walkinggait_parameter.Sample_Time;
+				OSC_LockRange_tmp = walkinggait_parameter.OSC_LockRange;
+				// Balance_tmp = walkinggait_parameter.Stand_Balance;
+				T_DSP_tmp = walkinggait_parameter.OSC_LockRange;
+				BASE_Default_Z_tmp = walkinggait_parameter.BASE_Default_Z;
+				Y_Swing_Shift_tmp = walkinggait_parameter.Y_Swing_Shift;
+				X_Swing_COM_tmp = walkinggait_parameter.X_Swing_COM;
+				BASE_LIFT_Z_tmp = walkinggait_parameter.BASE_LIFT_Z;
+				Kick_Point_X_temp = walkinggait_parameter.B_SplineParam.Kick_Point_X;
+				Kick_Point_Y_temp = walkinggait_parameter.B_SplineParam.Kick_Point_Y;
+				Kick_Point_Z_temp = walkinggait_parameter.B_SplineParam.Kick_Point_Z;
+				Back_Point_X_temp = walkinggait_parameter.B_SplineParam.Back_Point_X;
+				Back_Point_Z_temp = walkinggait_parameter.B_SplineParam.Back_Point_Z;
+				Support_Foot_Hip_Upper_Pitch_temp = walkinggait_parameter.B_SplineParam.Support_Foot_Hip_Upper_Pitch;
+				Kick_Foot_Ankle_Upper_Pitch_temp = walkinggait_parameter.B_SplineParam.Kick_Foot_Ankle_Upper_Pitch;
+				Support_Foot_Ankle_Upper_Pitch_temp = walkinggait_parameter.B_SplineParam.Support_Foot_Ankle_Upper_Pitch;
+				switch (statetype) {
+					case 1:
+						document.getElementById("cX_Swing").value = X_Swing_Range_tmp;
+						document.getElementById("cPeriod_T").value = Period_T_tmp;
+						document.getElementById("cY_Swing").value = Y_Swing_Range_tmp;
+						document.getElementById("cT_DSP").value = T_DSP_tmp;
+						document.getElementById("cBASE_Default_Z").value = BASE_Default_Z_tmp;
+						document.getElementById("cZ_Swing").value = Z_Swing_Range_tmp;
+						document.getElementById("cY_Swing_Shift").value = Y_Swing_Shift_tmp;
+						// document.getElementById("balance_").checked = Balance_tmp
+						break;
+					case 2:
+						document.getElementById("luX_Swing").value = X_Swing_Range_tmp;
+						document.getElementById("luY_Swing").value = Y_Swing_Range_tmp;
+						document.getElementById("luZ_Swing").value = Z_Swing_Range_tmp;
+						document.getElementById("luPeriod_T").value = Period_T_tmp;
+						//document.getElementById("luPeriod_T2").value = Period_T2_tmp;
+						//document.getElementById("luSample_Time").value = Sample_Time_tmp;
+						document.getElementById("luOSC_LockRange").value = OSC_LockRange_tmp;
+						document.getElementById("luBASE_Default_Z").value = BASE_Default_Z_tmp;
+						document.getElementById("luX_Swing_COM").value = X_Swing_COM_tmp;
+						document.getElementById("luY_Swing_Shift").value = Y_Swing_Shift_tmp;
+						document.getElementById("luBASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
+						// document.getElementById("balance_").checked = Balance_tmp
+						break;
+					case 3:
+						document.getElementById("ldX_Swing").value = X_Swing_Range_tmp;
+						document.getElementById("ldY_Swing").value = Y_Swing_Range_tmp;
+						document.getElementById("ldZ_Swing").value = Z_Swing_Range_tmp;
+						document.getElementById("ldPeriod_T").value = Period_T_tmp;
+						// document.getElementById("ldPeriod_T2").value = Period_T2_tmp;
+						// document.getElementById("ldSample_Time").value = Sample_Time_tmp;
+						document.getElementById("ldOSC_LockRange").value = OSC_LockRange_tmp;
+						document.getElementById("ldBASE_Default_Z").value = BASE_Default_Z_tmp;
+						document.getElementById("ldX_Swing_COM").value = X_Swing_COM_tmp;
+						document.getElementById("ldY_Swing_Shift").value = Y_Swing_Shift_tmp;
+						document.getElementById("ldBASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
+						// document.getElementById("balance_").checked = Balance_tmp
+						break;
+				}
+			});
+		}
+
+		function enterAddress() {
+			if(connectFlag)
+			{
+				ros.close();
+				connectFlag = false;
+			}
+			myAddress = document.getElementById("addressSelect").value;
+			console.log("Connecting address is", myAddress)
+			ros.connect("ws://" + myAddress + ":9090");
+			document.getElementById("orign_image").src = "http://" + myAddress + ":8080/stream?topic=/orign_image";
+			// document.getElementById("color_image").src = "http://" + myAddress + ":8080/stream?topic=/colormodel_image";
+		}
+		function changeX_Swing_value(value) {
+			X_Swing_Range_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("X_Swing").value = X_Swing_Range_tmp;
+					break;
+				case 1:
+					document.getElementById("cX_Swing").value = X_Swing_Range_tmp;
+					break;
+				case 2:
+					document.getElementById("luX_Swing").value = X_Swing_Range_tmp;
+					break;
+				case 3:
+					document.getElementById("ldX_Swing").value = X_Swing_Range_tmp;
+					break;
+			}
+		}
+		function changeY_Swing_value(value) {
+			Y_Swing_Range_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Y_Swing").value = Y_Swing_Range_tmp;
+					break;
+				case 1:
+					document.getElementById("cY_Swing").value = Y_Swing_Range_tmp;
+					break;
+				case 2:
+					document.getElementById("luY_Swing").value = Y_Swing_Range_tmp;
+					break;
+				case 3:
+					document.getElementById("ldY_Swing").value = Y_Swing_Range_tmp;
+					break;
+				case 9:
+				case 10:
+					document.getElementById("KiY_Swing").value = Y_Swing_Range_tmp;
+					break;
+			}
+		}
+		function changeZ_Swing_value(value) {
+			Z_Swing_Range_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Z_Swing").value = Z_Swing_Range_tmp;
+					break;
+				case 1:
+					document.getElementById("cZ_Swing").value = Z_Swing_Range_tmp;
+					break;
+				case 2:
+					document.getElementById("luZ_Swing").value = Z_Swing_Range_tmp;
+					break;
+				case 3:
+					document.getElementById("ldZ_Swing").value = Z_Swing_Range_tmp;
+					break;
+			}
+		}
+		function changePeriod_T_value(value) {
+			Period_T_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Period_T").value = Period_T_tmp;
+					break;
+				case 1:
+					document.getElementById("cPeriod_T").value = Period_T_tmp;
+					break;
+				case 2:
+					document.getElementById("luPeriod_T").value = Period_T_tmp;
+					break;
+				case 3:
+					document.getElementById("ldPeriod_T").value = Period_T_tmp;
+					break;
+				case 9:
+				case 10:
+					document.getElementById("KiPeriod_T").value = Period_T_tmp;
+					break;
+			}
+		}
+		function changePeriod_T2_value(value) {
+			Period_T2_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Period_T2").value = Period_T2_tmp;
+					break;
+				case 1:
+					document.getElementById("cPeriod_T2").value = Period_T2_tmp;
+					break;
+				case 2:
+					document.getElementById("luPeriod_T2").value = Period_T2_tmp;
+					break;
+				case 3:
+					document.getElementById("ldPeriod_T2").value = Period_T2_tmp;
+					break;
+			}
+		}
+		function changeSample_Time_value(value) {
+			Sample_Time_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Sample_Time").value = Sample_Time_tmp;
+					break;
+				case 1:
+					document.getElementById("cSample_Time").value = Sample_Time_tmp;
+					break;
+				case 2:
+					document.getElementById("luSample_Time").value = Sample_Time_tmp;
+					break;
+				case 3:
+					document.getElementById("ldSample_Time").value = Sample_Time_tmp;
+					break;
+			}
+		}
+		function changeOSC_LockRange_value(value) {
+			OSC_LockRange_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("OSC_LockRange").value = OSC_LockRange_tmp;
+					break;
+				case 1:
+					document.getElementById("cT_DSP").value = OSC_LockRange_tmp;
+					break;				
+				case 4:
+					document.getElementById("OSC_LockRange").value = OSC_LockRange_tmp;
+					break;
+				case 2:
+					document.getElementById("luOSC_LockRange").value = OSC_LockRange_tmp;
+					break;
+				case 3:
+					document.getElementById("ldOSC_LockRange").value = OSC_LockRange_tmp;
+					break;
+			}
+		}
+		function changeT_DSP_value(value){
+			OSC_LockRange_tmp = value;
+			switch (statetype) {
+				// case 0:
+				// 	document.getElementById("T_DSP").value = OSC_LockRange_tmp;
+				// 	break;
+				case 1:
+					document.getElementById("cT_DSP").value = OSC_LockRange_tmp;
+					break;
+			}
+		}
+		function changeBASE_Default_Z_value(value) {
+			BASE_Default_Z_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("BASE_Default_Z").value = BASE_Default_Z_tmp;
+					break;
+				case 1:
+					document.getElementById("cBASE_Default_Z").value = BASE_Default_Z_tmp;
+					break;
+				case 2:
+					document.getElementById("luBASE_Default_Z").value = BASE_Default_Z_tmp;
+					break;
+				case 3:
+					document.getElementById("ldBASE_Default_Z").value = BASE_Default_Z_tmp;
+					break;
+			}
+		}
+		function changeY_Swing_Shift_value(value) {
+			Y_Swing_Shift_tmp = value;
+			switch (statetype) {
+				case 4:
+				case 0:
+					document.getElementById("Y_Swing_Shift").value = Y_Swing_Shift_tmp;
+					break;
+				case 1:
+					document.getElementById("cY_Swing_Shift").value = Y_Swing_Shift_tmp;
+					break;
+				case 2:
+					document.getElementById("luY_Swing_Shift").value = Y_Swing_Shift_tmp;
+					break;
+				case 3:
+					document.getElementById("ldY_Swing_Shift").value = Y_Swing_Shift_tmp;
+					break;
+			}
+			// document.getElementById("Y_Swing_Shift").value = Y_Swing_Shift_tmp;
+		}
+		function changeX_Swing_COM_value(value) {
+			X_Swing_COM_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("X_Swing_COM").value = X_Swing_COM_tmp;
+				case 1:
+					document.getElementById("cX_Swing_COM").value = X_Swing_COM_tmp;
+				case 2:
+					document.getElementById("luX_Swing_COM").value = X_Swing_COM_tmp;
+					break;
+				case 3:
+					document.getElementById("ldX_Swing_COM").value = X_Swing_COM_tmp;
+					break;
+			}
+		}
+		function changeBASE_LIFT_Z_value(value) {
+			BASE_LIFT_Z_tmp = value;
+			switch (statetype) {
+				case 0:
+					document.getElementById("BASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
+					break;
+				case 2:
+					document.getElementById("luBASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
+					break;
+				case 3:
+					document.getElementById("ldBASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
+					break;
+			}
+		}
+		function changeKick_Point_X_value(value) {
+			Kick_Point_X_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Kick_Point_X").value = Kick_Point_X_temp;
+					break;
+			}
+		}
+		function changeKick_Point_Y_value(value) {
+			Kick_Point_Y_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Kick_Point_Y").value = Kick_Point_Y_temp;
+					break;
+			}
+		}
+		function changeKick_Point_Z_value(value) {
+			Kick_Point_Z_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Kick_Point_Z").value = Kick_Point_Z_temp;
+					break;
+			}
+		}
+		function changeBack_Point_X_value(value) {
+			Back_Point_X_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Back_Point_X").value = Back_Point_X_temp;
+					break;
+			}
+		}
+		function changeBack_Point_Z_value(value) {
+			Back_Point_Z_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Back_Point_Z").value = Back_Point_Z_temp;
+					break;
+			}
+		}
+		function changeSupport_Foot_Hip_Upper_Pitch_value(value) {
+			Support_Foot_Hip_Upper_Pitch_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Support_Foot_Hip_Upper_Pitch_temp").value = Support_Foot_Hip_Upper_Pitch_temp;
+					break;
+			}
+		}
+		function changeKick_Foot_Ankle_Upper_Pitch_value(value) {
+			Kick_Foot_Ankle_Upper_Pitch_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Kick_Foot_Ankle_Upper_Pitch_temp").value = Kick_Foot_Ankle_Upper_Pitch_temp;
+					break;
+			}
+		}
+		function changeSupport_Foot_Ankle_Upper_Pitch_value(value) {
+			Support_Foot_Ankle_Upper_Pitch_temp = value;
+			switch (statetype) {
+				case 9:
+				case 10:
+					document.getElementById("Support_Foot_Ankle_Upper_Pitch_temp").value = Support_Foot_Ankle_Upper_Pitch_temp;
+					break;
+			}
+		}
+		function changeContinuousback() 
+		{
+			if (document.getElementById("Continuousback").checked) {
+				Continuousback_msg.data = true;
+				console.log("checked");
+			}
+			else {
+				Continuousback_msg.data = false;
+				console.log("unchecked");
+			}
+			Continuousback_Topic.publish(Continuousback_msg);
+		}
+        document.onkeydown = getKeyboard;
+        function getKeyboard(e) {
+			// console.log(window.event.keyCode)
+			switch(window.event.keyCode)
+			{
+				case 87:	//W, Forward
+					ForwardFun();
+					break;
+				case 83:	//S, Backward
+					BackwardFun();
+					break;
+				case 65:	//A, Left Move
+					LeftFun();
+					break;
+				case 68:	//D, Right Move
+					RightFun();
+					break;
+				case 81:	//Q, Left Turn
+					LeftTurnFun();
+					break;
+				case 69:	//E, Right Turn
+					RightTurnFun();
+					break;
+                case 73:	//I
+                    Turnuphead();
+                    break;
+                case 74:    //J
+					Turnrighthead();
+                    break;
+                case 75:	//K
+                    Turndownhead();
+                    break;
+                case 76:	//L
+					Turnlefthead();   
+                    break;
+				case 80:	//P  歸零
+					horizontaltmp = 2048;
+					document.getElementById("HorizontalPositionValue").value = horizontaltmp;
+					rangeHorizontalPosition(horizontaltmp);
+                    break;
+				case 79:	//O	 歸零
+					verticaltmp = 2048;
+					document.getElementById("VerticalPositionValue").value = verticaltmp;
+					rangeVerticalPosition(verticaltmp);
+                    break;
+				case 190:	//方向右  
+					horizontaltmp = 1700;
+					document.getElementById("HorizontalPositionValue").value = horizontaltmp;
+					rangeHorizontalPosition(horizontaltmp);
+                    break;
+				case 188:	//方向左
+					horizontaltmp = 2500;
+					document.getElementById("HorizontalPositionValue").value = horizontaltmp;
+					rangeHorizontalPosition(horizontaltmp);
+					break;
+				case 78:	//方向上
+					verticaltmp = 2500;
+					document.getElementById("VerticalPositionValue").value = verticaltmp;
+					rangeVerticalPosition(verticaltmp);
+                    break;
+				case 77:	//方向下
+					verticaltmp = 1500;
+					document.getElementById("VerticalPositionValue").value = verticaltmp;
+					rangeVerticalPosition(verticaltmp);
+                    break;
+				case 82:	//R
+					Xvaluetmp = document.getElementById("Xvalueini").value;
+					document.getElementById("Xvalue").value = Xvaluetmp;
+					if (statetype == 1 ||statetype == 7 || statetype == 8) {
+						ChangeContinuousValueFun();
+					}
+
+					Yvaluetmp = document.getElementById("Yvalueini").value;
+					document.getElementById("Yvalue").value = Yvaluetmp;
+					if (statetype == 1 ||statetype == 7 || statetype == 8) {
+						ChangeContinuousValueFun();
+					}
+
+					Thetavaluetmp = document.getElementById("thetavalueini").value;
+					document.getElementById("Thetavalue").value = Thetavaluetmp;
+					if (statetype == 1 ||statetype == 7 || statetype == 8) {
+						ChangeContinuousValueFun();
+					}
+                    break;
+				case 49:
+                    executeDRC("motion1");
+                    break;
+				case 50:
+					executeDRC("motion2");
+                    break;
+				case 51:
+					executeDRC("motion3");
+                    break;
+				case 32:	//Space, Generate
+					Generate();
+					break;
+			}
+		}
+
+        function LeftTurnFun() {
+			Thetavaluetmp = Number(Thetavaluetmp) + 1;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function ForwardFun() {
+			Xvaluetmp = Number(Xvaluetmp) + 100;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function RightTurnFun() {
+			Thetavaluetmp = Number(Thetavaluetmp) - 1;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function LeftFun() {
+			Yvaluetmp = Number(Yvaluetmp) + 100;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function RightFun() {
+			Yvaluetmp = Number(Yvaluetmp) - 100;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+		function BackwardFun() {
+			Xvaluetmp = Number(Xvaluetmp) - 100;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+			if (statetype == 1 ||statetype == 7 || statetype == 8) {
+				ChangeContinuousValueFun();
+			}
+		}
+        function Turnrighthead() {
+			horizontaltmp = Number(horizontaltmp) + 5;
+			document.getElementById("HorizontalPositionValue").value = horizontaltmp;
+            rangeHorizontalPosition(horizontaltmp);
+		}
+        function Turnlefthead() {
+			horizontaltmp = Number(horizontaltmp) - 5;
+			document.getElementById("HorizontalPositionValue").value = horizontaltmp;
+            rangeHorizontalPosition(horizontaltmp);
+		}
+        function Turnuphead() {
+			verticaltmp = Number(verticaltmp) + 5;
+			document.getElementById("VerticalPositionValue").value = verticaltmp;
+            rangeVerticalPosition(verticaltmp);
+		}
+        function Turndownhead() {
+			verticaltmp = Number(verticaltmp) - 5;
+			document.getElementById("VerticalPositionValue").value = verticaltmp;
+            rangeVerticalPosition(verticaltmp);
+		}
+
+		function Generate() {
+            console.log("Generate")
+			if (statetype == 1 && ContinousModetmp == 0) {
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 1 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 7 && ContinousModetmp == 0) 
+			{
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 7 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 8 && ContinousModetmp == 0) 
+			{
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 8 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			}
+			SendBodyAutoFun();
+		}
+
+		function ChangeContinuousValueFun() {
+			Walkinggait_topic.x = Number(Xvaluetmp);
+			Walkinggait_topic.y = Number(Yvaluetmp);
+			Walkinggait_topic.z = 0;
+			Walkinggait_topic.theta = Number(Thetavaluetmp);
+			Walkinggait_topic.walking_mode = Number(statetype);
+			Walkinggait_topic.sensor_mode = Number(0);
+			console.log(Walkinggait_topic.sensor_mode);
+			ChangeContinuousValue_Topic.publish(Walkinggait_topic);
+		}
+		function SendBodyAutoFun() {
+			Walkinggait_topic.x = Number(Xvaluetmp);
+			Walkinggait_topic.y = Number(Yvaluetmp);
+			Walkinggait_topic.z = 0;
+			Walkinggait_topic.theta = Number(Thetavaluetmp);
+			Walkinggait_topic.walking_mode = Number(statetype);
+			Walkinggait_topic.sensor_mode = Number(0);
+			console.log(Walkinggait_topic.sensor_mode);
+			SendBodyAuto_Topic.publish(Walkinggait_topic);
+		}
+		function changeXvalue(value) {
+			Xvaluetmp = value;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+		}
+		function changeYvalue(value) {
+			Yvaluetmp = value;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+		}
+		function changethetavalue(value) {
+			Thetavaluetmp = value;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
+		}
+
+		function ResetColorModelFunction() {
+			document.getElementById("HminRange").value = 0;
+			document.getElementById("SminRange").value = 0;
+			document.getElementById("BminRange").value = 0;
+			document.getElementById("HmaxRange").value = 360;
+			document.getElementById("SmaxRange").value = 100;
+			document.getElementById("BmaxRange").value = 100;
+			document.getElementById("HminValue").value = 0;
+			document.getElementById("SminValue").value = 0;
+			document.getElementById("BminValue").value = 0;
+			document.getElementById("HmaxValue").value = 360;
+			document.getElementById("SmaxValue").value = 100;
+			document.getElementById("BmaxValue").value = 100;
+			Hmin = 0;
+			Hmax = 360;
+			Smin = 0;
+			Smax = 100;
+			Bmin = 0;
+			Bmax = 100;
+			HSVValuecmd.HMax = Number(Hmax);
+			HSVValuecmd.HMin = Number(Hmin);
+			HSVValuecmd.SMax = Number(Smax);
+			HSVValuecmd.SMin = Number(Smin);
+			HSVValuecmd.VMax = Number(Bmax);
+			HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+			console.log("ResetColorModelFunction");
+		}
+		function CloseColorModelFunction() {
+			document.getElementById("HminRange").value = 0;
+			document.getElementById("SminRange").value = 0;
+			document.getElementById("BminRange").value = 0;
+			document.getElementById("HmaxRange").value = 0;
+			document.getElementById("SmaxRange").value = 0;
+			document.getElementById("BmaxRange").value = 0;
+			document.getElementById("HminValue").value = 0;
+			document.getElementById("SminValue").value = 0;
+			document.getElementById("BminValue").value = 0;
+			document.getElementById("HmaxValue").value = 0;
+			document.getElementById("SmaxValue").value = 0;
+			document.getElementById("BmaxValue").value = 0;
+			Hmin = 0;
+			Hmax = 0;
+			Smin = 0;
+			Smax = 0;
+			Bmin = 0;
+			Bmax = 0;
+			HSVValuecmd.HMax = Number(Hmax);
+			HSVValuecmd.HMin = Number(Hmin);
+			HSVValuecmd.SMax = Number(Smax);
+			HSVValuecmd.SMin = Number(Smin);
+			HSVValuecmd.VMax = Number(Bmax);
+			HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+			console.log("CloseColorModelFunction");
+		}
+		function SaveColorModelFunction() {
+			console.log("SaveColorModelFunction");
+			SaveHSVreqrest.Save = true;
+			document.getElementById("SaveColorModel").disabled = "disabled";
+			SaveHSVClient.callService(SaveHSVreqrest, function (SaveHSVresult) {
+				if (SaveHSVresult.Already == true) {
+					document.getElementById("SaveColorModel").disabled = false;
+				}
+			});
+		}
+		function BuildColorModelFunction() {
+			console.log("BuildColorModelFunction");
+			Buildreqrest.Build = true;
+			document.getElementById("BuildColorModel").disabled = "disabled";
+			BuildClient.callService(Buildreqrest, function (Buildresult) {
+				if (Buildresult.Already == true) {
+					document.getElementById("BuildColorModel").disabled = false;
+				}
+			});
+		}
+		function ColorModelForm() {
+			if (B_ColorModelForm_Flag) {
+				document.getElementById("HSV_Range").style.display = "inline";
+				document.getElementById("B_ColorModelForm").value = "Close Model Form";
+				document.getElementById("container").style.height = "900px";
+				document.getElementById("select").style.height = "400px";
+				changeColorLabel(document.getElementById("ColorLabel").value);
+				B_ColorModelForm_Flag = false;
+				ColorFormcmd.BuildingModel = true;
+				ColorModelForm_Topic.publish(ColorFormcmd);
+			} else {
+				document.getElementById("HSV_Range").style.display = "none";
+				document.getElementById("B_ColorModelForm").value = "Show Model Form";
+				if (B_SetupCamera_Flag == false) {
+					document.getElementById("container").style.height = "900px";
+					document.getElementById("select").style.height = "400px";
+				} else {
+					document.getElementById("container").style.height = "900px";
+					document.getElementById("select").style.height = "100px";
+				}
+				B_ColorModelForm_Flag = true;
+				ColorFormcmd.BuildingModel = false;
+				ColorModelForm_Topic.publish(ColorFormcmd);
+			}
+		}
+		function CameraSetUp() {
+			if (B_SetupCamera_Flag) {
+				CameraInfoClient.callService(LoadCamerareqrest, function (LoadCameraresult) {
+					CamBrightnessValue = LoadCameraresult.brightness;
+					CamContrastValue = LoadCameraresult.contrast;
+					CamSaturationValue = LoadCameraresult.saturation;
+					CamWhiteBalanceValue = LoadCameraresult.white_balance;
+					CamAuto_WhiteBalanceValue = LoadCameraresult.auto_white_balance;
+					CamAuto_ExposureValue = LoadCameraresult.auto_exposure;
+
+					document.getElementById("CamBrightness").value = CamBrightnessValue;
+					document.getElementById("CamBrightnessValue").value = CamBrightnessValue;
+					document.getElementById("CamContrast").value = CamContrastValue;
+					document.getElementById("CamContrastValue").value = CamContrastValue;
+					document.getElementById("CamSaturation").value = CamSaturationValue;
+					document.getElementById("CamSaturationValue").value = CamSaturationValue;
+					document.getElementById("CamWhiteBalance").value = CamWhiteBalanceValue;
+					document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
+					document.getElementById("AutoWhitBlance").checked = CamAuto_WhiteBalanceValue;
+					document.getElementById("AutoExposure").checked = CamAuto_ExposureValue;
+
+					CameraMsg.brightness = Number(CamBrightnessValue);
+					CameraMsg.contrast = Number(CamContrastValue);
+					CameraMsg.saturation = Number(CamSaturationValue);
+					CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+					CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+					CameraMsg.auto_exposure = CamAuto_ExposureValue;
+					Camera.publish(CameraMsg);
+				});
+				document.getElementById("Camera").style.display = "inline";
+				document.getElementById("container").style.height = "900px";
+				document.getElementById("select").style.height = "400px";
+				B_SetupCamera_Flag = false;
+			} else {
+				document.getElementById("Camera").style.display = "none";
+				if (B_ColorModelForm_Flag == false) {
+					document.getElementById("container").style.height = "900px";
+					document.getElementById("select").style.height = "400px";
+				} else {
+					document.getElementById("container").style.height = "900px";
+					document.getElementById("select").style.height = "400px";
+				}
+				B_SetupCamera_Flag = true;
+			}
+		}
+		function changeColorLabel(newValue) {
+			console.log(newValue);
+			HSVreqrest.ColorLabel = String(newValue);
+			HSVClient.callService(HSVreqrest, function (HSVresult) {
+				document.getElementById("HminRange").value = HSVresult.Hmin;
+				document.getElementById("SminRange").value = HSVresult.Smin;
+				document.getElementById("BminRange").value = HSVresult.Vmin;
+				document.getElementById("HmaxRange").value = HSVresult.Hmax;
+				document.getElementById("SmaxRange").value = HSVresult.Smax;
+				document.getElementById("BmaxRange").value = HSVresult.Vmax;
+				document.getElementById("HminValue").value = HSVresult.Hmin;
+				document.getElementById("SminValue").value = HSVresult.Smin;
+				document.getElementById("BminValue").value = HSVresult.Vmin;
+				document.getElementById("HmaxValue").value = HSVresult.Hmax;
+				document.getElementById("SmaxValue").value = HSVresult.Smax;
+				document.getElementById("BmaxValue").value = HSVresult.Vmax;
+				HSVValuecmd.HMin = Number(document.getElementById("HminValue").value);
+				HSVValuecmd.HMax = Number(document.getElementById("HmaxValue").value);
+				HSVValuecmd.SMin = Number(document.getElementById("SminValue").value);
+				HSVValuecmd.SMax = Number(document.getElementById("SmaxValue").value);
+				HSVValuecmd.VMin = Number(document.getElementById("BminValue").value);
+				HSVValuecmd.VMax = Number(document.getElementById("BmaxValue").value);
+				HSVValue_Topic.publish(HSVValuecmd);
+			});
+		}
+		function showHminValue(newValue) {
+			document.getElementById("HminValue").value = newValue;
+			Hmin = newValue;
+			//HSVValuecmd.HMax = Number(Hmax);
+			HSVValuecmd.HMin = Number(Hmin);
+			//HSVValuecmd.SMax = Number(Smax);
+			//HSVValuecmd.SMin = Number(Smin);
+			//HSVValuecmd.VMax = Number(Bmax);
+			//HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangeHminValue(newValue) {
+			document.getElementById("HminRange").value = newValue;
+			Hmin = newValue;
+			//HSVValuecmd.HMax = Number(Hmax);
+			HSVValuecmd.HMin = Number(Hmin);
+			//HSVValuecmd.SMax = Number(Smax);
+			//HSVValuecmd.SMin = Number(Smin);
+			//HSVValuecmd.VMax = Number(Bmax);
+			//HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showHmaxValue(newValue) {
+			document.getElementById("HmaxValue").value = newValue;
+			Hmax = newValue;
+			HSVValuecmd.HMax = Number(Hmax);
+			//HSVValuecmd.HMin = Number(Hmin);
+			//HSVValuecmd.SMax = Number(Smax);
+			//HSVValuecmd.SMin = Number(Smin);
+			//HSVValuecmd.VMax = Number(Bmax);
+			//HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangeHmaxValue(newValue) {
+			document.getElementById("HmaxRange").value = newValue;
+			Hmax = newValue;
+			HSVValuecmd.HMax = Number(Hmax);
+			//HSVValuecmd.HMin = Number(Hmin);
+			//HSVValuecmd.SMax = Number(Smax);
+			//HSVValuecmd.SMin = Number(Smin);
+			//HSVValuecmd.VMax = Number(Bmax);
+			//HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showSminValue(newValue) {
+			document.getElementById("SminValue").value = newValue;
+			Smin = newValue;
+			//HSVValuecmd.HMax = Number(Hmax);
+			//HSVValuecmd.HMin = Number(Hmin);
+			//HSVValuecmd.SMax = Number(Smax);
+			HSVValuecmd.SMin = Number(Smin);
+			//HSVValuecmd.VMax = Number(Bmax);
+			//HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangeSminValue(newValue) {
+			document.getElementById("SminRange").value = newValue;
+			Smin = newValue;
+			//HSVValuecmd.HMax = Number(Hmax);
+			//HSVValuecmd.HMin = Number(Hmin);
+			//HSVValuecmd.SMax = Number(Smax);
+			HSVValuecmd.SMin = Number(Smin);
+			//HSVValuecmd.VMax = Number(Bmax);
+			//HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showSmaxValue(newValue) {
+			document.getElementById("SmaxValue").value = newValue;
+			Smax = newValue;
+			//HSVValuecmd.HMax = Number(Hmax);
+			//HSVValuecmd.HMin = Number(Hmin);
+			HSVValuecmd.SMax = Number(Smax);
+			//HSVValuecmd.SMin = Number(Smin);
+			//HSVValuecmd.VMax = Number(Bmax);
+			//HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangeSmaxValue(newValue) {
+			document.getElementById("SmaxRange").value = newValue;
+			Smax = newValue;
+			//HSVValuecmd.HMax = Number(Hmax);
+			//HSVValuecmd.HMin = Number(Hmin);
+			HSVValuecmd.SMax = Number(Smax);
+			//HSVValuecmd.SMin = Number(Smin);
+			//HSVValuecmd.VMax = Number(Bmax);
+			//HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showBminValue(newValue) {
+			document.getElementById("BminValue").value = newValue;
+			Bmin = newValue;
+			//HSVValuecmd.HMax = Number(Hmax);
+			//HSVValuecmd.HMin = Number(Hmin);
+			//HSVValuecmd.SMax = Number(Smax);
+			//HSVValuecmd.SMin = Number(Smin);
+			//HSVValuecmd.VMax = Number(Bmax);
+			HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangeBminValue(newValue) {
+			document.getElementById("BminRange").value = newValue;
+			Bmin = newValue;
+			//HSVValuecmd.HMax = Number(Hmax);
+			//HSVValuecmd.HMin = Number(Hmin);
+			//HSVValuecmd.SMax = Number(Smax);
+			//HSVValuecmd.SMin = Number(Smin);
+			//HSVValuecmd.VMax = Number(Bmax);
+			HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showBmaxValue(newValue) {
+			document.getElementById("BmaxValue").value = newValue;
+			Bmax = newValue;
+			//HSVValuecmd.HMax = Number(Hmax);
+			//HSVValuecmd.HMin = Number(Hmin);
+			//HSVValuecmd.SMax = Number(Smax);
+			//HSVValuecmd.SMin = Number(Smin);
+			HSVValuecmd.VMax = Number(Bmax);
+			//HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+
+		function rangeBmaxValue(newValue) {
+			document.getElementById("BmaxRange").value = newValue;
+			Bmax = newValue;
+			//HSVValuecmd.HMax = Number(Hmax);
+			//HSVValuecmd.HMin = Number(Hmin);
+			//HSVValuecmd.SMax = Number(Smax);
+			//HSVValuecmd.SMin = Number(Smin);
+			HSVValuecmd.VMax = Number(Bmax);
+			//HSVValuecmd.VMin = Number(Bmin);
+			HSVValue_Topic.publish(HSVValuecmd);
+		}
+		function showCamBrightness(newValue) {
+			document.getElementById("CamBrightnessValue").value = newValue;
+			CamBrightnessValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+			CameraMsg.auto_exposure = CamAuto_ExposureValue;
+			Camera.publish(CameraMsg);
+
+		}
+		function rangeCamBrightnessValue(newValue) {
+			document.getElementById("CamBrightness").value = newValue;
+			CamBrightnessValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+			CameraMsg.auto_exposure = CamAuto_ExposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function showCamContrast(newValue) {
+			document.getElementById("CamContrastValue").value = newValue;
+			CamContrastValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+			CameraMsg.auto_exposure = CamAuto_ExposureValue;
+			Camera.publish(CameraMsg);
+
+		}
+		function rangeCamContrastValue(newValue) {
+			document.getElementById("CamContrast").value = newValue;
+			CamContrastValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+			CameraMsg.auto_exposure = CamAuto_ExposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function showCamSaturation(newValue) {
+			document.getElementById("CamSaturationValue").value = newValue;
+			CamSaturationValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+			CameraMsg.auto_exposure = CamAuto_ExposureValue;
+			Camera.publish(CameraMsg);
+
+		}
+		function rangeCamSaturationValue(newValue) {
+			document.getElementById("CamSaturation").value = newValue;
+			CamSaturationValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+			CameraMsg.auto_exposure = CamAuto_ExposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function showCamWhiteBalance(newValue) {
+			document.getElementById("CamWhiteBalanceValue").value = newValue;
+			CamWhiteBalanceValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+			CameraMsg.auto_exposure = CamAuto_ExposureValue;
+			Camera.publish(CameraMsg);
+
+		}
+		function rangeCamWhiteBalanceValue(newValue) {
+			document.getElementById("CamWhiteBalance").value = newValue;
+			CamWhiteBalanceValue = newValue;
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+			CameraMsg.auto_exposure = CamAuto_ExposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function changeAutoWhitBlance() {
+			if (document.getElementById("AutoWhitBlance").checked) {
+				CamAuto_WhiteBalanceValue = true;
+			} else {
+				CamAuto_WhiteBalanceValue = false;
+			}
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+			CameraMsg.auto_exposure = CamAuto_ExposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function changeAutoExposure() {
+			if (document.getElementById("AutoExposure").checked) {
+				CamAuto_ExposureValue = true;
+			} else {
+				CamAuto_ExposureValue = false;
+			}
+			CameraMsg.brightness = Number(CamBrightnessValue);
+			CameraMsg.contrast = Number(CamContrastValue);
+			CameraMsg.saturation = Number(CamSaturationValue);
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
+			CameraMsg.auto_exposure = CamAuto_ExposureValue;
+			Camera.publish(CameraMsg);
+		}
+		function WebStart() {
+			if (B_Start_Flag) {
+				document.getElementById("B_Start").value = "Finsh";
+				changeColorLabel(document.getElementById("ColorLabel").value);
+				B_Start_Flag = false;
+				WebStartcmd.data = true;
+				WebStart_Topic.publish(WebStartcmd);
+			} else {
+				document.getElementById("B_Start").value = "Start";
+				B_Start_Flag = true;
+				WebStartcmd.data = false;
+				WebStart_Topic.publish(WebStartcmd);
+			}
+		}
+		function showHorizontalPosition(newValue) {
+			document.getElementById("HorizontalPositionValue").value = newValue;
+			HeadPackagecmd.ID = Number(1);
+			HeadPackagecmd.Position = Number(document.getElementById("HorizontalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("HorizontalSpeedValue").value);
+            horizontaltmp = HeadPackagecmd.Position
+			Head_Topic.publish(HeadPackagecmd);
+		}
+
+		function rangeHorizontalPosition(newValue) {
+			document.getElementById("HorizontalPositionRange").value = newValue;
+			HeadPackagecmd.ID = Number(1);
+			HeadPackagecmd.Position = Number(document.getElementById("HorizontalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("HorizontalSpeedValue").value);
+            horizontaltmp = HeadPackagecmd.Position
+			Head_Topic.publish(HeadPackagecmd);
+		}
+		function showHorizontalSpeed(newValue) {
+			document.getElementById("HorizontalSpeedValue").value = newValue;
+			HeadPackagecmd.ID = Number(1);
+			HeadPackagecmd.Position = Number(document.getElementById("HorizontalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("HorizontalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
+		}
+
+		function rangeHorizontalSpeed(newValue) {
+			document.getElementById("HorizontalSpeedRange").value = newValue;
+			HeadPackagecmd.ID = Number(1);
+			HeadPackagecmd.Position = Number(document.getElementById("HorizontalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("HorizontalSpeedValue").valutde);
+			Head_Topic.publish(HeadPackagecmd);
+		}
+		function showVerticalPosition(newValue) {
+			document.getElementById("VerticalPositionValue").value = newValue;
+			HeadPackagecmd.ID = Number(2);
+			HeadPackagecmd.Position = Number(document.getElementById("VerticalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("VerticalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
+		}
+
+		function rangeVerticalPosition(newValue) {
+			document.getElementById("VerticalPositionRange").value = newValue;
+			HeadPackagecmd.ID = Number(2);
+			HeadPackagecmd.Position = Number(document.getElementById("VerticalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("VerticalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
+		}
+		function showVerticalSpeed(newValue) {
+			document.getElementById("VerticalSpeedValue").value = newValue;
+			HeadPackagecmd.ID = Number(2);
+			HeadPackagecmd.Position = Number(document.getElementById("VerticalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("VerticalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
+
+		}
+
+		function rangeVerticalSpeed(newValue) {
+			document.getElementById("VerticalSpeedRange").value = newValue;
+			HeadPackagecmd.ID = Number(2);
+			HeadPackagecmd.Position = Number(document.getElementById("VerticalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("VerticalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
+		}
+		function changeCamera() {
+			CameraId_msg.data = Number(document.getElementById("Camera_Select").value);
+			CameraId_Topic.publish(CameraId_msg);
+		}
+
+	</script>
+	<style type="text/css">
+		body {
+			width: 1800px;
+			height: 1000px;
+			overflow: visible;
+			background-image: url(./picture/red_filter_image.jpg);
+			background-size: cover;
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+		}
+
+
+		#container {
+			background-color: #333;
+			border: 2px black solid;
+			width: 1600px;
+			height: 900px;
+			margin: 20px auto;
+			overflow: visible;
+			color: white;
+		}
+
+		#div_orign_image {
+			width: 1120px;
+			height: 840px;
+			border: 1px #FFF solid;
+			margin: 25px 32px 24px 32px;
+			float: left;
+			display: inline;
+		}
+
+		/* #div_color_image {
+			width: 320px;
+			height: 240px;
+			border: 1px #FFF solid;
+			margin: 25px 32px 24px 32px;
+			float: right;
+			display: inline;
+		} */
+
+		#HSV_Range {
+			width: 320px;
+			height: 400px;
+			border: 1px #FFF solid;
+			margin: 10px 32px 0px 32px;
+			float: right;
+			display: none;
+		}
+
+		#select {
+			width: 320px;
+			height: 400px;
+			margin: 10px 32px 0px 32px;
+			float: left;
+			display: inline;
+		}
+
+		#header {
+			text-align: center;
+			color: #FFFFFF;
+			margin-top: 13px;
+		}
+
+		.text {
+			margin: 1px 1px 1px 5px;
+			font-size: 12px;
+		}
+
+		.ValueText {
+			width: 38px;
+			height: 20px;
+		}
+
+		.Range {
+			width: 225px;
+			height: 10px;
+			margin: 6px 2px 6px 2px;
+
+		}
+
+		#B_ColorModelForm {
+			width: 150px;
+		}
+
+		#Camera {
+			display: none;
+		}
+
+		#B_Start {
+			width: 50px;
+		}
+	</style>
+	<title>HumanoidInterface</title>
+</head>
+
+<body>
+	<!-- NAV BAR -->
+	<ul>
+		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+        <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+        <li><a target="_blank" class="navbarright" href="PIDcontroll.html">PIDcontroll</a></li>
+		<li class="logo">
+			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+		</li>
+	</ul>
+	<br />
+	<p id="connected" style="color:#00D600; display:none; font-size: 20px;">
+		Connected
+	</p>
+	<form>
+
+		<div id="head" align="center">
+			<!-- <h1 id="header">Humanoid Interface</h1> -->
+			<table>
+				<tr>
+					<td>
+						<select style="height:25px; margin-right: 5px;" id="addressSelect">
+							<option value="172.17.121.10">172.17.121.10</option>
+							<option value="localhost">localhost</option>
+						</select>
+					</td>
+					<td>
+						<button type="button" style="width:110px ;height:25px;" id="changeAddressButton" onclick="enterAddress()">Enter Address</button>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<div id="container" align="center">
+			<!-- 攝影機畫面 -->
+            <div id="div_orign_image">
+				<img id="orign_image" style="-webkit-user-select: none; display:inline; transform: scale(3.5);margin-top: 300px;" src="http://172.17.121.10:8080/stream?topic=/usb_cam/image_raw">
+			</div>
+            <!-- 攝影機參數方向 -->
+            <div id="select">
+				<div>
+					<table width="320">
+						<tr>
+							<td>
+								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_Start" value="Start" onClick="WebStart()"></input>
+							</td>
+							<!-- <td>
+								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_ColorModelForm" value="Show Model Form"
+								 onClick="ColorModelForm()"></input>
+							</td> -->
+							<td>
+								<input style="margin-left: 150px; height:25px;" type="button" class="Button" id="B_Camera" value="Camera Setup"
+								 onClick="CameraSetUp()"></input>
+							</td>
+						</tr>
+					</table>
+				</div>
+                <!-- 控制頭部馬達 -->
+				<div>
+					<table width="320">
+						<tr>
+							<td colspan="3">
+								<p class="text" style="font-size: 15px;">Horizontal:</p>
+							</td>
+						</tr>
+						<tr>
+							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="HorizontalPositionValue" size="12" value="2048" onchange="rangeHorizontalPosition(this.value)" /></td>
+							<td><input class="Range" id="HorizontalPositionRange" name="HorizontalPositionRange" type="range" min="0" max="4095"
+								 value="2048" oninput="showHorizontalPosition(this.value)"/></td>
+							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="HorizontalSpeedValue" size="12" value="1" onchange="rangeHorizontalSpeed(this.value)" /></td>
+						</tr>
+						<tr>
+							<td><input class="Range" id="HorizontalSpeedRange" name="HorizontalSpeedRange" type="range" min="1" max="1023"
+								 value="1" oninput="showHorizontalSpeed(this.value)"/></td>
+						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text" style="font-size: 15px;">Vertical:</p>
+							</td>
+						</tr>
+						<tr>
+							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="VerticalPositionValue" size="12" value="2048" onchange="rangeVerticalPosition(this.value)" /></td>
+							<td><input class="Range" id="VerticalPositionRange" name="VerticalPositionRange" type="range" min="0" max="4095"
+								 value="2048" oninput="showVerticalPosition(this.value)" /></td>
+							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="VerticalSpeedValue" size="12" value="1" onchange="rangeVerticalSpeed(this.value)" /></td>
+						</tr>
+						<tr>
+							<td><input class="Range" id="VerticalSpeedRange" name="VerticalSpeedRange" type="range" min="1" max="1023" value="1"
+								 oninput="showVerticalSpeed(this.value)" /></td>
+						</tr>
+					</table>
+				</div>
+				<div id="Camera">
+					<div style="float:left; margin-left:8px;">
+						<input type="checkbox" name="AutoWhitBlance" id="AutoWhitBlance" onclick="changeAutoWhitBlance()">Auto White_blance
+					</div>
+					<div style="float:right; margin-right:12px;">
+						<input type="checkbox" name="AutoExposure" id="AutoExposure" onclick="changeAutoExposure()">Auto Exposure
+					</div>
+					<table width="320">
+						<tr>
+							<td colspan="3">
+								<p class="text">Camera Brightness:</p>
+							</td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="CamBrightness" name="CamBrightness" type="range" min="-60" max="60" value="-15"
+								 oninput="showCamBrightness(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamBrightnessValue" size="12" value="50" onchange="rangeCamBrightnessValue(this.value)" /></td>
+						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text">Camera Contrast:</p>
+							</td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="CamContrast" name="CamContrast" type="range" min="0" max="200" value="50" oninput="showCamContrast(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamContrastValue" size="12" value="5" onchange="rangeCamContrastValue(this.value)" /></td>
+						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text">Camera Saturation:</p>
+							</td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="CamSaturation" name="CamSaturation" type="range" min="0" max="255" value="50"
+								 oninput="showCamSaturation(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamSaturationValue" size="12" value="50" onchange="rangeCamSaturationValue(this.value)" /></td>
+						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text">Camera WhiteBalance:</p>
+							</td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="CamWhiteBalance" name="CamWhiteBalance" type="range" min="0" max="8000" value="4000"
+								 oninput="showCamWhiteBalance(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamWhiteBalanceValue" size="12" value="4000" onchange="rangeCamWhiteBalanceValue(this.value)" /></td>
+						</tr>
+					</table>
+				</div>
+			</div>
+            <!-- 控制方向 -->
+            <div style="margin-right: 50px;" id="walking"align="left">
+				<p></p>
+				<input type="radio" name="gender" value="Continuous" onclick="ContinuousFun()" checked="checked"> Continuous
+				<input type="radio" name="gender" value="LC_up" onclick="LC_upFun()"> LC_up
+				<input type="radio" name="gender" value="LC_down" onclick="LC_downFun()"> LC_down<p></p>
+                <tr>
+                    <tr>
+                        <td>X</td>
+                        <td><input style="margin-left: 32px;" type="text" name="Xvalue" id="Xvalue" value="0" onchange="changeXvalue(this.value)"></td>
+						<td><input style="width:50px; margin-top: 10px;" type="text" name="Xvalueini" id="Xvalueini" value="0"></td>
+                    </tr>
+                    <br>
+                    <tr>
+                        <td>Y</td>
+                        <td><input style="margin-left: 33px;" type="text" name="Yvalue" id="Yvalue" value="0" onchange="changeYvalue(this.value)"></td>
+						<td><input style="width:50px; margin-top: 10px;" type="text" name="Yvalueini" id="Yvalueini" value="0"></td>
+					</tr>
+                    <br>
+                    <tr>
+                        <td>Theta</td>
+                        <td><input type="text" name="Thetavalue" id="Thetavalue" value="0" onchange="changethetavalue(this.value)"></td>
+						<td><input style="width:50px; margin-top: 10px;" type="text" name="thetavalueini" id="thetavalueini" value="0"></td>
+					</tr>
+                </tr>
+				<br>
+				<input type="button" id="Generate_Button" style="width: 100px;height: 40px; margin-top: 10px; margin-left: 120px; display: inline-block;" onclick="Generate()" value="Generate"></input>
+            </div>
+            <div style="margin-right: 200px;margin-top: 20px;"align="right">
+                <tr>
+                    <td style="color:#888;font-size: 18px">IMU</td>
+                </tr>
+                <br>
+                <tr>
+                    <td>Roll:</td>
+                    <td><input type="text" name="Roll" id="Roll" value="0" style="width: 70px"></td>
+                </tr>
+                <br>
+                <tr>
+                    <td>Pitch:</td>
+                    <td><input type="text" name="Pitch" id="Pitch" value="0" style="width: 70px"></td>
+                </tr>
+                <br>
+                <tr>
+                    <td>Yaw:</td>
+                    <td><input type="text" name="Yaw" id="Yaw" value="0" style="width: 70px"></td>
+                </tr>
+                <br>
+                <button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 10px;display: inline-block;" onclick="SendSensorSet()">IMU reset</button>
+            </div>
+            <!-- 磁區動作 -->
+            <br>
+            <div style="margin-left: 0px;margin-top: 30px;"id="motion"align="left">
+                <input type="button" id="executeButton" value="motion1" onclick="executeDRC(this.value);" style="width:70px; margin-left:69px;">
+				motion1: <input type="text" id="Sector1" value=-1 style="width:40px;">
+				<br>
+				<input type="button" id="executeButton" value="motion2" onclick="executeDRC(this.value);" style="width:70px; margin-left:69px;">
+				motion2: <input type="text" id="Sector2" value=-1 style="width:40px;">
+				<br>
+				<input type="button" id="executeButton" value="motion3" onclick="executeDRC(this.value);" style="width:70px; margin-left:69px;">
+				motion3: <input type="text" id="Sector3" value=-1 style="width:40px;">
+				<br>
+				<input type="button" id="executeButton" value="stand" onclick="standDRC();" style="width:50px; margin-left:69px;">
+                <br>
+
+				</div>
+            
+		</div>
+
+	</form>
+</body>
+
+</html>

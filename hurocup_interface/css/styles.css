@@ -1,0 +1,133 @@
+/* 這個類別用於滑塊組。它將顯示設置為flex，方向設置為列，並將項目對齊到flex容器的開始。 */
+.slider-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px; /* 添加内边距以创建边框和内容之间的空间 */
+    max-width: 300px; /* 限制最大宽度为300px */
+}
+
+/* 新的类用于右边的 .slider-group */
+.slider-group-right {
+    border: 1px solid white; /* 添加一个白色边框 */
+}
+
+/* 這個類別用於標題組。它將顯示設置為flex，將項目對齊到flex容器的中心，並設置特定的寬度。 */
+.title-group {
+    display: flex;
+    align-items: center;
+    width: 220px; /* 根據需要調整此值 */
+    color: white; /* 將文字顏色更改為白色 */
+    font-size: 100px; /* 將文字大小更改為20px */
+}
+
+/* 這個規則用於滑塊容器內的段落。它設置字體大小，右邊距，並允許段落在有額外空間的情況下增長。 */
+.slider-container p {
+    font-size: 14px;
+    margin-right: 10px;
+    flex: 1; /* 已添加 */
+}
+
+.slider-container span {
+    display: inline-block;
+    width: 50px;
+    height: 20px;
+    line-height: 20px;
+    text-align: right;
+    border: 1px solid black; /* 將邊框顏色更改為黑色 */
+    background-color: white; /* 將背景顏色更改為白色 */
+    color: black; /* 將文字顏色更改為黑色 */
+    padding: 0 5px;
+    margin-top: 5px; /* 從10px減少到5px */
+    margin-left: 10px;
+    font-size: 14px;
+}
+/* 這個規則用於體。它設置背景圖像為'../picture/Background.jpg'，背景重複為不重複，背景大小為覆蓋。 */
+body {
+    background-image: url('../picture/Background.jpg');
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+/* 這個類別用於容器。它設置邊框為1px實線黑色，內邊距為10px。 */
+.container {
+    border: 1px solid black;
+    padding: 10px;
+}
+
+/* 這個類別用於滑塊容器。它設置邊框為1px實線黑色，內邊距為10px，背景顏色為深灰色，寬度為100%。 */
+.slider-container {
+    display: flex;
+    align-items: center; /* 垂直对齐元素到中心 */
+    padding: 10px; /* 添加内边距以创建边框和内容之间的空间 */
+    max-width: 300px; /* 限制最大宽度为300px */
+}
+/* 這個類別用於複選框容器。它將顯示設置為flex，並將項目在主軸上居中對齊。 */
+.checkbox-container {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start; /* 如果您希望子元素在容器的顶部对齐，可以添加这一行 */
+}
+
+.img-container {
+    align-self: center;
+}
+/* 這個類別用於整個設計的容器。它將顯示設置為flex，並將項目在主軸上居中對齊。 */
+.design-container {
+    display: flex; /* 将元素并排显示 */
+    justify-content: center; /* 水平居中对齐元素 */
+    gap: 10px; /* 在元素之间添加一些空间 */
+    align-items: stretch; /* 垂直拉伸元素以填充容器 */
+    margin-top: 60px; /* 添加顶部边距以为标题提供空间 */
+}
+
+.slider-container {
+    padding: 20px;
+    background-color: #303030;
+    max-width: 500px; /* 限制最大宽度 */
+    display: flex; /* 将元素并排显示 */
+    justify-content: center; /* 水平居中对齐元素 */
+    align-items: flex-start; /* 垂直对齐元素到顶部 */
+    flex-direction: column; /* 将元素垂直排列 */
+    min-height: 500px; /* 让所有 .slider-container 元素的最小高度为500px */
+}
+.title-group {
+    display: flex; /* 将元素并排显示 */
+    align-items: center; /* 垂直居中对齐元素 */
+    gap: 10px; /* 在元素之间添加一些空间 */
+}
+
+#header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    /* background-color: #303030; */
+    color: white;
+    padding: 20px;
+}
+
+.slider-container img {
+    margin: 20px; /* 這將在圖像與其邊界之間添加20px的距離 */
+}
+
+#video2 {
+    width: 300px; /* 设置一个固定的宽度 */
+    height: 200px; /* 设置一个固定的高度 */
+    object-fit: cover; /* 控制影像如何适应其容器 */
+}
+#video1 {
+    width: 300px; /* 设置一个固定的宽度 */
+    height: 200px; /* 设置一个固定的高度 */
+    object-fit: cover; /* 控制影像如何适应其容器 */
+}
+
+#HSV_Range {
+    width: 320px;
+    height: 400px;
+    border: 1px #FFF solid;
+    margin: 10px 32px 0px 0px;
+    float: right;
+    display: none;
+}

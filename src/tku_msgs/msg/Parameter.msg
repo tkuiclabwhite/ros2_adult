@@ -1,0 +1,10 @@
+int32 mode
+int32 period_t
+float64 hip_roll
+float64 ankle_roll
+float64 com_y_swing
+float64 width_size
+float64 t_dsp 
+float64 lift_height
+float64 stand_height
+float64 com_height

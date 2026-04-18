@@ -1,0 +1,48 @@
+from setuptools import setup
+
+package_name = 'walking'
+
+setup(
+    name=package_name,
+    version='0.0.0',
+    packages=[package_name],
+    data_files=[
+        ('share/ament_index/resource_index/packages',
+         ['resource/' + package_name]),
+        ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/launch', ['launch/walking.launch.py']),
+    ],
+    install_requires=['setuptools'],
+    zip_safe=True,
+    maintainer='iclab',
+    maintainer_email='你自己的 email',
+    description='Humanoid walking launcher',
+    license='TODO',
+    tests_require=['pytest'],
+    entry_points={
+        'console_scripts': [
+            # 之後如果要把 Main.py 收進來才會用到，現from setuptools import setup
+
+package_name = 'walking'
+
+setup(
+    name=package_name,
+    version='0.0.0',
+    packages=[package_name],
+    data_files=[
+        ('share/ament_index/resource_index/packages',
+         ['resource/' + package_name]),
+        ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/launch', ['launch/walking.launch.py']),
+    ],
+    install_requires=['setuptools'],
+    zip_safe=True,
+    maintainer='iclab',
+    maintainer_email='你自己的 email',
+    description='Humanoid walking launcher',
+    license='TODO',
+    tests_require=['pytest'],
+    entry_points={
+        'console_scripts': [
+            # 之後如果要把 Main.py 收進來才會用到，現在留著沒差
+            # 'walking_main = walking.main

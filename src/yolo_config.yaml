@@ -1,0 +1,10 @@
+align_kp: 3.0
+area_threshold: 723
+avoid_step1_duration: 1.5
+avoid_step2_duration: 1.5
+avoid_step3_duration: 1.5
+avoid_strafe_speed: 500
+left_turn_angle: 90
+left_turn_duration: 6.5
+right_turn_angle: 90
+right_turn_duration: 6.5
