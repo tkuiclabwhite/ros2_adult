@@ -1,4 +1,5 @@
 #!/bin/bash
+cd "$(dirname "$0")"
 
 # --- 1. 設定身分 ---
 git config user.name "tkuiclabwhite"
@@ -64,5 +65,6 @@ git commit -m "Update ($TARGET): $current_date"
 git push origin main
 
 echo "-------------------------------"
-echo ":white_check_mark: 上傳成功！[暱稱: ${INPUT:-all}] -> $TARGET"
+echo "上傳成功！[push package: ${INPUT:-all}] -> $TARGET"
+echo "上傳成功！日期: $current_date"
 echo "-------------------------------"
