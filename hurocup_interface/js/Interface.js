@@ -1688,26 +1688,48 @@ let activeParts = {
     'left_leg': false,
     'right_leg': false,
 };
+// function Update_Motor_Input_Values(motorValues) {
+//     // 遍歷所有部位
+//     for (const partName in robotConfig) {
+//         // 【關鍵判斷】只有被按下按鈕的部位 (activeParts 為 true) 才進行讀取顯示
+//         if (activeParts[partName]) {
+//             const motorsInPart = robotConfig[partName];
+            
+//             motorsInPart.forEach(motor => {
+//                 // 假設 motorValues 陣列 index 0 對應 ID 1，以此類推
+//                 let currentVal = motorValues[motor.id - 1]; 
+//                 let inputField = document.getElementById('motor_val_' + motor.id);
+
+//                 if (inputField) {
+//                     // 如果使用者正在裡面打字，暫停自動更新以免干擾
+//                     if (document.activeElement !== inputField) {
+//                         inputField.value = currentVal;
+//                     }
+//                 }
+//             });
+//         }
+//     }
+// }
 function Update_Motor_Input_Values(motorValues) {
     // 遍歷所有部位
     for (const partName in robotConfig) {
-        // 【關鍵判斷】只有被按下按鈕的部位 (activeParts 為 true) 才進行讀取顯示
-        if (activeParts[partName]) {
-            const motorsInPart = robotConfig[partName];
-            
-            motorsInPart.forEach(motor => {
-                // 假設 motorValues 陣列 index 0 對應 ID 1，以此類推
-                let currentVal = motorValues[motor.id - 1]; 
-                let inputField = document.getElementById('motor_val_' + motor.id);
+        
+        // 移除 if (activeParts[partName]) 的限制，讓所有部位隨時更新
+        const motorsInPart = robotConfig[partName];
+        
+        motorsInPart.forEach(motor => {
+            // 假設 motorValues 陣列 index 0 對應 ID 1，以此類推
+            let currentVal = motorValues[motor.id - 1]; 
+            let inputField = document.getElementById('motor_val_' + motor.id);
 
-                if (inputField) {
-                    // 如果使用者正在裡面打字，暫停自動更新以免干擾
-                    if (document.activeElement !== inputField) {
-                        inputField.value = currentVal;
-                    }
+            if (inputField) {
+                // 如果使用者正在裡面打字，暫停自動更新以免干擾
+                if (document.activeElement !== inputField) {
+                    inputField.value = currentVal;
                 }
-            });
-        }
+            }
+        });
+        
     }
 }
 
@@ -1739,7 +1761,43 @@ function Torque_Choose(partName, buttonID) {
         updateTableUI(partName, false);
     }
 }
+// =================================================================
+// 輔助函式：單顆開關扭力
+// =================================================================
+function SetSingleTorque(state) {
+    const inputVal = document.getElementById('single_motor_id').value;
+    const motorID = parseInt(inputVal);
 
+    if (isNaN(motorID) || motorID < 1 || motorID > 29) {
+        alert("請輸入有效的馬達 ID (1 ~ 29)！");
+        return;
+    }
+
+    // --- 發送 ROS 封包 ---
+    var dataPackage = [83, 84, 246, motorID, state, 78, 69];
+    if (typeof SendPackage !== 'undefined' && typeof interface !== 'undefined') {
+        SendPackage.sectorname = String(motorID);
+        SendPackage.package = dataPackage;
+        interface.publish(SendPackage);
+        
+        // --- UI 視覺反饋邏輯 ---
+        const btnOn = document.getElementById('btn_single_on');
+        const btnOff = document.getElementById('btn_single_off');
+
+        if (state === 1) {
+            // 按下開啟：ON 亮起，OFF 熄滅
+            btnOn.classList.add('active');
+            btnOff.classList.remove('active');
+        } else {
+            // 按下關閉：OFF 亮起，ON 熄滅
+            btnOff.classList.add('active');
+            btnOn.classList.remove('active');
+        }
+
+        const stateText = state === 1 ? "ON (鎖死)" : "OFF (洩力)";
+        document.getElementById('label').innerHTML = `Motor ID: ${motorID} Torque is ${stateText}`;
+    }
+}
 function SetGroupTorque(partName, state) {
     const motors = robotConfig[partName];
     if (!motors) return;

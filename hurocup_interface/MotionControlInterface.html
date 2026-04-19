@@ -71,6 +71,37 @@
             /* 讓按鈕稍微亮一點，並保持這個狀態 */
             transform: scale(1.05);    /* 稍微放大，表示能量充滿 */
         }
+        /* 單顆控制按鈕基礎樣式 */
+.btn-single-torque {
+    width: 80px;
+    font-weight: bold;
+    color: white;
+    border: 2px solid transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    padding: 3px;
+    margin-right: 10px;
+    transition: 0.3s;
+    opacity: 0.6; /* 未按下時稍微透明 */
+}
+
+/* 開啟 (ON) 的顏色 */
+.btn-on {
+    background-color: #00D600;
+}
+
+/* 關閉 (OFF) 的顏色 */
+.btn-off {
+    background-color: #D60000;
+}
+
+/* 亮起狀態 (最後按下) */
+.btn-single-torque.active {
+    opacity: 1;
+    border-color: white;
+    box-shadow: 0 0 15px currentColor; /* 根據背景色產生對應光暈 */
+    transform: scale(1.05);
+}
     </style>
 </head>
 
@@ -400,6 +431,13 @@
                 <input type="button" id="btn_waist" class="button_choose" onclick="Torque_Choose('waist', 'btn_waist');" value="waist" style="width: 80px;">
                 <input type="button" id="btn_left_leg" class="button_choose" onclick="Torque_Choose('left_leg', 'btn_left_leg');" value="left_leg" style="width: 80px;">
                 <input type="button" id="btn_right_leg" class="button_choose" onclick="Torque_Choose('right_leg', 'btn_right_leg');" value="right_leg" style="width: 80px;">
+            </div>
+            <div style="margin-top: 8px; margin-bottom: 8px; padding: 5px; background-color: rgba(46, 58, 61, 0.8); border-radius: 5px; color: white; display: flex; align-items: center; justify-content: center; width: 100%; box-sizing: border-box;">
+                <span style="font-weight: bold; margin-right: 10px;">單顆控制 ID:</span>
+                <input type="text" id="single_motor_id" value="1" style="width: 40px; text-align: center; font-weight: bold; margin-right: 15px;">
+                
+                <input type="button" id="btn_single_on" value="開啟 (ON)" onclick="SetSingleTorque(1);" class="btn-single-torque btn-on">
+                <input type="button" id="btn_single_off" value="關閉 (OFF)" onclick="SetSingleTorque(0);" class="btn-single-torque btn-off">
             </div>
             <div style="background-color: rgba(46, 58, 61, 0.637); padding: 5px;">
                 <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; width: 450px;">

@@ -479,14 +479,14 @@ void UsbCamNode::camera_save_callback(const tku_msgs::msg::CameraSave &msg) {
             if (fs::exists(p)) return p;
         }
         if (const char* home = std::getenv("HOME")) {
-            fs::path p1 = fs::path(home) / "tku" / "src" / "strategy" / "strategy";
+            fs::path p1 = fs::path(home) / "ros2_adult" / "src" / "strategy" / "strategy";
             if (fs::exists(p1)) return p1;
-            fs::path p2 = fs::path(home) / "workspace" / "tku" / "src" / "strategy" / "strategy";
+            fs::path p2 = fs::path(home) / "workspace" / "ros2_adult" / "src" / "strategy" / "strategy";
             if (fs::exists(p2)) return p2;
         }
         // 往上走嘗試找到 tku/src/strategy/strategy
         for (fs::path up = fs::current_path(); !up.empty(); up = up.parent_path()) {
-            fs::path cand = up / "tku" / "src" / "strategy" / "strategy";
+            fs::path cand = up / "ros2_adult" / "src" / "strategy" / "strategy";
             if (fs::exists(cand)) return cand;
         }
         return {};
@@ -594,7 +594,7 @@ void UsbCamNode::LoadSet() {
     if (const char* env = std::getenv("tku_STRATEGY_ROOT")) {
         strategy_root = fs::path(env);
     } else if (const char* home = std::getenv("HOME")) {
-        strategy_root = fs::path(home) / "tku" / "src" / "strategy" / "strategy";
+        strategy_root = fs::path(home) / "ros2_adult" / "src" / "strategy" / "strategy";
     }
 
     // ---- 3) 組成主要讀取路徑（Primary）與備援路徑（Fallback: save_dir）----

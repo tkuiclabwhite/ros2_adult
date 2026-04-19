@@ -24,6 +24,9 @@ FOCUS_MATRIX = [
      6, 5, 4, 3, 2, 1, 1
 ]
 
+
+HEAD_HORIZONTAL = 2030
+HEAD_VERTICAL = 2800
 #原地步態
 STAY_X     = -200
 STAY_Y     = 0
@@ -64,13 +67,38 @@ IMU_LEFT_Y = 0
 #開局動作
 PRE_ACT = 'start' # 'start' 'preturn_L' 'preturn_R'
 PRE_TURN_ANGLE = 20
-
+TURN_HEAD_RANGE = 12
 TURN_90           = False #是否啟用轉90度判斷
 WALK_FORWARD_ZONE = 6   #可從障礙物中間通過的可容忍範圍
-RECHECK_ZONE      = 4   #障礙物偏離中心重新判斷轉向
+# RECHECK_ZONE      = 7   #障礙物偏離中心重新判斷轉向
 ACCEL_STEP        = 100 #每秒增加/減少的速度量 
 IMU_FIX           = 3   #imu修正容許值
 
+
+class NonBlockingDelay:
+    def __init__(self):
+        self.start_time = 0.0
+        self.is_waiting = False
+
+    def check(self, delay_seconds):
+        """ 檢查是否已經經過指定的秒數 """
+        if not self.is_waiting:
+            # 第一次進來，開始計時
+            self.start_time = time.time()
+            self.is_waiting = True
+            return False
+        
+        if time.time() - self.start_time >= delay_seconds:
+            # 時間到，重置狀態以供下次使用，並回傳 True
+            self.is_waiting = False
+            return True
+            
+        # 時間還沒到
+        return False
+        
+    def reset(self):
+        """ 強制重置計時器 (當狀態被外部強制切換時可呼叫) """
+        self.is_waiting = False
 # ================= Calculate (負責影像與視覺參數計算) =================
 class Calculate():
     def __init__(self, robot_core):
@@ -101,33 +129,37 @@ class Calculate():
 
     def convert(self, msg: Image):
         try:
-            self.img_received = True # 成功收到影像就會亮燈
+            self.img_received = True 
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             
             self.red_width = 0
-            self.Deep_Matrix = []
+            # 【修改 1】：不要使用 self.Deep_Matrix，改用區域變數 local_matrix
+            local_matrix = []
             
-            # 【重要修正】：必須使用 INTER_NEAREST (最近鄰內插法)，否則色塊邊緣會被混色，導致 if b==128 判斷全部失敗
             cv_image = cv2.resize(cv_image, (320, 240), interpolation=cv2.INTER_NEAREST)
             cv_image_2 = cv2.resize(cv_image, (32, 24), interpolation=cv2.INTER_NEAREST)
             
             for compress_width in range(0, 32):
-                self.Deep_Matrix.append(0)
+                local_matrix.append(0) # 👈 修改這裡
                 for compress_height in range(23, -1, -1):
                     b = cv_image_2.item(compress_height, compress_width, 0)
                     g = cv_image_2.item(compress_height, compress_width, 1)
                     r = cv_image_2.item(compress_height, compress_width, 2)
                     if (b == 128 and g == 0 and r == 128) or (b ==128 and g ==128 and r ==0):
-                        self.Deep_Matrix[compress_width] = 23 - compress_height
+                        local_matrix[compress_width] = 23 - compress_height # 👈 修改這裡
                         break
                     if b == 255 and g == 255 and r == 0:
-                        self.Deep_Matrix[compress_width] = 18 - compress_height
+                        local_matrix[compress_width] = 18 - compress_height # 👈 修改這裡
                         break
                     if compress_height == 0:
-                        self.Deep_Matrix[compress_width] = 24
+                        local_matrix[compress_width] = 24 # 👈 修改這裡
                         
-            self.depth = self.Deep_Matrix
+            # 【修改 2】：全部算完且長度確定是 32 後，再原子性地覆蓋給 self.depth
+            self.depth = local_matrix
+
+            self.calculate()
             return self.depth
+            
         except Exception as e:
             self.last_error = f"Convert Error: {e}"
             return self.depth
@@ -238,9 +270,10 @@ class RobotStatus():
         self.last_update_time = time.time()
 
     def draw_focus_grid(self):
-        """ 繪製 FOCUS_MATRIX 的階梯狀邊界 (修正連接邏輯) """
+        """ 繪製 FOCUS_MATRIX 的階梯狀邊界 (修正連接邏輯與通訊塞車) """
         try:
-            time.sleep(1)
+            time.sleep(1) # 給系統一點初始化的緩衝時間
+            
             for i in range(len(FOCUS_MATRIX)):
                 v = FOCUS_MATRIX[i]
                 
@@ -251,28 +284,27 @@ class RobotStatus():
                 # 計算 Y 軸座標 (公式：y = 240 - v * 10)
                 y_now = 240 - (v * 10)
                 
-                # 1. 繪製橫線 (水平部分) - 流水號 200~231
-                self.robot.drawImageFunction(200 + i, 1, int(x_start), int(x_end), int(y_now), int(y_now), 255, 255, 255)
+                # 1. 繪製橫線 - 修改 ID 範圍為 100~131 (確保在 255 以內)
+                self.robot.drawImageFunction(100 + i, 1, int(x_start), int(x_end), int(y_now), int(y_now), 255, 255, 255)
+                time.sleep(0.03) # 【關鍵】：每畫一條線停頓 30 毫秒，讓硬體消化封包
                 
-                # 2. 繪製垂直連接線 (階梯垂直部分) - 流水號 300~331
+                # 2. 繪製垂直連接線
                 if i > 0:
                     y_prev = 240 - (FOCUS_MATRIX[i-1] * 10)
                     
-                    # 只有在高度有變化時才需要畫垂直線
                     if y_now != y_prev:
-                        # 找出最高點與最低點，確保直線方向正確
                         y_top = min(y_now, y_prev)
                         y_bottom = max(y_now, y_prev)
                         
-                        # 在 x_start 位置畫一條垂直線，連接上一階與這一階
-                        self.robot.drawImageFunction(300 + i, 1, int(x_start), int(x_start), int(y_top), int(y_bottom), 255, 255, 255)
-                time.sleep(0.2)
+                        # 修改 ID 範圍為 150~181 (確保在 255 以內，且不與橫線衝突)
+                        self.robot.drawImageFunction(150 + i, 1, int(x_start), int(x_start), int(y_top), int(y_bottom), 255, 255, 255)
+                        time.sleep(0.03) # 【關鍵】：同樣給予硬體消化時間
+            
             # 標記已發送，防止重複執行
             self.grid_sent = True
             
         except Exception as e:
             self.calc.last_error = f"Grid Draw Error: {e}"
-
     def update(self):
         self.is_start           = getattr(self.robot, 'is_start', False)
         self.action_id          = self.calc.last_action
@@ -314,6 +346,7 @@ deep_x           : {self.deep_x}\n\
 deep_y           : {self.deep_y}\n\
 center_deep      : {self.center_deep}\n\
 deep_sum_lr      : {self.deep_sum_l} {self.deep_sum_r}\n\
+deep_sum         : {self.calc.deep_sum}\n\
 LCRdeep          : {self.left_deep} {self.center_deep} {self.right_deep}\n\
 #=====================================#\n\
 ")
@@ -357,7 +390,9 @@ class Obs(API):
         self.image_sub = self.create_subscription(
             Image, 'processed_image', self.calc.convert, 10, callback_group=self.cbg
         )
-        
+        self.delay = NonBlockingDelay()
+        self.turn_head_step = 0
+
         self.timer = self.create_timer(0.05, self.main, callback_group=self.cbg)
         
         self.status_thread = threading.Thread(target=self.status_mgr.runThread, daemon=True)
@@ -374,12 +409,14 @@ class Obs(API):
         self.pre_status = ''
         self.imu_ok = False
         self.body_auto = False
-        self.sendHeadMotor(1, 2048, 50)
-        self.sendHeadMotor(2, 1300, 50)
+        self.sendHeadMotor(1, HEAD_HORIZONTAL, 50)
+        self.sendHeadMotor(2, HEAD_VERTICAL, 50)
+        time.sleep(2)
         self.sendSensorReset(True)
         self.left_deep_sum = 0
         self.right_deep_sum = 0
         self.deep_sum = 0
+        self.turn_head_step = 0
 
     def walk_switch(self):
         if self.body_auto:
@@ -390,10 +427,10 @@ class Obs(API):
             self.body_auto = True
 
     def main(self):
-        self.calc.calculate()
+        # self.calc.calculate()
         
         # 你的測試碼：強制啟動。若你想用硬體開關控制，請把這行註解掉
-        self.is_start = True 
+        # self.is_start = True 
         # time.sleep(10)
         
         if getattr(self, 'is_start', False):
@@ -427,7 +464,7 @@ class Obs(API):
                     self.status = 'starting_walking_without_obs'
             #3.有障礙物時======================================
             elif self.status == 'starting_walking_with_obs':
-                if -WALK_FORWARD_ZONE <= self.calc.deep_x <= WALK_FORWARD_ZONE:#障礙物在兩側 可從中間過
+                if abs(self.calc.deep_x) <= WALK_FORWARD_ZONE:#障礙物在兩側 可從中間過
                     self.pre_status = self.status
                     self.status = 'walk_forword'
                 elif -14 < self.calc.deep_x < -WALK_FORWARD_ZONE:#障礙物在右邊
@@ -444,18 +481,20 @@ class Obs(API):
                 if self.imu_rpy[2] > -50:
                     self.calc.move("turn_right_90")
                 else:
+                    self.pre_status = self.status
                     self.status = "walk_forword"
             #5.執行轉頭策略(障礙物在正中間、整體偏右)===============
             elif self.status =='turn_left_90':
                 if self.imu_rpy[2] < 50:
                     self.calc.move("turn_left_90")
                 else:
+                    self.pre_status = self.status
                     self.status = "walk_forword"
             #6.直走(障礙物在兩側)================================
             elif self.status == 'walk_forword':
                 if self.calc.deep_y < 24:
                     self.calc.move("small_forward")
-                    if abs(self.calc.deep_x) > RECHECK_ZONE:
+                    if abs(self.calc.deep_x) > WALK_FORWARD_ZONE+1:
                         self.pre_status = self.status
                         self.status = 'starting_walking_with_obs'
                 else:
@@ -477,11 +516,11 @@ class Obs(API):
                 else:
                     self.calc.move("stay_wait")
             #9.imu修正回0=======================================
-            elif self.status == 'imu_fix':
-                if abs(self.imu_rpy[2]) > IMU_FIX : #可容許誤差值3
-                    self.calc.move("imu_fix")
-                else:                    
-                    if (self.calc.left_deep < 12) and (self.calc.right_deep < 12) and (self.calc.center_deep < 12):
+            elif self.status == 'imu_fix':                
+                if(abs(self.imu_rpy[2]) > IMU_FIX):
+                    self.calc.move("imu_fix")                
+                else:
+                    if (self.calc.left_deep < TURN_HEAD_RANGE) and (self.calc.right_deep < TURN_HEAD_RANGE) and (self.calc.center_deep < TURN_HEAD_RANGE):
                         self.pre_status = self.status
                         self.status = 'turn_head'
                     elif self.calc.deep_y < 24:
@@ -492,28 +531,43 @@ class Obs(API):
                         self.status = 'starting_walking_without_obs'
             elif self.status == 'turn_head':
                     self.calc.move("stay")
-                    self.sendHeadMotor(1, 1548, 50)
-                    time.sleep(1)                    
-                    self.left_deep_sum = self.deep_sum
-                    time.sleep(1)                    
-                    self.sendHeadMotor(1, 2548, 50)
-                    time.sleep(1)                    
-                    self.right_deep_sum = self.deep_sum
-                    time.sleep(1)
-                    self.sendHeadMotor(1, 2048, 50)
-                    if self.left_deep_sum > self.right_deep_sum:
-                        self.pre_status = self.status
-                        self.status = 'turn_right_90'
-                    else:
-                        self.pre_status = self.status
-                        self.status = 'turn_left_90'
+                    if self.turn_head_step == 0:
+                        self.sendHeadMotor(1, HEAD_HORIZONTAL-500, 100)
+                        self.sendHeadMotor(2, HEAD_VERTICAL, 50)
+                        self.delay.reset() # 確保計時器重置
+                        self.turn_head_step = 1 # 切換到下一步
+                        
+                    # 第 1 步：不卡死地等待 1 秒，讀取右邊數值，然後向左看
+                    elif self.turn_head_step == 1:
+                        if self.delay.check(1.0):
+                            self.left_deep_sum = self.calc.deep_sum
+                            self.sendHeadMotor(1, HEAD_HORIZONTAL+500, 100)
+                            self.sendHeadMotor(2, HEAD_VERTICAL, 50)
+                            self.turn_head_step = 2 # 切換到下一步
+                            
+                    # 第 2 步：不卡死地等待 1 秒，讀取左邊數值，頭部回正並退出狀態
+                    elif self.turn_head_step == 2:
+                        if self.delay.check(1.0):
+                            self.right_deep_sum = self.calc.deep_sum
+                            self.sendHeadMotor(1, HEAD_HORIZONTAL, 100)
+                            self.sendHeadMotor(2, HEAD_VERTICAL, 50)
+                            
+                            # 決策接下來的主狀態
+                            self.pre_status = self.status
+                            if self.left_deep_sum > self.right_deep_sum:
+                                self.status = 'turn_right_90'
+                            else:
+                                self.status = 'turn_left_90'
+                                
+                            # 【非常重要】離開前把計步器歸零，下次轉頭才能從第 0 步開始！
+                            self.turn_head_step = 0
 
         else:
             if self.body_auto:
                 self.walk_switch()
+            self.initial()
             # time.sleep(1)
-            # self.is_start = True 
-
+            self.is_start = True 
 # ================= 執行進入點 =================
 def main(args=None):
     rclpy.init(args=args)

@@ -530,13 +530,39 @@ function Copy()
       document.getElementById('label').innerHTML = "Copy is fail !! No this ID !!";
     }
   }
-  else if(document.getElementById("AbsolutePosition").style.display == "initial")
+    // 3. Absolute 模式
+  else if(document.getElementById("AbsolutePosition").style.display == "initial" || document.getElementById("AbsoluteSpeed").style.display == "initial")
   {
-    document.getElementById('label').innerHTML = "Copy can only execute in Relative!!";
-  }
-  else if(document.getElementById("AbsoluteSpeed").style.display == "initial")
-  {
-    document.getElementById('label').innerHTML = "Copy can only execute in Relative!!";
+    for(var i = 0; i < document.getElementById('AbsolutePositionTable').getElementsByTagName('div').length; i += 2)
+    {
+      // 尋找指定的 ID
+      if(document.getElementById('AbsolutePositionTable').getElementsByTagName('div')[i].getElementsByClassName('textbox')[0].value == num)
+      {
+        n = i;
+        flag = true;
+        break;
+      }  
+    }
+    
+    if(flag == true)
+    {
+      Add(); // 這裡會自動判斷當前顯示的模式來呼叫 NewAbsolutePosition() 和 NewAbsoluteSpeed()
+      var totalRows = document.getElementById('AbsolutePositionTable').getElementsByTagName('div').length;
+      
+      // 將尋找到的數值複製到最新產生的那一行
+      for (var j = 1; j <= 27; j++)
+      {
+        var x = Number(document.getElementById('AbsolutePositionTable').getElementsByTagName('div')[n+1].getElementsByClassName('textbox')[j].value);
+        var y = Number(document.getElementById('AbsoluteSpeedTable').getElementsByTagName('div')[n+1].getElementsByClassName('textbox')[j].value);
+        document.getElementById('AbsolutePositionTable').getElementsByTagName('div')[totalRows-1].getElementsByClassName('textbox')[j].value = x;
+        document.getElementById('AbsoluteSpeedTable').getElementsByTagName('div')[totalRows-1].getElementsByClassName('textbox')[j].value = y;
+      }
+      document.getElementById('label').innerHTML = "Copy is successful !!";
+    }
+    else
+    {
+      document.getElementById('label').innerHTML = "Copy is fail !! No this ID !!";
+    }
   }
 }
 
@@ -570,15 +596,14 @@ const customDefaults = {
     25:  { pos: 151912, spd: 1000 },
   };
 
-  // 4. 迴圈讀取 motor_val_1 ~ 27 的數值並寫入
-  for (var i = 1; i <= 27; i++) 
+for (var i = 1; i <= 27; i++) 
   {
     // 先抓取 HTML 元素 (防呆：確保該欄位真的存在)
-    var motorElement = document.getElementById('motorval' + i);
+    // 【修正這裡】把 'motorval' 改成 'motor_val_'
+    var motorElement = document.getElementById('motor_val_' + i); 
     var motorValue = motorElement ? Number(motorElement.value) : 0;
 
     // 決定這顆馬達的預設值與速度
-    // 如果 customDefaults 有設定就用設定的，沒有的話：位置給 2048，速度給 50
     var fallbackPos = (customDefaults[i] && customDefaults[i].pos !== undefined) ? customDefaults[i].pos : 2048;
     var targetSpd   = (customDefaults[i] && customDefaults[i].spd !== undefined) ? customDefaults[i].spd : 50;
 
