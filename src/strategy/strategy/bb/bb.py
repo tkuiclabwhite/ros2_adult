@@ -41,7 +41,7 @@ BASTET_LENGTH =  20  #增加以下全域變數
 FOCAL_LENGTH  = 360  # 333 
 TEST_DISTANCE = 150
 
-VALUEE = 1
+VALUEE = 55
 #球測試
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
@@ -257,7 +257,7 @@ class MotorMove():
                     time.sleep(delay)
     
             elif self.search_flag == 4:
-                if self.head_vertical <= up_place:
+                if self.head_vertical >= up_place:
                     self.api.get_logger().debug(f'上尋')
                     self.api.get_logger().info(f'上尋')
                     self.move_head(2, self.head_vertical, 880, 880, speed)
@@ -283,7 +283,7 @@ class MotorMove():
             elif self.search_flag ==  2:
                 self.api.get_logger().debug(f'下尋')
                 self.api.get_logger().info(f'下尋')
-                if self.head_vertical >= down_place:
+                if self.head_vertical <= down_place:
                     self.move_head(2, self.head_vertical, 880, 880, speed)      #頭向下的極限
                     self.head_vertical = self.head_vertical + speed
                     time.sleep(delay) 
@@ -581,6 +581,9 @@ class BasketBall(API):
         elif VALUEE == 2:       # basket size   上下上下
             self.motor.draw()
             self.motor.basket_distance() #增加
+
+            # print("valuee=2")
+            # time.sleep(2)
             # print(self.target.ball_x)
             self.motor.trace_revise(self.target.basket_x, self.target.basket_y, 65)
             self.get_logger().info(f'Head_vertical = {self.motor.head_vertical}') #增加
@@ -656,6 +659,8 @@ class BasketBall(API):
             if self.target.ball_size <= 350:   # 球在視野中太小
                 self.get_logger().info(f'球在視野中太小 -> 大範圍尋球')
                 # motor.view_search_left(2428, 1668, 1800, 1200, 40, 0.05)
+                self.motor.move_head(2, 1700, 880, 880, 50)   # 先抬頭到 1700
+                time.sleep(0.5)
                 self.motor.view_search(2500, 1668, 1800, 1200, 120, 0.05)
                 self.target.ball_parameter() 
 
