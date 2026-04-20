@@ -6,6 +6,14 @@ setup(
     name=package_name,
     version='0.0.0',
     packages=find_packages(exclude=['test']),
+    package_data={
+        'strategy': [
+            'mar/*.engine',
+            'mar/*.onnx',
+            'mar/*.pt',
+        ],
+    },
+    include_package_data=True,
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -34,9 +42,10 @@ setup(
             'yolo3 = strategy.mar.viz_optimized:main',
             'mar0919 = strategy.mar.strategy_MAR0919:main',
             'testyolo = strategy.mar.test:main',
-            'navigation_node = strategy.mar.navigation_node:main',
+            'navigation_node = strategy.mar.navigation_node:main',   #use that
             'nav_debug = strategy.mar.nav_debug:main',
-            'haha = strategy.mar.haha3:main'
+            'haha = strategy.mar.haha3:main',
+            'tag = strategy.sp.apriltag_node:main'
             ],
     },
 )
