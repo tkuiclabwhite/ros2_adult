@@ -105,7 +105,7 @@ class WalkingWebBridge(Node):
         for up in Path(__file__).resolve().parents:
             if up.name == "src" and (up / "strategy" / "strategy").is_dir():
                 return up / "strategy" / "strategy"
-        return Path.home() / "tku" / "src" / "strategy" / "strategy"
+        return Path.home() / "ros2_adult" / "src" / "strategy" / "strategy"
 
     def _read_strategy_ini_raw(self) -> str:
         try:
