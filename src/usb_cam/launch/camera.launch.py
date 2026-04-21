@@ -118,7 +118,7 @@ def generate_launch_description():
     # ==========================================
     # 把所有清單串起來
     actions =  camera_nodes + \
-              [driver_node, walking_node, motion_node, web_bridge_node, imu_node] + \
+              [driver_node, walking_node, motion_node, web_bridge_node, imu_node,switch_node] + \
               [image_node, web_video, rosbridge_node]
 
     ld = LaunchDescription()

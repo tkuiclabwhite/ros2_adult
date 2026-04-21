@@ -1,1 +1,1 @@
-window._strategy_location = "ar";
+window._strategy_location = "bb";

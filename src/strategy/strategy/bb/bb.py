@@ -31,14 +31,14 @@ FIVEPOINT_HEAD_Y_DEGREE = [2010]      #投出去偏向左邊＝>頭 往左轉（
 CATCH_BALL_CORRECT = 1550        #1500
 
 #CATCH_BALL_LINE  = [1680, 1, 1580]            # slow_degree, stop_degree, backward_degree
-CATCH_BALL_LINE  = [1650, 1545, 1535]
+CATCH_BALL_LINE  = [2600, 2500, 2400]
 TWO_POINT_LINE   = [1800, 1700, 1660]            # slow_degree, stop_degree, backward_degree
 THREE_POINT_LINE = [86, 65, 62, 60]             # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
-FIVE_POINT_LINE  = [105, 96, 93, 88]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
+FIVE_POINT_LINE  = [160, 156, 150, 145]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 
 # 計算焦距判斷距離
 BASTET_LENGTH =  20  #增加以下全域變數
-FOCAL_LENGTH  = 360  # 333 
+FOCAL_LENGTH  = 352  # 333 
 TEST_DISTANCE = 150
 
 VALUEE = 55
@@ -130,7 +130,7 @@ class TargetLocation():
         self.basket_length = 1 #增加
         # print(self.api.object_sizes [5])
         for j in range (self.color_mask_subject_red):     #將所有看到的紅色物件編號
-            if self.api.object_sizes [5][j] > 2000:
+            if self.api.object_sizes [5][j] > 200:
     
                 if  40000 > self.api.object_sizes [5][j] > self.basket_size:  #用大小過濾物件(濾雜訊)
                     self.basket_x = (self.api.object_x_max[5][j] + self.api.object_x_min[5][j]) // 2
@@ -211,22 +211,22 @@ class MotorMove():
             self.target.basket_parameter()
             if ID == 1:
                 self.head_horizon =  Position
-                if abs(self.head_horizon - 2048) > head_max_x:
-                    if (self.head_horizon - 2048 ) > 0:
-                        self.head_horizon = 2048 + head_max_x
-                    elif (self.head_horizon - 2048 ) < 0:
-                        self.head_horizon = 2048 - head_max_x
+                if abs(self.head_horizon - 2030) > head_max_x:
+                    if (self.head_horizon - 2030 ) > 0:
+                        self.head_horizon = 2030 + head_max_x
+                    elif (self.head_horizon - 2030 ) < 0:
+                        self.head_horizon = 2030 - head_max_x
     
             else :
                 self.head_vertical = Position
-                if abs(self.head_vertical - 2400) > head_max_y :
-                    if (self.head_vertical - 2400 ) > 0 :
-                        self.head_vertical = 2400 - head_max_y    
-                    elif (self.head_vertical - 2400) < 0 :    
-                        self.head_vertical = 2400 + head_max_y    
+                if abs(self.head_vertical - 2048) > head_max_y :
+                    if (self.head_vertical - 2048 ) > 0 :
+                        self.head_vertical = 2048 - head_max_y    
+                    elif (self.head_vertical - 2048) < 0 :    
+                        self.head_vertical = 2048 + head_max_y    
     
         def waist_rotate(self, waist_x, Speed):
-            self.api.sendSingleMotor(9, waist_x-self.waist_position, Speed)#####
+            self.api.sendSingleMotor(15, waist_x-self.waist_position, Speed)#####
             self.waist_position =  waist_x 
     
         ####################################### view search #######################################
@@ -248,7 +248,7 @@ class MotorMove():
                 if self.head_horizon >= left_place:
                     self.api.get_logger().debug(f'左尋')
                     self.api.get_logger().info(f'左尋')
-                    self.move_head(1, self.head_horizon, 1000, 1080, speed)
+                    self.move_head(1, self.head_horizon, 880, 880, speed)
                     self.head_horizon = self.head_horizon - speed
                     time.sleep(delay)
                     print("1-1")
@@ -257,11 +257,11 @@ class MotorMove():
                     time.sleep(delay)
     
             elif self.search_flag == 4:
-                if self.head_vertical >= up_place:
+                if self.head_vertical <= up_place:
                     self.api.get_logger().debug(f'上尋')
                     self.api.get_logger().info(f'上尋')
                     self.move_head(2, self.head_vertical, 880, 880, speed)
-                    self.head_vertical = self.head_vertical - speed/2
+                    self.head_vertical = self.head_vertical + speed
                     time.sleep(delay)
                     print("1-2")
                 else:
@@ -283,9 +283,9 @@ class MotorMove():
             elif self.search_flag ==  2:
                 self.api.get_logger().debug(f'下尋')
                 self.api.get_logger().info(f'下尋')
-                if self.head_vertical <= down_place:
+                if self.head_vertical >= down_place:
                     self.move_head(2, self.head_vertical, 880, 880, speed)      #頭向下的極限
-                    self.head_vertical = self.head_vertical + speed
+                    self.head_vertical = self.head_vertical - speed
                     time.sleep(delay) 
                     print("1-4")  
                 else:
@@ -307,7 +307,7 @@ class MotorMove():
                 self.api.get_logger().info(f'miss_target -> 需重新尋求')
                 self.move_head(2, 2400, 880, 880, 50)
         def body_trace_rotate(self, degree): #步態旋轉到可拿球的角度
-            x_body_rotate = self.head_horizon - 2048 #身體需要旋轉多少
+            x_body_rotate = self.head_horizon - 2030 #身體需要旋轉多少
             if x_body_rotate > degree:
                 # self.MoveContinuous(LEFT_CORRECT[0], LEFT_CORRECT[1], LEFT_CORRECT[2], 100, 100, 8)
                 # self.get_logger().info(f'右轉修正 = {x_body_rotate}')
@@ -352,7 +352,7 @@ class MotorMove():
             self.waist_rotate((self.waist_position + self.MoveW), 15)
             self.api.get_logger().info(f"貓頭鷹修腰 head_horizon = {self.head_horizon}")
             self.api.get_logger().info(f'self.MoveW = {self.MoveW}')
-            time.sleep(0.5)
+            time.sleep(0.1)
     
         def Null_WaistFix(self, turn_final): # 轉腰調整Basket.X與Baskethead_verticalBaseLine的誤差
      
@@ -515,7 +515,6 @@ class BasketBall(API):
         #self.get_logger().info(f"orange_count={self.target.color_mask_subject_orange}, ball_size={self.target.ball_size}")
    
   ##############???????
-
         self.is_start = True
         if  self.is_start: #api.send.Web
             self.get_logger().info(f'step = {self.step}')
@@ -557,7 +556,8 @@ class BasketBall(API):
             if self.target.ball_size <= 350:   # 球在視野中太小
                 self.get_logger().debug(f'球在視野中太小 -> 大範圍尋球')
                 # motor.view_search_left(2428, 1668, 1800, 1200, 40, 0.05) 2551
-                self.motor.view_search(2700, 1678, 1660, 1200, 100, 0.05)
+                # self.motor.view_search(2700, 1678, 1660, 1200, 100, 0.05)
+                self.motor.view_search(2700, 1678, 2600, 2300, 120, 0.05)
                 self.target.ball_parameter() 
 
             elif self.target.ball_size > 350:   # 球在視野中夠大
@@ -569,7 +569,7 @@ class BasketBall(API):
                     time.sleep(0.05)
                 else: 
 
-                    self.motor.reg = 2048 - self.motor.head_horizon
+                    self.motor.reg = 2030 - self.motor.head_horizon
                     self.motor.search_num = 0
 
             self.get_logger().info(f'Head_vertical = {self.motor.head_vertical}')
@@ -659,9 +659,9 @@ class BasketBall(API):
             if self.target.ball_size <= 350:   # 球在視野中太小
                 self.get_logger().info(f'球在視野中太小 -> 大範圍尋球')
                 # motor.view_search_left(2428, 1668, 1800, 1200, 40, 0.05)
-                self.motor.move_head(2, 1700, 880, 880, 50)   # 先抬頭到 1700
+                # self.motor.move_head(2, 1700, 880, 880, 50)   # 先抬頭到 1700
                 time.sleep(0.5)
-                self.motor.view_search(2500, 1668, 1800, 1200, 120, 0.05)
+                self.motor.view_search(2700, 1678, 2600, 2300, 120, 0.05)
                 self.target.ball_parameter() 
 
             elif self.target.ball_size > 350:   # 球在視野中夠大
@@ -672,7 +672,7 @@ class BasketBall(API):
                     self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 65) 
                     time.sleep(0.1)
 
-                elif (CATCH_BALL_LINE[2] <= self.motor.head_vertical <= CATCH_BALL_LINE[1]) and (abs(self.motor.head_horizon-2048) <= 270):
+                elif (CATCH_BALL_LINE[2] <= self.motor.head_vertical <= CATCH_BALL_LINE[1]) and (abs(self.motor.head_horizon-2030) <= 540):
                     self.get_logger().info(f'到達夾球範圍 STOP!!, self.head_vertical = {self.motor.head_vertical}')                
                     time.sleep(0.05)
                     self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 50) 
@@ -680,14 +680,14 @@ class BasketBall(API):
                     self.get_logger().info(f'蹲下準備夾球')
                     time.sleep(1)
                     
-                    self.motor.reg = 2048 - self.motor.head_horizon
+                    self.motor.reg = 2030 - self.motor.head_horizon
                     self.motor.search_num = 0
                     self.motor.directly = True
                     self.step = 'waist_fix'
 
                 else: 
 
-                    self.motor.reg = 2048 - self.motor.head_horizon
+                    self.motor.reg = 2030 - self.motor.head_horizon
                     self.motor.search_num = 0
                     self.step = 'start_gait'   
 
@@ -713,7 +713,7 @@ class BasketBall(API):
         self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 60)
         self.get_logger().info(f"head_vertical = {self.motor.head_vertical}")
 
-        if (CATCH_BALL_LINE[2] <= self.motor.head_vertical <= CATCH_BALL_LINE[1]) and (abs(self.motor.head_horizon-2048) <= 110):  # 到達夾球位置
+        if (CATCH_BALL_LINE[2] <= self.motor.head_vertical <= CATCH_BALL_LINE[1]) and (abs(self.motor.head_horizon-2030) <= 110):  # 到達夾球位置
             self.motor.bodyauto_close(0) # 步態停止
             self.get_logger().info(f'到達夾球範圍 STOP!!, self.head_vertical = {self.motor.head_vertical}')                
             time.sleep(0.05)
@@ -732,7 +732,7 @@ class BasketBall(API):
             self.target.ball_parameter()
             self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 35) 
 
-            if abs(self.motor.head_horizon-2048) > 100:
+            if abs(self.motor.head_horizon-2030) > 100:
                 self.get_logger().debug(f'頭部馬達水平刻度偏差 -> 步態影響')
                 self.get_logger().info(f'rotate調整')
                 # self.motor.body_trace_rotate(30)
@@ -772,21 +772,30 @@ class BasketBall(API):
             # time.sleep(1)
             # self.get_logger().info(f'正常夾球動作')
             # self.sendBodySector(687)
-            time.sleep(2) 
+            self.sendBodySector(11) 
+            time.sleep(5) 
+            self.sendBodySector(12) 
+            time.sleep(3)
+            self.sendBodySector(14) 
+            time.sleep(3)
+            self.sendBodySector(15) 
+            time.sleep(3)
+            self.sendBodySector(18) 
+            time.sleep(3)
             self.motor.catch_correct = True
 
         else:
             self.get_logger().info(f'正常夾球動作')
             self.sendBodySector(11) 
-            time.sleep(0.5) 
+            time.sleep(5) 
             self.sendBodySector(12) 
-            time.sleep(0.5)
+            time.sleep(3)
             self.sendBodySector(14) 
-            time.sleep(0.5)
+            time.sleep(3)
             self.sendBodySector(15) 
-            time.sleep(0.5)
+            time.sleep(3)
             self.sendBodySector(18) 
-            time.sleep(0.5)
+            time.sleep(3)
             
             
         self.get_logger().info(f'腰部回正')
@@ -798,16 +807,12 @@ class BasketBall(API):
             # self.sendBodySector(444)
             # time.sleep(1)
             self.get_logger().info(f'回復站姿')
-            self.sendBodySector(19) 
-            time.sleep(0.5)
             self.sendBodySector(29) 
             time.sleep(0.5)
             
 
         else:
             self.get_logger().info(f'回復站姿')
-            self.sendBodySector(19) 
-            time.sleep(0.5)
             self.sendBodySector(29) 
             time.sleep(0.5)
            
@@ -817,7 +822,7 @@ class BasketBall(API):
 
     def find_basket(self):
         self.target.basket_parameter()
-        if self.target.basket_size < 500:
+        if self.target.basket_size < 25:
             self.get_logger().debug(f'籃框在視野裡太小 -> 尋框')
             self.get_logger().info(f'basket_size =  {self.target.basket_size}')
 
@@ -832,7 +837,8 @@ class BasketBall(API):
                 self.get_logger().debug(f'開始尋框')
                 self.get_logger().info(f'target.basket_x = {self.target.basket_x}, target.basket_y = {self.target.basket_y}, target.basket_size = {self.target.basket_size}')
                 ####################################### view search #######################################
-                self.motor.view_search(2548, 1548, 2048, 1948, 50, 0.04)
+                self.motor.view_search(2700, 1678, 2600, 2300, 120, 0.04)
+                
 
         else:                                
             self.get_logger().debug(f'籃框在視野裡夠大 -> 判斷策略所需前往的位置')
@@ -1035,7 +1041,7 @@ class BasketBall(API):
                 self.motor.trace_revise(self.target.basket_x, self.target.basket_y, 65)
                 self.get_logger().info(f'籃球框距離 = {self.motor.basket_distance_x}')
                 self.get_logger().info(f'水平刻度 = {self.motor.head_horizon}')
-                if (FIVE_POINT_LINE[1] >= self.motor.basket_distance_x >= FIVE_POINT_LINE[2]) and (abs(self.motor.head_horizon - 2048) <= 70) and not self.motor.turn_flag:
+                if (FIVE_POINT_LINE[1] >= self.motor.basket_distance_x >= FIVE_POINT_LINE[2]) and (abs(self.motor.head_horizon - 2030) <= 200) and not self.motor.turn_flag:
     
                     self.motor.line_flag += 1
                     self.get_logger().info(f'line_flag = {self.motor.line_flag}')
@@ -1049,10 +1055,10 @@ class BasketBall(API):
                         self.target.basket_parameter()
                         time.sleep(2)
                         self.get_logger().info(f'5分球預備動作')
-                        self.sendBodySector(50)
-                        time.sleep(2)  
-                        self.sendBodySector(51)
-                        time.sleep(4)  
+                        # self.sendBodySector(50)
+                        # time.sleep(2)  
+                        # self.sendBodySector(51)
+                        # time.sleep(4)  
                         self.get_logger().info(f'頭部調整') 
                         self.get_logger().info(f'頭部水平旋轉調整')                                            
                         self.motor.move_head(1, FIVEPOINT_HEAD_Y_DEGREE[0], 880, 880, 50)
@@ -1063,7 +1069,7 @@ class BasketBall(API):
     
                 else:
     
-                    if abs(self.motor.head_horizon-2048) > 80:
+                    if abs(self.motor.head_horizon-2030) < 80:
                         self.get_logger().info(f'頭部馬達水平刻度偏差 -> 步態影響的')
                         self.get_logger().info(f'rotate調整')
                         time.sleep(0.05)
@@ -1096,10 +1102,10 @@ class BasketBall(API):
                             # self.api.sendBodySector(5) 
                             # time.sleep(0.05) 
                             self.get_logger().info(f'開爪')
-                            self.sendBodySector(23)
-                            time.sleep(3)
+                            # self.sendBodySector(23)
+                            # time.sleep(3)
                             self.get_logger().info(f'投籃')
-                            self.sendBodySector(24)
+                            # self.sendBodySector(24)
                             # self.api.sendBodySector(5503)
                             time.sleep(2)
                             self.get_logger().info(f'motor.throw_strength  = {self.motor.throw_strength}')
