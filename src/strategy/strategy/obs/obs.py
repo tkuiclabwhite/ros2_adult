@@ -17,11 +17,11 @@ from strategy.API import API
 
 # ================= 參數定義 =================
 FOCUS_MATRIX = [
-     1, 2, 3, 4, 5, 6, 7,
-     8, 9, 10, 12, 14,15,16,
-    17,18,18,17,
-    16,15, 14, 12, 10, 9, 8,
-     7, 6, 5, 4, 3, 2, 1
+     1, 2, 2, 3, 4, 4, 6,
+     7, 8, 9, 10, 10,11,11,
+    12,12,12,12,
+    11,11, 10, 10, 9, 8, 7,
+    6, 4, 4, 3, 2, 2, 1
 ]
 
 
@@ -52,23 +52,23 @@ IMU_RIGHT_X = 1700
 IMU_RIGHT_Y = -1000
 #IMU__RIGHT_THETA max(5,-5)
 #dx左轉(45)
-TURN_LEFT_X = 2000
-TURN_LEFT_Y = 600
+TURN_LEFT_X = 2200
+TURN_LEFT_Y = 800
 TURN_LEFT_THETA = 5
 #左轉(90)
-TURN_LEFT_90_X     = 2000
-TURN_LEFT_90_Y     = 600
+TURN_LEFT_90_X     = 2200
+TURN_LEFT_90_Y     = 800
 TURN_LEFT_90_THETA = 5
 #imu左轉
-IMU_LEFT_X = 2000
-IMU_LEFT_Y = 600
+IMU_LEFT_X = 2200
+IMU_LEFT_Y = 800
 #IMU_LEFT_THETA max(5,-5)
 
 #開局動作
 PRE_ACT = 'start' # 'start' 'preturn_L' 'preturn_R'
 PRE_TURN_ANGLE = 20
 TURN_HEAD_RANGE = 12
-TURN_90           = False #是否啟用轉90度判斷
+TURN_HEAD_FLAG  = False #是否啟用轉90度判斷
 WALK_FORWARD_ZONE = 6   #可從障礙物中間通過的可容忍範圍
 # RECHECK_ZONE      = 7   #障礙物偏離中心重新判斷轉向
 ACCEL_STEP        = 100 #每秒增加/減少的速度量 
@@ -182,12 +182,13 @@ class Calculate():
             
             # self.deep_y = min(np.array(self.depth))
             # invaders = [self.depth[i] for i in range(32) if self.depth[i] < FOCUS_MATRIX[i]]
-            invaders = [self.depth[i] for i in range(32) if self.depth[i] < max(FOCUS_MATRIX)]
+            invaders = [self.depth[i] for i in range(32) if self.depth[i] < (max(FOCUS_MATRIX)+1)]
             self.deep_y = min(invaders) if invaders else 24
 
             self.deep_sum = sum(np.array(self.depth))
             self.deep_sum_l = sum(np.array(self.depth)[0:16])
             self.deep_sum_r = sum(np.array(self.depth)[17:32])
+            self.deep_sum_canter = sum(np.array(self.depth)[4:28])
             self.left_deep = np.array(self.depth)[4]
             self.right_deep = np.array(self.depth)[28]
             self.center_deep = np.array(self.depth)[16]
@@ -258,6 +259,7 @@ class RobotStatus():
         self.ContinuousValue    = [0,0,0]
         self.obs_status         = "" 
         self.pre_status         = ""
+        self.pre_act            = ""
         
         self.imu                = 0
         self.deep_x             = 0
@@ -315,6 +317,7 @@ class RobotStatus():
         self.ContinuousValue    = [self.calc.speed_x, self.calc.y, self.calc.theta] 
         self.obs_status         = self.robot.status
         self.pre_status         = self.robot.pre_status
+        self.pre_act            = self.robot.pre_act
         self.imu                = getattr(self.robot, 'yaw', 0)
         self.deep_x             = self.calc.deep_x
         self.deep_y             = self.calc.deep_y
@@ -340,6 +343,7 @@ ContinuousValue  : {self.ContinuousValue}\n\
 #===============避障狀態===============#\n\
 status           : {self.obs_status}\n\
 pre_status       : {self.pre_status}\n\
+pre_act          : {self.pre_act}\n\
 #===============系統狀態===============#\n\
 Image Topic      : {img_str}\n\
 System Error     : {self.calc.last_error}\n\
@@ -363,6 +367,8 @@ LCRdeep          : {self.left_deep} {self.center_deep} {self.right_deep}\n\
                 draw_x = abs(self.deep_x*10) if self.deep_x < 0 else 320-(self.deep_x*10)
                 self.robot.drawImageFunction(1,1,draw_x,draw_x,0,240,255,0,0)            
                 self.robot.drawImageFunction(2,1,0,320,240-self.deep_y*10,240-self.deep_y*10,255,0,255)
+                self.robot.drawImageFunction(3,1,80,80,0,240,255,0,0)            
+                self.robot.drawImageFunction(4,1,240,240,0,240,255,0,0)            
         except Exception as e:
             self.calc.last_error = f"Draw Error: {e}"
 
@@ -405,6 +411,7 @@ class Obs(API):
         self.pre_status = ''
         self.imu_ok = False
         self.body_auto = False
+        self.pre_act = ''
         
         self.initial()
 
@@ -423,6 +430,7 @@ class Obs(API):
         self.turn_head_step = 0
         self.first_imu = True
         self.imutype = 0
+        self.pre_act = ''
 
     def walk_switch(self):
         if self.body_auto:
@@ -470,22 +478,45 @@ class Obs(API):
                     self.status = 'starting_walking_without_obs'
             #3.有障礙物時======================================
             elif self.status == 'starting_walking_with_obs':
-                if abs(self.calc.deep_x) <= WALK_FORWARD_ZONE:#障礙物在兩側 可從中間過
+                if (self.calc.deep_sum_canter/24)>22:
                     self.pre_status = self.status
                     self.status = 'walk_forword'
-                elif -14 < self.calc.deep_x < -WALK_FORWARD_ZONE:#障礙物在右邊
-                    self.calc.move("turn_left")
-                elif WALK_FORWARD_ZONE < self.calc.deep_x < 14:#障礙物在左邊
-                    self.calc.move("turn_right")
-
-                elif abs(self.calc.deep_x) > 14:
-                    if abs(self.calc.deep_sum_l - self.calc.deep_sum_r) < 100:
+                elif abs(self.calc.deep_x) <= WALK_FORWARD_ZONE:#障礙物在兩側 可從中間過
+                    self.pre_status = self.status                    
+                    self.status = 'walk_forword'
+                    self.pre_act = 'walk_forword'
+                elif -15 < self.calc.deep_x < -WALK_FORWARD_ZONE:#障礙物在右邊
+                    if self.pre_act == 'turn_right':
+                        if self.calc.deep_sum_l > self.calc.deep_sum_r:
+                            self.calc.move("turn_left")
+                            self.pre_act = 'turn_left'
+                        else:
+                            self.calc.move("turn_right")                            
+                            self.pre_act = 'turn_right'
+                    else:
+                        self.calc.move("turn_left")
+                        self.pre_act = 'turn_left'
+                elif WALK_FORWARD_ZONE < self.calc.deep_x < 15:#障礙物在左邊
+                    if self.pre_act == 'turn_left':
+                        if self.calc.deep_sum_l > self.calc.deep_sum_r:
+                            self.calc.move("turn_left")
+                            self.pre_act = 'turn_left'
+                        else:
+                            self.calc.move("turn_right")                            
+                            self.pre_act = 'turn_right'
+                    else:
+                        self.calc.move("turn_right")                            
+                        self.pre_act = 'turn_right'
+                elif abs(self.calc.deep_x) > 15:
+                    if (abs(self.calc.deep_sum_l - self.calc.deep_sum_r) < 50)and TURN_HEAD_FLAG:
                         self.pre_status = self.status
                         self.status = 'turn_head'
                     elif self.calc.deep_sum_l > self.calc.deep_sum_r:
                         self.calc.move("turn_left")
+                        self.pre_act = 'turn_left'
                     else:
                         self.calc.move("turn_right")
+                        self.pre_act = 'turn_right'
                 # elif -16 <= self.calc.deep_x <= -14 or 14 <= self.calc.deep_x <= 16:#障礙物在正中間
                 #     self.pre_status = self.status
                 #     self.status = 'imu_fix'
@@ -494,6 +525,7 @@ class Obs(API):
             elif self.status =='turn_right_90':
                 if self.imu_rpy[2] > -50:
                     self.calc.move("turn_right_90")
+                    self.pre_act = 'turn_right_90'
                 else:
                     self.pre_status = self.status
                     self.status = "walk_forword"
@@ -501,6 +533,7 @@ class Obs(API):
             elif self.status =='turn_left_90':
                 if self.imu_rpy[2] < 50:
                     self.calc.move("turn_left_90")
+                    self.pre_act = 'turn_left_90'
                 else:
                     self.pre_status = self.status
                     self.status = "walk_forword"
@@ -508,6 +541,7 @@ class Obs(API):
             elif self.status == 'walk_forword':
                 if self.calc.deep_y < 24:
                     self.calc.move("small_forward")
+                    self.pre_act = 'small_forward'
                     if abs(self.calc.deep_x) > WALK_FORWARD_ZONE+1:
                         self.pre_status = self.status
                         self.status = 'starting_walking_with_obs'
@@ -526,6 +560,7 @@ class Obs(API):
                     # self.status = 'starting_walking_with_obs'
                 else:
                     self.calc.move("max_speed")
+                    self.pre_act = 'max_speed'
             #8.高速看到障礙物時緩減速==============================
             elif self.status == 'stay_wait':
                 if self.calc.speed_x <= STAY_X:#等待到減速完成
@@ -534,6 +569,7 @@ class Obs(API):
                     self.status = 'starting_walking_with_obs'
                 else:
                     self.calc.move("stay_wait")
+                    self.pre_act ='stay_wait'
             #9.imu修正回0=======================================
             elif self.status == 'imu_fix':
                 # if self.first_imu:
@@ -555,7 +591,8 @@ class Obs(API):
                 #         self.calc.move("imu_fix")  
                 # elif self.imutype == -1:
                 if abs(self.imu_rpy[2]) > IMU_FIX:
-                    self.calc.move("imu_fix")                
+                    self.calc.move("imu_fix")     
+                    self.pre_act = 'imu_fix'
                 else:
                     if (self.calc.left_deep < TURN_HEAD_RANGE) and (self.calc.right_deep < TURN_HEAD_RANGE) and (self.calc.center_deep < TURN_HEAD_RANGE):
                         self.pre_status = self.status
@@ -570,6 +607,7 @@ class Obs(API):
                     #     self.status = 'starting_walking_without_obs'
                     else:
                         self.calc.move("stay")
+                        self.pre_act = 'stay'
                         time.sleep(1)
                         self.pre_status = self.status
                         self.status = 'starting_walking_with_obs'
@@ -577,6 +615,7 @@ class Obs(API):
                         self.calc.face_imu = 0
             elif self.status == 'turn_head':
                     self.calc.move("stay")
+                    self.pre_act = 'stay'
                     if self.turn_head_step == 0:
                         self.sendHeadMotor(1, HEAD_HORIZONTAL-500, 100)
                         self.sendHeadMotor(2, HEAD_VERTICAL-50, 50)
@@ -630,8 +669,8 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        # node.destroy_node()
-        executor.destroy_node()
+        node.destroy_node()
+        # executor.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
 
