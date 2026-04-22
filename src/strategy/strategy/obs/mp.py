@@ -6,6 +6,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
 import time
+import math
 
 # 設定初始值與馬達限制
 HEAD_HORIZON = 2030
@@ -53,8 +54,15 @@ class PersonCoordinateNode(API):
         self.px = 0
         self.py = 0
         self.search_num = 0
+        self.prev_x_diff = 0
+        self.prev_y_diff = 0
+        self.search_angle = 0.0
+        self.search_radius = 0.0
         self.new_waist_pos = self.waist_horizon
-        self.reg = 1 # 搜尋方向控制
+        self.reg = 1 # 搜尋方向控制        
+        
+        # 新增：目標丟失計數器
+        self.miss_count = 0
         self.get_logger().info("320x240 座標偵測與追蹤 Node 已啟動")
 
     def image_callback(self, msg):
@@ -83,20 +91,45 @@ class PersonCoordinateNode(API):
             # cv2.imshow("Person Tracking", cv_image)
             self.drawImage()
             # 執行追蹤修正
+# 執行追蹤修正
             if self.is_start:
                 if self.px != 0 and self.py != 0:
                     self.trace_revise(self.px, self.py, 100)
-                    self.search_num = 0
+                    self.search_angle = 0.0
+                    self.search_radius = 0.0
+                    self.miss_count = 0  # 找到人，重置丟失計數
                 else:
-                    self.get_logger().info('miss_target -> 需重新尋求')
-                    # self.view_search(right_place=2800, left_place=1200, up_place=2800, down_place=1800, speed=100, delay=0.05)
+                    self.miss_count += 1
+                    if self.miss_count > 10:  # 容忍 10 幀沒看到人，才開始螺旋搜尋
+                        self.get_logger().info('miss_target -> 開始螺旋尋求')
+                        # 拿掉 delay 參數
+                        self.view_search(
+                            right_place=HEAD_HORIZON_MAXMIN[1], 
+                            left_place=HEAD_HORIZON_MAXMIN[0], 
+                            up_place=HEAD_VERTICAL_MAXMIN[1], 
+                            down_place=HEAD_VERTICAL_MAXMIN[0], 
+                            speed=80
+                        )
+                    else:
+                        self.get_logger().info(f'目標閃爍... 等待確認 ({self.miss_count}/10)')
             else:
                 self.sendHeadMotor(1, HEAD_HORIZON, 50)
                 self.sendHeadMotor(2, HEAD_VERTICAL, 50)
                 self.SingleAbsolutePosition(WAIST_ID, 2048, 50)
-                self.search_num = 0
                 self.sendBodySector(29)
-                # self.sendSingleMotor(WAIST_ID, 2048, 50)
+                
+                # 必須同步重置內部絕對座標變數，防止下次 true 時暴衝
+                self.head_horizon = HEAD_HORIZON
+                self.head_vertical = HEAD_VERTICAL
+                self.waist_horizon = 2048
+                
+                # 同時重置搜尋與 PID 相關變數
+                self.search_num = 0
+                self.search_angle = 0.0
+                self.search_radius = 0.0
+                self.prev_x_diff = 0
+                self.prev_y_diff = 0
+                self.miss_count = 0
 
             # cv2.waitKey(1)
 
@@ -104,50 +137,77 @@ class PersonCoordinateNode(API):
             self.get_logger().error(f"執行錯誤: {e}")
 
     def trace_revise(self, x_target, y_target, speed):
-        # 計算影像中心偏差 (Center = 160, 120)
         x_difference = x_target - 160               
         y_difference = y_target - 120               
         
-        # 像素偏差轉角度比例
-        x_degree = x_difference * (65 / 320)         
-        y_degree = y_difference * (38 / 240)         
-
-        # --- 水平計算 ---
-        new_head_h = self.head_horizon - round(x_degree * 4096 / 360 * 0.15)
+        # --- 3. PD 控制防過衝 ---
+        Kp = 0.1 # 比例：原始的 0.15
+        Kd = 0.2 # 微分：預測趨勢，煞車用 (可依機器人反應微調)
         
-        # --- 垂直計算 (已修正符號為相反) ---
-        # 原本是 self.head_vertical - ... 現在改為 +
-        new_head_v = self.head_vertical + round(y_degree * 4096 / 360 * 0.15)
+        x_pd = (x_difference * Kp) + ((x_difference - self.prev_x_diff) * Kd)
+        y_pd = (y_difference * Kp) + ((y_difference - self.prev_y_diff) * Kd)
+        
+        # 紀錄本次誤差給下一幀使用
+        self.prev_x_diff = x_difference
+        self.prev_y_diff = y_difference
+        
+        x_degree = x_pd * (65 / 320)         
+        y_degree = y_pd * (38 / 240)         
 
-        # 1. 水平追蹤與腰部補償
+        # --- 頭部計算 ---
+        new_head_h = self.head_horizon - round(x_degree * 4096 / 360)
+        new_head_v = self.head_vertical + round(y_degree * 4096 / 360)
+
+        # 1. 水平追蹤與 4. 腰部回正
         if HEAD_HORIZON_MAXMIN[0] <= new_head_h <= HEAD_HORIZON_MAXMIN[1]:
-            self.move_head(1, new_head_h, speed)
-        else:
-            self.get_logger().warn(f"頭部水平受限，改動腰部 ID:{WAIST_ID}")
-            
-            relative_step = -5 if x_difference > 0 else 5
-            
-            # 預判移動後的絕對位置，用來檢查範圍
-            predicted_absolute_pos = self.waist_horizon + relative_step
-            if WAIST_HORIZON_MAXMIN[0] <= predicted_absolute_pos <= WAIST_HORIZON_MAXMIN[1]:
-                # waist_step = -10 if x_difference > 0 else 10
-                # self.new_waist_pos = self.waist_horizon - waist_step
-                # self.get_logger().info(f"self.new_waist_pos:{self.new_waist_pos}")
-                # self.sendSingleMotor(WAIST_ID, waist_step, speed)
-                # self.waist_horizon = self.new_waist_pos
-                self.SingleAbsolutePosition(WAIST_ID, predicted_absolute_pos, speed)
-                # 更新目前存放在程式裡的絕對位置紀錄
-                self.waist_horizon = predicted_absolute_pos
+            # 頭部在安全範圍 -> 檢查腰部是否需要回正 2048
+            if self.waist_horizon != 2048:
+                # 決定腰部回歸中心的步長
+                if abs(self.waist_horizon - 2048) < 15:
+                    waist_shift = 2048 - self.waist_horizon
+                else:
+                    waist_shift = 15 if self.waist_horizon < 2048 else -15
+                
+                self.waist_horizon += waist_shift
+                self.SingleAbsolutePosition(WAIST_ID, self.waist_horizon, speed)
+                
+                # 腰部往中心轉了，頭部必須「反向轉動」同等刻度，鏡頭才能鎖定在原目標上
+                new_head_h -= waist_shift 
+
             clamped_h = max(HEAD_HORIZON_MAXMIN[0], min(new_head_h, HEAD_HORIZON_MAXMIN[1]))
-            self.move_head(1, clamped_h, speed)
+            self.move_head(1, int(clamped_h), speed)
+            
+        else:
+            self.get_logger().warn(f"頭部水平受限，計算腰部 ID:{WAIST_ID}")
+            
+            # --- 腰部專用 PD 計算 ---
+            # 腰部負載較重，Kp 與 Kd 建議比頭部小，確保重心穩定
+            Kp_waist = 0.05
+            Kd_waist = 0.1  
+            
+            # 計算腰部的 PD 補償量
+            x_pd_waist = (x_difference * Kp_waist) + ((x_difference - self.prev_x_diff) * Kd_waist)
+            
+            # 轉換為馬達刻度
+            waist_diff = round((x_pd_waist * 65 / 320) * (4096 / 360))
+            
+            # 決定移動方向 (依照你之前的邏輯：人在右側 x_diff > 0 時，馬達數值要減少)
+            predicted_absolute_pos = self.waist_horizon - waist_diff
+            
+            # 檢查是否超出腰部物理極限
+            if WAIST_HORIZON_MAXMIN[0] <= predicted_absolute_pos <= WAIST_HORIZON_MAXMIN[1]:
+                self.SingleAbsolutePosition(WAIST_ID, predicted_absolute_pos, speed)
+                self.waist_horizon = predicted_absolute_pos
+            else:
+                self.get_logger().warn("腰部已達物理範圍邊限")
+
+            # 頭部依然固定在邊界
+            clamped_h = max(HEAD_HORIZON_MAXMIN[0], min(new_head_h, HEAD_HORIZON_MAXMIN[1]))
+            self.move_head(1, int(clamped_h), speed)
 
         # 2. 垂直追蹤
-        if HEAD_VERTICAL_MAXMIN[0] <= new_head_v <= HEAD_VERTICAL_MAXMIN[1]:
-            self.move_head(2, new_head_v, speed)
-        else:
-            # 強制限制在範圍內，避免數值跑掉
-            clamped_v = max(HEAD_VERTICAL_MAXMIN[0], min(new_head_v, HEAD_VERTICAL_MAXMIN[1]))
-            self.move_head(2, clamped_v, speed)
+        clamped_v = max(HEAD_VERTICAL_MAXMIN[0], min(new_head_v, HEAD_VERTICAL_MAXMIN[1]))
+        self.move_head(2, int(clamped_v), speed)
     def move_head(self, ID, Position, Speed):
         self.sendHeadMotor(ID, Position, Speed)
         if ID == 1:
@@ -155,39 +215,27 @@ class PersonCoordinateNode(API):
         elif ID == 2:
             self.head_vertical = Position
 
-    def view_search(self, right_place, left_place, up_place, down_place, speed, delay):   
-        # 決定搜尋順序
-        turn_order = [3, 4, 1, 2] if self.reg > 0 else [1, 4, 3, 2]
-        if self.search_num >= len(turn_order):
-            self.search_num = 0
-
-        search_flag = turn_order[self.search_num]
-
-        if search_flag == 1: # 左尋
-            if self.head_horizon >= left_place:
-                self.move_head(1, self.head_horizon - speed, 100)
-            else:
-                self.search_num += 1
+    def view_search(self, right_place, left_place, up_place, down_place, speed):   
+        # 螺旋擴展參數 (配合高頻率 callback 需調得很小)
+        angle_step = 0.1   # 每次轉動的角度增量，越小畫圈越圓
+        radius_step = 2.5  # 半徑增量，越小圈圈擴大得越慢
         
-        elif search_flag == 3: # 右尋
-            if self.head_horizon <= right_place:
-                self.move_head(1, self.head_horizon + speed, 100)
-            else:
-                self.search_num += 1
+        self.search_angle += angle_step
+        self.search_radius += radius_step
+        
+        target_h = int(2048 + self.search_radius * math.cos(self.search_angle))
+        target_v = int(2028 + self.search_radius * math.sin(self.search_angle))
+        
+        if target_h > right_place or target_h < left_place or target_v > up_place or target_v < down_place:
+            self.get_logger().info('搜尋達邊界，重置回中心點')
+            self.search_angle = 0.0
+            self.search_radius = 0.0
+            target_h = 2048
+            target_v = 2028
 
-        elif search_flag == 4: # 上尋
-            if self.head_vertical <= up_place:
-                self.move_head(2, self.head_vertical + speed, 100)
-            else:
-                self.search_num += 1  
-        
-        elif search_flag == 2: # 下尋
-            if self.head_vertical >= down_place:
-                self.move_head(2, self.head_vertical - speed, 100)
-            else:
-                self.search_num = 0 # 繞完一圈回到第一個動作
-        
-        time.sleep(delay)            
+        self.move_head(1, target_h, speed)
+        self.move_head(2, target_v, speed)
+        # 絕對不能在這裡放 time.sleep()！
 
     def drawImage(self):
         self.drawImageFunction(1, 1, 160, 160, 0, 240, 255, 255, 255) 
