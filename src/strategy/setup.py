@@ -39,13 +39,14 @@ setup(
             'mar1 = strategy.mar.mar1:main',
             'yolo = strategy.mar.ros2_engine_inference:main',
             'yolo2 = strategy.mar.visualization:main',
-            'yolo3 = strategy.mar.viz_optimized:main',
+            'yolo3  = strategy.mar.viz_optimized:main',
             'mar0919 = strategy.mar.strategy_MAR0919:main',
             'testyolo = strategy.mar.test:main',
             'navigation_node = strategy.mar.navigation_node:main',   #use that
             'nav_debug = strategy.mar.nav_debug:main',
             'haha = strategy.mar.haha3:main',
-            'tag = strategy.sp.apriltag_node:main'
+            'tag = strategy.sp.apriltag_node:main',
+            'mp = strategy.obs.mp:main',
             ],
     },
 )

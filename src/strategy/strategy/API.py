@@ -116,6 +116,7 @@ class API(Node):
         # -------------------- Publishers --------------------
         self.imu_reset_pub = self.create_publisher(SensorSet, '/sensorset', 10)
         self.singlemotor_pub = self.create_publisher(SingleMotorData, '/package/SingleMotorData', 10)
+        self.SingleAbsolutePosition_pub = self.create_publisher(SingleMotorData, '/package/SingleAbsolutePosition', 10)
 
         self.generate_pub = self.create_publisher(Int16, '/ContinousMode_Topic', 10)
         self.continous_pub = self.create_publisher(Interface, '/ChangeContinuousValue_Topic', 10)
@@ -471,6 +472,11 @@ class API(Node):
         m = SingleMotorData()
         m.id, m.position, m.speed = ID, Position, Speed
         self.singlemotor_pub.publish(m)
+        
+    def SingleAbsolutePosition(self, ID: int, Position: int, Speed: int) -> None:
+        m = SingleMotorData()
+        m.id, m.position, m.speed = ID, Position, Speed
+        self.SingleAbsolutePosition_pub.publish(m)
 
     def sendHeadMotor(self, ID: int, Position: int, Speed: int) -> None:
         m = HeadPackage()

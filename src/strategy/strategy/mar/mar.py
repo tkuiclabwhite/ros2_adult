@@ -68,8 +68,6 @@ class Mar(API):
     def arrow_yolo(self):
         if self.yolo_valid():
             self.arrow_temp.append(self.action)
-        else:
-            self.arrow_temp.append('None')
 
         self.get_logger().info(f'arrow_temp = {list(self.arrow_temp)}')
 
@@ -114,11 +112,11 @@ class Mar(API):
     def arrow_turn(self):
         print(1)
         if self.arrow_temp[0] == 'right':
-            self.sendContinuousValue(2000, 0, -6 + ORIGIN_THETA)
+            self.sendContinuousValue(1700, 0, -6 + ORIGIN_THETA)
         elif self.arrow_temp[0] == 'left':
-            self.sendContinuousValue(2000, 0, 6 + ORIGIN_THETA)
+            self.sendContinuousValue(1700, 0, 6 + ORIGIN_THETA)
         else:
-            self.sendContinuousValue(0, 0, 0)
+            self.sendContinuousValue(-300, 0, 0)
             return
 
         if abs(self.yaw - self.turn_start_yaw) > 85:
@@ -130,10 +128,12 @@ class Mar(API):
 
     def main_loop(self):
         if self.is_start:
+            # self.status = 'INIT'
+            
             # print(self.status)
             # self.get_logger().info(self.can_turn_flag)
             if self.status == 'INIT':
-                self.sendHeadMotor(2, 1500, 50)
+                self.sendHeadMotor(2, 2800, 50)
                 self.sendHeadMotor(1, 2048, 50)
                 self.sendSensorReset(True)
                 self.sendbodyAuto(1)

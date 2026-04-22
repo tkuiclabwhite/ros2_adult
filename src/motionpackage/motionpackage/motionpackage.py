@@ -36,6 +36,7 @@ class MotionNode(Node):
         self.web_sub = self.create_subscription(InterfaceSend2Sector, "/package/InterfaceSend2Sector", self.web_interface_cb, qos)
         self.save_sub = self.create_subscription(SaveMotion, '/package/InterfaceSaveMotion', self.cb_save_motion, qos)
         self.singlemotor_sub = self.create_subscription(SingleMotorData, '/package/SingleMotorData', self.cb_single_motor, 10)
+        self.SingleAbsolutePosition_sub = self.create_subscription(SingleMotorData, '/package/SingleAbsolutePosition', self.cb_SingleAbsolutePosition, 10)
 
         # Variables
         self.current_joints = {} 
@@ -413,6 +414,40 @@ class MotionNode(Node):
         # ---------------------------------------
 
         final_target = base_pos + pos
+
+        js = JointState()
+        js.header.stamp = self.get_clock().now().to_msg()
+        js.name = [str(mid)]
+        js.position = [float(final_target)]
+        js.velocity = [float(spd)]
+        self.cmd_pub.publish(js)
+
+        # 更新最後目標值，確保其他邏輯同步
+        self.last_goals[mid] = final_target
+
+        # 通知 WalkingNode 定錨點已改變
+        reset_msg = Bool()
+        reset_msg.data = True
+        self.anchor_reset_pub.publish(reset_msg)
+
+        self.get_logger().info(f"[SingleMotor] ID={mid} Base={base_pos} Target={final_target} (Rel={pos})")
+
+    def cb_SingleAbsolutePosition(self, msg: SingleMotorData):
+        mid = int(msg.id)
+        pos = int(msg.position)  # 這是相對位移量
+        spd = int(msg.speed)
+
+        # --- 修改重點：強制讀取馬達當前的真實位置 ---
+        # 使用 .get(mid, 2048) 確保如果沒讀到數值時有個預設值
+        if mid in self.current_joints:
+            base_pos = self.current_joints[mid]
+        else:
+            # 如果連 current_joints 都沒抓到，才考慮用 last_goals 或預設中立點
+            base_pos = self.last_goals.get(mid, 2048)
+            self.get_logger().warn(f"[SingleMotor] Motor {mid} no feedback, using last goal/default.")
+        # ---------------------------------------
+
+        final_target = pos
 
         js = JointState()
         js.header.stamp = self.get_clock().now().to_msg()

@@ -1,1 +1,1 @@
-window._strategy_location = "mar";
+window._strategy_location = "obs";

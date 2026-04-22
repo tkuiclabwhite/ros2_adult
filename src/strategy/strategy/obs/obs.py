@@ -17,11 +17,11 @@ from strategy.API import API
 
 # ================= 參數定義 =================
 FOCUS_MATRIX = [
-     1, 1, 2, 3, 4, 5, 6,
-     7, 7, 8, 8, 9,10,11,
-    12,14,14,12,
-    11,10, 9, 8, 8, 7, 7,
-     6, 5, 4, 3, 2, 1, 1
+     1, 2, 3, 4, 5, 6, 7,
+     8, 9, 10, 12, 14,15,16,
+    17,18,18,17,
+    16,15, 14, 12, 10, 9, 8,
+     7, 6, 5, 4, 3, 2, 1
 ]
 
 
@@ -32,11 +32,11 @@ STAY_X     = 1700
 STAY_Y     = 0
 STAY_THETA = 0
 #大前進
-MAX_FORWARD_X       = -6000
+MAX_FORWARD_X       = -3000
 MAX_FORWARD_Y       = 0
 MAX_FORWARD_THETA   = 0
 #小前進
-SMALL_FOEWARD_X     = 3000
+SMALL_FOEWARD_X     = -3000
 SMALL_FOEWARD_Y     = 0
 SMALL_FOEWARD_THETA = 0
 #dx右轉(45)
@@ -72,7 +72,7 @@ TURN_90           = False #是否啟用轉90度判斷
 WALK_FORWARD_ZONE = 6   #可從障礙物中間通過的可容忍範圍
 # RECHECK_ZONE      = 7   #障礙物偏離中心重新判斷轉向
 ACCEL_STEP        = 100 #每秒增加/減少的速度量 
-IMU_FIX           = 3   #imu修正容許值
+IMU_FIX           = 2   #imu修正容許值
 
 
 class NonBlockingDelay:
@@ -123,6 +123,7 @@ class Calculate():
         self.theta = 0
         self.last_action = "stop"
         
+        self.face_imu = 0
         # 除錯用變數
         self.img_received = False
         self.last_error = "None"
@@ -180,7 +181,8 @@ class Calculate():
             left_weight = np.dot(filter_matrix, left_weight_matrix)
             
             # self.deep_y = min(np.array(self.depth))
-            invaders = [self.depth[i] for i in range(32) if self.depth[i] < FOCUS_MATRIX[i]]
+            # invaders = [self.depth[i] for i in range(32) if self.depth[i] < FOCUS_MATRIX[i]]
+            invaders = [self.depth[i] for i in range(32) if self.depth[i] < max(FOCUS_MATRIX)]
             self.deep_y = min(invaders) if invaders else 24
 
             self.deep_sum = sum(np.array(self.depth))
@@ -228,6 +230,8 @@ class Calculate():
                     self.speed_x = min(self.speed_x + ACCEL_STEP, x)
                 elif self.speed_x > x:
                     self.speed_x = max(self.speed_x - ACCEL_STEP, x)
+            else:
+                self.speed_x = x
 
             self.robot.sendContinuousValue(self.speed_x, self.y, self.theta)
 
@@ -238,7 +242,7 @@ class Calculate():
             (-60, 5), (-90, 5), (-180, 5),
         ]
         for imu_range in imu_ranges:
-            if getattr(self.robot, 'yaw', 0) >= imu_range[0]:
+            if (getattr(self.robot, 'yaw', 0) -self.face_imu) >= imu_range[0]:
                 return imu_range[1]
         return 0
 
@@ -348,7 +352,6 @@ center_deep      : {self.center_deep}\n\
 deep_sum_lr      : {self.deep_sum_l} {self.deep_sum_r}\n\
 deep_sum         : {self.calc.deep_sum}\n\
 LCRdeep          : {self.left_deep} {self.center_deep} {self.right_deep}\n\
-#=====================================#\n\
 ")
         sys.stdout.flush()
 
@@ -406,6 +409,7 @@ class Obs(API):
         self.initial()
 
     def initial(self):
+        self.status = PRE_ACT
         self.pre_status = ''
         self.imu_ok = False
         self.body_auto = False
@@ -417,6 +421,8 @@ class Obs(API):
         self.right_deep_sum = 0
         self.deep_sum = 0
         self.turn_head_step = 0
+        self.first_imu = True
+        self.imutype = 0
 
     def walk_switch(self):
         if self.body_auto:
@@ -472,9 +478,17 @@ class Obs(API):
                 elif WALK_FORWARD_ZONE < self.calc.deep_x < 14:#障礙物在左邊
                     self.calc.move("turn_right")
 
-                elif -16 <= self.calc.deep_x <= -14 or 14 <= self.calc.deep_x <= 16:#障礙物在正中間
-                    self.pre_status = self.status
-                    self.status = 'imu_fix'
+                elif abs(self.calc.deep_x) > 14:
+                    if abs(self.calc.deep_sum_l - self.calc.deep_sum_r) < 100:
+                        self.pre_status = self.status
+                        self.status = 'turn_head'
+                    elif self.calc.deep_sum_l > self.calc.deep_sum_r:
+                        self.calc.move("turn_left")
+                    else:
+                        self.calc.move("turn_right")
+                # elif -16 <= self.calc.deep_x <= -14 or 14 <= self.calc.deep_x <= 16:#障礙物在正中間
+                #     self.pre_status = self.status
+                #     self.status = 'imu_fix'
 
             #4.執行轉頭策略(障礙物在正中間、整體偏左)===============
             elif self.status =='turn_right_90':
@@ -503,8 +517,12 @@ class Obs(API):
             #7.沒障礙物時========================================
             elif self.status == 'starting_walking_without_obs':
                 if self.calc.deep_y < 24 :
-                    self.pre_status = self.status
-                    self.status = 'stay_wait'
+                    if self.pre_status == 'imu_fix':
+                        self.pre_status = self.status
+                        self.status = 'starting_walking_with_obs'                        
+                    else:
+                        self.pre_status = self.status
+                        self.status = 'imu_fix'
                     # self.status = 'starting_walking_with_obs'
                 else:
                     self.calc.move("max_speed")
@@ -512,46 +530,76 @@ class Obs(API):
             elif self.status == 'stay_wait':
                 if self.calc.speed_x <= STAY_X:#等待到減速完成
                     self.pre_status = self.status
-                    self.status = 'imu_fix'
+                    # self.status = 'imu_fix'
+                    self.status = 'starting_walking_with_obs'
                 else:
                     self.calc.move("stay_wait")
             #9.imu修正回0=======================================
-            elif self.status == 'imu_fix':                
-                if(abs(self.imu_rpy[2]) > IMU_FIX):
+            elif self.status == 'imu_fix':
+                # if self.first_imu:
+                #     if self.imu_rpy[2] > IMU_FIX:
+                #         # self.imutype = 1
+                #         self.calc.face_imu = -2
+                #         self.first_imu = False
+                #     elif self.imu_rpy[2] < -IMU_FIX:
+                #         # self.imutype = -1
+                #         self.calc.face_imu = 2
+                #         self.first_imu = False
+                #     else:
+                #         self.pre_status = self.status
+                #         self.status = 'starting_walking_with_obs'
+                #         self.first_imu = True
+                #         self.calc.face_imu = 0
+                # if self.imutype == 1:
+                #     if self.imu_rpy[2] > -IMU_FIX:
+                #         self.calc.move("imu_fix")  
+                # elif self.imutype == -1:
+                if abs(self.imu_rpy[2]) > IMU_FIX:
                     self.calc.move("imu_fix")                
                 else:
                     if (self.calc.left_deep < TURN_HEAD_RANGE) and (self.calc.right_deep < TURN_HEAD_RANGE) and (self.calc.center_deep < TURN_HEAD_RANGE):
                         self.pre_status = self.status
                         self.status = 'turn_head'
-                    elif self.calc.deep_y < 24:
+                        self.first_imu = True
+                        self.calc.face_imu = 0
+                    # elif self.calc.deep_y < 24:
+                    #     self.pre_status = self.status
+                    #     self.status = 'starting_walking_with_obs'
+                    # else:                        
+                    #     self.pre_status = self.status
+                    #     self.status = 'starting_walking_without_obs'
+                    else:
+                        self.calc.move("stay")
+                        time.sleep(1)
                         self.pre_status = self.status
                         self.status = 'starting_walking_with_obs'
-                    else:
-                        self.pre_status = self.status
-                        self.status = 'starting_walking_without_obs'
+                        self.first_imu = True
+                        self.calc.face_imu = 0
             elif self.status == 'turn_head':
                     self.calc.move("stay")
                     if self.turn_head_step == 0:
                         self.sendHeadMotor(1, HEAD_HORIZONTAL-500, 100)
-                        self.sendHeadMotor(2, HEAD_VERTICAL, 50)
+                        self.sendHeadMotor(2, HEAD_VERTICAL-50, 50)
+                        self.status = 'turn_head'
                         self.delay.reset() # 確保計時器重置
                         self.turn_head_step = 1 # 切換到下一步
                         
                     # 第 1 步：不卡死地等待 1 秒，讀取右邊數值，然後向左看
                     elif self.turn_head_step == 1:
-                        if self.delay.check(1.0):
+                        if self.delay.check(2.0):
                             self.left_deep_sum = self.calc.deep_sum
                             self.sendHeadMotor(1, HEAD_HORIZONTAL+500, 100)
-                            self.sendHeadMotor(2, HEAD_VERTICAL, 50)
+                            self.sendHeadMotor(2, HEAD_VERTICAL-50, 50)
+                            self.status = 'turn_head'
                             self.turn_head_step = 2 # 切換到下一步
                             
                     # 第 2 步：不卡死地等待 1 秒，讀取左邊數值，頭部回正並退出狀態
                     elif self.turn_head_step == 2:
-                        if self.delay.check(1.0):
+                        if self.delay.check(2.0):
                             self.right_deep_sum = self.calc.deep_sum
                             self.sendHeadMotor(1, HEAD_HORIZONTAL, 100)
                             self.sendHeadMotor(2, HEAD_VERTICAL, 50)
-                            
+                            self.status = 'turn_head'
                             # 決策接下來的主狀態
                             self.pre_status = self.status
                             if self.left_deep_sum > self.right_deep_sum:
@@ -565,7 +613,7 @@ class Obs(API):
         else:
             if self.body_auto:
                 self.walk_switch()
-                self.initial()
+            self.initial()
             # time.sleep(1)
             
 # ================= 執行進入點 =================
@@ -582,7 +630,8 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        node.destroy_node()
+        # node.destroy_node()
+        executor.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
 
