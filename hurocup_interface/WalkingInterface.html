@@ -223,6 +223,8 @@
 				case 69:	//E, Right Turn
 					RightTurnFun();
 					break;
+               case 82:
+                   ResetFun();					
 			}
 		}
 
@@ -323,6 +325,19 @@
 				ChangeContinuousValueFun();
 			}
 		}
+		
+		function ResetFun(){
+           document.getElementById("Xvalue").value = 0;
+           document.getElementById("Yvalue").value = 0;
+           document.getElementById("Thetavalue").value = 0;
+           Xvaluetmp = 0;
+           Yvaluetmp = 0;
+           Thetavaluetmp = 0;
+           if (statetype == 0 ||statetype == 7 || statetype == 8) {
+               ChangeContinuousValueFun();
+           }
+       }
+
 		
 		function Generate() {
 			if (statetype == 0 && ContinousModetmp == 0) {

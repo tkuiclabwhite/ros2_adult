@@ -28,11 +28,11 @@ FOCUS_MATRIX = [
 HEAD_HORIZONTAL = 2030
 HEAD_VERTICAL = 2800
 #原地步態
-STAY_X     = -200
+STAY_X     = 1700
 STAY_Y     = 0
 STAY_THETA = 0
 #大前進
-MAX_FORWARD_X       = 6000
+MAX_FORWARD_X       = -6000
 MAX_FORWARD_Y       = 0
 MAX_FORWARD_THETA   = 0
 #小前進
@@ -40,28 +40,28 @@ SMALL_FOEWARD_X     = 3000
 SMALL_FOEWARD_Y     = 0
 SMALL_FOEWARD_THETA = 0
 #dx右轉(45)
-TURN_RIGHT_X     = -300
-TURN_RIGHT_Y     = 0
+TURN_RIGHT_X     = 1700
+TURN_RIGHT_Y     = -1000
 TURN_RIGHT_THETA = -5
 #右轉(90)
-TURN_RIGHT_90_X     = -300
-TURN_RIGHT_90_Y     = 0
+TURN_RIGHT_90_X     = 1700
+TURN_RIGHT_90_Y     = -1000
 TURN_RIGHT_90_THETA = -5
 #imu右轉
-IMU_RIGHT_X = 0
-IMU_RIGHT_Y = 0
+IMU_RIGHT_X = 1700
+IMU_RIGHT_Y = -1000
 #IMU__RIGHT_THETA max(5,-5)
 #dx左轉(45)
-TURN_LEFT_X = -300
-TURN_LEFT_Y = 0
+TURN_LEFT_X = 2000
+TURN_LEFT_Y = 600
 TURN_LEFT_THETA = 5
 #左轉(90)
-TURN_LEFT_90_X     = -300
-TURN_LEFT_90_Y     = 0
+TURN_LEFT_90_X     = 2000
+TURN_LEFT_90_Y     = 600
 TURN_LEFT_90_THETA = 5
 #imu左轉
-IMU_LEFT_X = -100
-IMU_LEFT_Y = 0
+IMU_LEFT_X = 2000
+IMU_LEFT_Y = 600
 #IMU_LEFT_THETA max(5,-5)
 
 #開局動作
@@ -423,7 +423,7 @@ class Obs(API):
             self.sendbodyAuto(0)
             self.body_auto = False
         else:
-            self.sendbodyAuto(0)
+            self.sendbodyAuto(1)
             self.body_auto = True
 
     def main(self):
@@ -565,9 +565,9 @@ class Obs(API):
         else:
             if self.body_auto:
                 self.walk_switch()
-            self.initial()
+                self.initial()
             # time.sleep(1)
-            self.is_start = True 
+            
 # ================= 執行進入點 =================
 def main(args=None):
     rclpy.init(args=args)

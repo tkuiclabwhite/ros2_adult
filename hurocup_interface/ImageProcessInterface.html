@@ -584,12 +584,13 @@ function HeadTorqueSwitch() {
 			console.log("Publish /Camera_Save:", SaveCameraMsg);
 			SaveCamera.publish(SaveCameraMsg);
 		}
-		function saveAll(){
-			CameraSave();
-			SaveYUVColorModelFunction();
-			SaveColorModelFunction();
-			opencvSave();
-		}
+       function saveAll(){
+           CameraSave();
+           // SaveYUVColorModelFunction();
+           SaveColorModelFunction();
+           // opencvSave();
+       }
+
 		
 		function changebuild(newValue) {
 			console.log(newValue)
