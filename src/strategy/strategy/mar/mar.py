@@ -32,6 +32,7 @@ class Mar(API):
         # 狀態機
         self.status = 'INIT'
         self.turn_now_flag = False
+        self.is_start = False
         self.arrow_cnt_times = 0
         self.turn_start_yaw = 0.0
 
@@ -76,7 +77,7 @@ class Mar(API):
         if len(uniq) == 1 and self.arrow_temp[0] != 'None':
             stable_label = self.arrow_temp[0]
             self.stable_arrow = stable_label
-            self.can_turn_flag = stable_label in ('left', 'right')
+            self.can_turn_flag = stable_label in ('left', 'right','Right','Left')
             self.arrow_center_x = self.x
             self.arrow_center_y = self.y
             return True
@@ -86,6 +87,7 @@ class Mar(API):
         return False
 
     def imu_go(self):
+        
         self.theta = 0 + ORIGIN_THETA
         self.speed_x = 3500
 
@@ -110,29 +112,26 @@ class Mar(API):
         self.sendContinuousValue(self.speed_x, 0, self.theta)
 
     def arrow_turn(self):
-        if self.stable_arrow == 'right':
+        print(1)
+        if self.arrow_temp[0] == 'right':
             self.sendContinuousValue(2000, 0, -6 + ORIGIN_THETA)
-        elif self.stable_arrow == 'left':
+        elif self.arrow_temp[0] == 'left':
             self.sendContinuousValue(2000, 0, 6 + ORIGIN_THETA)
         else:
             self.sendContinuousValue(0, 0, 0)
             return
 
         if abs(self.yaw - self.turn_start_yaw) > 85:
-            self.sendContinuousValue(0, 0, 0)
             self.sendSensorReset(True)
             self.turn_now_flag = False
             self.can_turn_flag = False
             self.arrow_cnt_times = 0
-            self.status = 'DONE'
             self.get_logger().info('箭頭轉彎結束')
 
     def main_loop(self):
         if self.is_start:
-            self.sendContinuousValue(0, 0, 0)
-            self.status = 'INIT'
-
-
+            # print(self.status)
+            # self.get_logger().info(self.can_turn_flag)
             if self.status == 'INIT':
                 self.sendHeadMotor(2, 1500, 50)
                 self.sendHeadMotor(1, 2048, 50)
@@ -142,29 +141,33 @@ class Mar(API):
                 self.get_logger().info('進入 ARROW_PART')
 
             elif self.status == 'ARROW_PART':
+                
                 if self.turn_now_flag:
                     self.arrow_turn()
-                    return
 
-                stable = self.arrow_yolo()
+                else:
+                    # Change this line:
+                    # self.arrow.yolo()
+                    
+                    # To this:
+                    self.arrow_yolo()
+                    
+                    if self.can_turn_flag:
+                        self.get_logger().info('穩定看到可轉向箭頭')
 
-                if stable and self.can_turn_flag:
-                    self.get_logger().info('穩定看到可轉向箭頭')
+                        # 接近箭頭才開始轉
+                        if self.arrow_center_y >= 185:
+                            self.arrow_cnt_times += 1
 
-                    # 接近箭頭才開始轉
-                    if self.arrow_center_y >= 185:
-                        self.arrow_cnt_times += 1
-                    else:
-                        self.arrow_cnt_times = 0
-
-                    if self.arrow_cnt_times >= 13:
-                        self.turn_start_yaw = self.yaw
-                        self.turn_now_flag = True
-                        self.arrow_cnt_times = 0
-                        self.get_logger().info('開始轉彎')
-                        return
-
-                self.imu_go()
+                        if self.arrow_cnt_times >= 13:
+                            self.turn_start_yaw = self.yaw
+                            self.turn_now_flag = True
+                            self.arrow_cnt_times = 0
+                            self.get_logger().info('開始轉彎')
+                            self.status = 'ARROW_PART'
+                            
+            
+                    self.imu_go()
 
         else :
             if self.status != 'INIT':
