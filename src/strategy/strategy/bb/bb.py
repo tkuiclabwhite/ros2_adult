@@ -17,9 +17,9 @@ from rclpy.node import Node
 # 2025.4.17
 #======================================================================================
 
-CORRECT       = [-300, 0, 0]        # 原地踏步修正
-LEFT_CORRECT  = [-350, -100, 3]        # 左旋修正
-RIGHT_CORRECT = [-350, 0, -3]       # 右旋修正
+CORRECT       = [2000, 0, 0]        # 原地踏步修正
+LEFT_CORRECT  = [2400, 800, 5]        # 左旋修正
+RIGHT_CORRECT = [2400, -800, -5]       # 右旋修正
 #                 x , y , theta 
 
 #====================================================================================
@@ -635,8 +635,8 @@ class BasketBall(API):
 
         #self.api.sendBodySector(6)      ############步態調整############
         #time.sleep(0.05)
-        #self.api.sendBodySector(8) 
-        #time.sleep(0.05)
+        self.sendBodySector(26) 
+        time.sleep(0.5)
         # self.sendBodySector(1) 
         time.sleep(0.05)   
 

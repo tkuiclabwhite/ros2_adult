@@ -28,7 +28,7 @@ FOCUS_MATRIX = [
 HEAD_HORIZONTAL = 2030
 HEAD_VERTICAL = 2800
 #原地步態
-STAY_X     = 1700
+STAY_X     = 2200
 STAY_Y     = 0
 STAY_THETA = 0
 #大前進
@@ -40,11 +40,11 @@ SMALL_FOEWARD_X     = -3000
 SMALL_FOEWARD_Y     = 0
 SMALL_FOEWARD_THETA = 0
 #dx右轉(45)
-TURN_RIGHT_X     = 1700
+TURN_RIGHT_X     = 2200
 TURN_RIGHT_Y     = -1000
 TURN_RIGHT_THETA = -5
 #右轉(90)
-TURN_RIGHT_90_X     = 1700
+TURN_RIGHT_90_X     = 2200
 TURN_RIGHT_90_Y     = -1000
 TURN_RIGHT_90_THETA = -5
 #imu右轉
@@ -66,10 +66,10 @@ IMU_LEFT_Y = 800
 
 #開局動作
 PRE_ACT = 'start' # 'start' 'preturn_L' 'preturn_R'
-PRE_TURN_ANGLE = 20
+PRE_TURN_ANGLE = 60
 TURN_HEAD_RANGE = 12
 TURN_HEAD_FLAG  = False #是否啟用轉90度判斷
-WALK_FORWARD_ZONE = 6   #可從障礙物中間通過的可容忍範圍
+WALK_FORWARD_ZONE = 4   #可從障礙物中間通過的可容忍範圍
 # RECHECK_ZONE      = 7   #障礙物偏離中心重新判斷轉向
 ACCEL_STEP        = 100 #每秒增加/減少的速度量 
 IMU_FIX           = 2   #imu修正容許值
@@ -188,7 +188,7 @@ class Calculate():
             self.deep_sum = sum(np.array(self.depth))
             self.deep_sum_l = sum(np.array(self.depth)[0:16])
             self.deep_sum_r = sum(np.array(self.depth)[17:32])
-            self.deep_sum_canter = sum(np.array(self.depth)[4:28])
+            self.deep_sum_canter = sum(np.array(self.depth)[6:26])
             self.left_deep = np.array(self.depth)[4]
             self.right_deep = np.array(self.depth)[28]
             self.center_deep = np.array(self.depth)[16]
@@ -211,9 +211,9 @@ class Calculate():
             "max_speed": {"x": MAX_FORWARD_X, "y": MAX_FORWARD_Y, "theta": MAX_FORWARD_THETA},
             "small_forward": {"x": SMALL_FOEWARD_X, "y": SMALL_FOEWARD_Y, "theta": SMALL_FOEWARD_THETA},
             "imu_fix": {"x": IMU_RIGHT_X if getattr(self.robot, 'yaw', 0) > 0 else IMU_LEFT_X, "y": 0, "theta": self.imu_angle()},
-            "turn_right": {"x": TURN_RIGHT_X, "y": TURN_RIGHT_X, "theta": TURN_RIGHT_90_THETA},
+            "turn_right": {"x": TURN_RIGHT_X, "y": TURN_RIGHT_Y, "theta": TURN_RIGHT_90_THETA},
             "turn_right_90": {"x": TURN_RIGHT_90_X, "y": TURN_RIGHT_90_Y, "theta": TURN_RIGHT_90_THETA},
-            "turn_left": {"x": TURN_LEFT_X, "y": 0, "theta": TURN_LEFT_THETA},
+            "turn_left": {"x": TURN_LEFT_X, "y": TURN_LEFT_Y, "theta": TURN_LEFT_THETA},
             "turn_left_90": {"x": TURN_LEFT_90_X, "y": TURN_LEFT_90_Y, "theta": TURN_LEFT_90_THETA},
             "stay_wait": {"x": STAY_X, "y": STAY_Y, "theta": STAY_THETA},
             # "preturn_left": {"x": TURN_LEFT_X, "y": 0, "theta": TURN_LEFT_THETA},
@@ -355,6 +355,7 @@ deep_y           : {self.deep_y}\n\
 center_deep      : {self.center_deep}\n\
 deep_sum_lr      : {self.deep_sum_l} {self.deep_sum_r}\n\
 deep_sum         : {self.calc.deep_sum}\n\
+avg_walkway      : {self.calc.deep_sum_canter/26}\n\
 LCRdeep          : {self.left_deep} {self.center_deep} {self.right_deep}\n\
 ")
         sys.stdout.flush()
@@ -367,8 +368,8 @@ LCRdeep          : {self.left_deep} {self.center_deep} {self.right_deep}\n\
                 draw_x = abs(self.deep_x*10) if self.deep_x < 0 else 320-(self.deep_x*10)
                 self.robot.drawImageFunction(1,1,draw_x,draw_x,0,240,255,0,0)            
                 self.robot.drawImageFunction(2,1,0,320,240-self.deep_y*10,240-self.deep_y*10,255,0,255)
-                self.robot.drawImageFunction(3,1,80,80,0,240,255,0,0)            
-                self.robot.drawImageFunction(4,1,240,240,0,240,255,0,0)            
+                self.robot.drawImageFunction(3,1,60,60,0,240,255,0,0)            
+                self.robot.drawImageFunction(4,1,260,260,0,240,255,0,0)            
         except Exception as e:
             self.calc.last_error = f"Draw Error: {e}"
 
@@ -478,7 +479,7 @@ class Obs(API):
                     self.status = 'starting_walking_without_obs'
             #3.有障礙物時======================================
             elif self.status == 'starting_walking_with_obs':
-                if (self.calc.deep_sum_canter/24)>22:
+                if (self.calc.deep_sum_canter/20)>22:
                     self.pre_status = self.status
                     self.status = 'walk_forword'
                 elif abs(self.calc.deep_x) <= WALK_FORWARD_ZONE:#障礙物在兩側 可從中間過
@@ -661,16 +662,27 @@ def main(args=None):
     
     node = Obs()
 
+    # 使用 MultiThreadedExecutor 處理多執行緒回調
     executor = MultiThreadedExecutor()
     executor.add_node(node)
     
     try:
         executor.spin()
     except KeyboardInterrupt:
-        pass
+        # 當按下 Ctrl+C 時，先通知 executor 停止運作
+        node.get_logger().info('Stopping node...')
     finally:
+        # --- 優化順序 ---
+        # 1. 先停止執行器，確保所有背景回調執行完畢或中斷
+        executor.shutdown()
+        
+        # 2. 移除節點（選擇性，shutdown 通常會處理，但手動移除更保險）
+        executor.remove_node(node)
+        
+        # 3. 銷毀節點
         node.destroy_node()
-        # executor.destroy_node()
+        
+        # 4. 最後關閉 rclpy
         if rclpy.ok():
             rclpy.shutdown()
 

@@ -68,6 +68,8 @@ class Mar(API):
     def arrow_yolo(self):
         if self.yolo_valid():
             self.arrow_temp.append(self.action)
+        else:
+            self.arrow_temp.append(None)
 
         self.get_logger().info(f'arrow_temp = {list(self.arrow_temp)}')
 
@@ -87,7 +89,7 @@ class Mar(API):
     def imu_go(self):
         
         self.theta = 0 + ORIGIN_THETA
-        self.speed_x = 3500
+        self.speed_x = -3500
 
         self.get_logger().debug(f'直走 yaw={self.yaw:.2f}')
 
@@ -116,7 +118,7 @@ class Mar(API):
         elif self.arrow_temp[0] == 'left':
             self.sendContinuousValue(1700, 0, 6 + ORIGIN_THETA)
         else:
-            self.sendContinuousValue(-300, 0, 0)
+            self.sendContinuousValue(0, 0, 0)
             return
 
         if abs(self.yaw - self.turn_start_yaw) > 85:
@@ -138,7 +140,7 @@ class Mar(API):
                 self.sendSensorReset(True)
                 self.sendbodyAuto(1)
                 self.status = 'ARROW_PART'
-                self.get_logger().info('進入 ARROW_PART')
+                # self.get_logger().info('進入 ARROW_PART')
 
             elif self.status == 'ARROW_PART':
                 
@@ -154,9 +156,9 @@ class Mar(API):
                     
                     if self.can_turn_flag:
                         self.get_logger().info('穩定看到可轉向箭頭')
-
+                        
                         # 接近箭頭才開始轉
-                        if self.arrow_center_y >= 185:
+                        if self.arrow_center_y >= 140:
                             self.arrow_cnt_times += 1
 
                         if self.arrow_cnt_times >= 13:

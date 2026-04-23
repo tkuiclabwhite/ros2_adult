@@ -38,7 +38,7 @@ DIR: Dict[int, int] = {
 }
 
 # ---- 時序參數 ----
-period_t    = 600   # 單步週期 (ms)
+period_t    = 420   # 單步週期 (ms)
 sample_time = 20    # 取樣時間 (ms)
 Tdsp        = 0.0   # 雙支撐比例: 0 <= Tdsp < 1
 
@@ -54,7 +54,7 @@ step_length  = 0      # x
 shift_length = 0.0    # y
 theta_       = 0.0    # theta
 width_size   = 0    # 半步寬 (cm)
-lift_height  = 4
+lift_height  = 5
 com_y_swing  = 0      # 質心側擺幅度 (cm)
 hip_roll     = 0
 ankle_roll   = 0
