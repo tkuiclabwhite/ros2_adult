@@ -12,14 +12,14 @@ import time
 # =========================
 FORWARD_START_SPEED = -1000     # 起步前進速度 2000
 BACK_START_SPEED = 3000       # 起步後退速度（負值代表反方向) 
-FORWARD_MAX_SPEED = -2000       # 前進速度上限
+FORWARD_MAX_SPEED = -3000       # 前進速度上限
 FORWARD_MIN_SPEED = -1000       # 前進減速階段的下限（這裡設成 2000 => 等於不會真的降到更慢）
-BACK_MAX_SPEED = 6000         # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
+BACK_MAX_SPEED = 8000         # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
 
 # 每圈更新速度的變化量
-FORWARD_SPEED_ADD = -50        # 前進加速量
-FORWARD_SPEED_SUB = -500       # 減速量（負值代表速度往小變）
-BACK_SPEED_ADD = 100          # 後退加速量（更負 => 更快後退）
+FORWARD_SPEED_ADD = -100        # 前進加速量
+FORWARD_SPEED_SUB = -50       # 減速量（負值代表速度往小變）
+BACK_SPEED_ADD = 500          # 後退加速量（更負 => 更快後退）
 
 # theta(轉向)的基準偏移
 FORWARD_ORIGIN_THETA = 0     # 前進的基準修正
@@ -98,11 +98,12 @@ class SP():
         self.tag_center_y = float(data[3])
         self.tag_area = float(data[4])
 
-        self.tku_ros_api.get_logger().info(
-            f'[TAG_CB] found={self.tag_found} id={self.tag_id} '
-            f'cx={self.tag_center_x:.1f} cy={self.tag_center_y:.1f} area={self.tag_area:.1f}'
-        )
+        # self.tku_ros_api.get_logger().info(
+        #     f'[TAG_CB] found={self.tag_found} id={self.tag_id} '
+        #     f'cx={self.tag_center_x:.1f} cy={self.tag_center_y:.1f} area={self.tag_area:.1f}'
+        # )
 
+        
     def status_check(self):
         print("tag_area = ", self.tag_area)
         print("tag_id = ", self.tag_id)
@@ -117,21 +118,22 @@ class SP():
         #     return 'Forward'
 
         # 門檻之後一定要現場調整
-        if 4000 >= self.tag_area >= 2500:
+        if 500 >= self.tag_area >= 3000:
             return 'Decelerating'
-        elif self.tag_area > 4000:
+        elif self.tag_area > 5000:
             return 'Backward'
+        
     def head_control(self):
         # 用 AprilTag 中心 y 控頭
         if self.tag_center_y < 110:   # tag 在畫面偏上
             self.head_y += 20
             self.head_y = min(HEAD_Y_HIGH, self.head_y)
-            self.tku_ros_api.get_logger().info('[HEAD] UP (tag high)')
+            # self.tku_ros_api.get_logger().info('[HEAD] UP (tag high)')
 
         if self.tag_center_y > 130:   # tag 在畫面偏下
             self.head_y -= 20
             self.head_y = max(HEAD_Y_LOW, self.head_y)
-            self.tku_ros_api.get_logger().info('[HEAD] DOWN (tag low)')
+            # self.tku_ros_api.get_logger().info('[HEAD] DOWN (tag low)')
 
         print("head_y", self.head_y, "tag_center_y", self.tag_center_y)
 
@@ -160,7 +162,7 @@ class SP():
 
         # 加上前進/後退的基準補償
         self.theta += original_theta
-        self.tku_ros_api.get_logger().info(f'theta = {self.theta}')
+        # self.tku_ros_api.get_logger().info(f'theta = {self.theta}')
 
     def speed_control(self, speed, speed_variation, speed_limit, status):
         
@@ -172,22 +174,23 @@ class SP():
             # 前進：限制在 speed_limit 以內（上限）
              self.tku_ros_api.get_logger().info('Forward')
              speed = max(speed_limit, speed + speed_variation)
-        elif status == 'Decelerating' or status == 'Backward':
+        elif status == 'Decelerating':
              self.tku_ros_api.get_logger().info('Decelerating or Backward')
             # 減速/後退：限制在 speed_limit 以內（對負值來說，max 才是「不要比 -2000 更負」）
              speed = max(speed_limit, speed + speed_variation)
-
+        elif status == 'Backward':
+             speed = min(speed_limit, speed + speed_variation)
         self.tku_ros_api.get_logger().info(f'speed = {speed}')
         return speed
 
     def head_motor_update(self):
-        self.tku_ros_api.get_logger().info('=== HEAD_MOTOR_UPDATE APRILTAG VERSION ===')
+        # self.tku_ros_api.get_logger().info('=== HEAD_MOTOR_UPDATE APRILTAG VERSION ===')
 
         self.ball_found = self.tag_found and (self.tag_id == self.target_tag_id)
 
         if self.ball_found:
             self.head_control()
-            self.tku_ros_api.get_logger().info(f'[TRACK] head_y = {self.head_y}')
+            # self.tku_ros_api.get_logger().info(f'[TRACK] head_y = {self.head_y}')
             return
 
         # 找不到 tag：掃描
@@ -201,7 +204,7 @@ class SP():
             self.scan_dir = 1
 
         self.tku_ros_api.sendHeadMotor(2, self.head_y, 80)
-        self.tku_ros_api.get_logger().info(f'[SCAN] head_y = {self.head_y}')
+        # self.tku_ros_api.get_logger().info(f'[SCAN] head_y = {self.head_y}')
         
     def init(self):
         
@@ -210,7 +213,7 @@ class SP():
         #-球 size 清 0
         #-前進/後退速度回起始值
         #-頭部馬達回到初始角度
-        
+        self.walk_status = 'Forward'
         self.head_y = 1800
         self.sp_ball.size = 0
         self.forward.speed = FORWARD_START_SPEED
@@ -218,7 +221,7 @@ class SP():
 
         # 頭左右 (id=1) 回正 2048；頭上下 (id=2) 設 1800
         self.tku_ros_api.sendHeadMotor(1, 2048, 50)
-        self.tku_ros_api.sendHeadMotor(2, 1800, 50)
+        self.tku_ros_api.sendHeadMotor(2, 2800, 50)
         time.sleep(0.01)
     
 
@@ -236,7 +239,7 @@ def main(args=None):
     dt = 1.0 / rate_hz
 
     # 控制是否開始策略（由外部可能會改 self.is_start）
-    self.is_start = True
+    self.is_start = False
 
     first_in =  True      # 用來判斷是否剛進入 start 狀態（只做一次初始化）
     walk_status = 'Forward'
@@ -245,16 +248,15 @@ def main(args=None):
         while rclpy.ok():
             # 不阻塞地處理一次 ROS callback（收感測器、影像結果、IMU yaw...）
             rclpy.spin_once(self, timeout_sec=0.0)
-
             if self.is_start:
                 # 第一次進入 start：只做一次的初始化
                 if first_in:
                     print("123")
                     sp.init()
-                    self.sendbodyAuto(1)         # 開啟自動走路模式
+                    # self.sendbodyAuto(1)         # 開啟自動走路模式
                     first_in = False
                     self.sendSensorReset(True)    # 重置感測器（例如 IMU 或步態狀態）
-                self.sendbodyAuto(1)         # 開啟自動走路模式
+                # self.sendbodyAuto(1)         # 開啟自動走路模式
 
                 # 若有看到球就更新頭部追蹤
                 sp.head_motor_update()
@@ -262,6 +264,7 @@ def main(args=None):
                 # ==============
                 # 三種行走狀態
                 # ==============
+                
                 if walk_status == 'Forward':
                     # 用 yaw 修正方向 + 設定前進 theta
                     sp.angle_control(-2, 2, 0, FORWARD_ORIGIN_THETA)
@@ -291,7 +294,7 @@ def main(args=None):
                     self.sendContinuousValue(sp.forward.speed, 0, sp.theta)
                     walk_status = sp.status_check()
 
-                else:
+                elif walk_status == 'Backward':
                     # Backward：後退時使用另一個 origin_theta
                     sp.angle_control(-2, 2, 0, BACK_ORIGIN_THETA)
 
@@ -300,9 +303,9 @@ def main(args=None):
                         sp.backward.speed, BACK_SPEED_ADD,
                         BACK_MAX_SPEED, walk_status
                     )
-
                     self.sendContinuousValue(sp.backward.speed, 0, sp.theta)
-
+                    # walk_status = sp.status_check()
+                    
             else:
                 # 如果 is_start 被關掉：重置策略，等待下次開始
                 if not first_in:
@@ -395,9 +398,9 @@ class SprintBall:
                 self.tku_ros_api.drawImageFunction(2, 1, *self.right_side.boundary_box, 255, 0, 0)
 
                 # 紀錄 size 與 center
-                self.tku_ros_api.get_logger().info(
-                    f'left_ball_size = {self.left_side.size}, right_ball_size = {self.right_side.size}'
-                )
+                # self.tku_ros_api.get_logger().info(
+                #     f'left_ball_size = {self.left_side.size}, right_ball_size = {self.right_side.size}'
+                # )
                 # size 用兩邊面積相加
                 self.size = self.left_side.size + self.right_side.size
                 # center 用兩邊中心平均
