@@ -19,11 +19,11 @@ HORIZON_HEAD = 3010
 HEAD_CHECK = 2080
 HAND_BACK = 222 
 LEG_BACK = 1812
-VERTICAL_HEAD = 2115
-X_BENCHMARK = [210, 200, 189, 180, 180] # [最左,中左,中間,中右,最右]
+VERTICAL_HEAD = 2155
+X_BENCHMARK = [210, 200, 189, 178, 169] # [最左,中左,中間,中右,最右]    #改大射左
 
-Y_BENCHMARK = 108 
-SHOOT_DELAY = 0.69
+Y_BENCHMARK = 74 #改大射高
+SHOOT_DELAY = 0.78
 
 # motion sector
 PREPARE = 9999   
@@ -58,7 +58,8 @@ class ArcheryTarget:
 
         self.log_counter += 1       # 計數器加 1
         show_log = (self.log_counter % 20 == 0) # 每 20 次才印一次 Log (顯示偵測狀態)
-
+        self.api.drawImageFunction(1, 1, 0, 320, 120, 120, 0, 0, 0)
+        self.api.drawImageFunction(2, 1, 160, 160, 0, 240, 0, 0, 0)
         try:
             # API 定義的顏色索引:Yellow=1, Blue=2, Red=5
             # 遍歷藍色 (Index 2)
@@ -119,7 +120,7 @@ class ArcheryTarget:
                                     self.red_y = red_y
                                     self.found = True
                                     
-                                    print(f"✅ 鎖定靶心! R:({int(red_x)},{int(red_y)})")
+                                    print(f" ======== 鎖定靶心! R:({int(red_x)},{int(red_y)}) ========")
                                     return # 找到一組就直接回傳，鎖定目標
 
                         except IndexError:
@@ -214,7 +215,7 @@ class Archery(Node):
     def main_strategy(self):
         """主策略迴圈"""
         self.get_logger().info("策略開始執行 Loop...")
-        self.send.is_start = True
+        # self.send.is_start = True
         
         while rclpy.ok():
             # [狀態監控] 每2秒印一次,確認 API 有收到數據
@@ -231,6 +232,7 @@ class Archery(Node):
             self.send.drawImageFunction(5, 0, 160, 160, 0, 240, 0, 0, 0)
 
             if self.send.is_start:
+                self.stand = 0
                 # ------------------- 初始化動作 -------------------
                 if self.init_cnt == 1: 
                     self.initial() 
@@ -296,16 +298,16 @@ class Archery(Node):
 
                 elif self.ctrl_status == 'archery_action':
                     # 決定要轉多少
-                    if 0 < self.lowest_x <= 100: 
+                    if 0 < self.lowest_x <= 110: 
                         self.x_benchmark_type = 4 # 最右(97,1794)
                         print("44444444444444444444444444")
-                    elif 100 < self.lowest_x <= 150: 
+                    elif 110 < self.lowest_x <= 150: 
                         self.x_benchmark_type = 3 # 中右(146,1914)(150,1928)
                         print("33333333333333333333333333")
-                    elif self.lowest_x >= 210: 
+                    elif self.lowest_x >= 190: 
                         self.x_benchmark_type = 0 # 最左(219,2093)
                         print("00000000000000000000000000")
-                    elif 210 > self.lowest_x >= 190:   
+                    elif 190 > self.lowest_x >= 170 :   
                         self.x_benchmark_type = 1 # 中左(197,2042)
                         print("11111111111111111111111111")
                     else:   
@@ -333,6 +335,9 @@ class Archery(Node):
                     if self.lowest_y - Y_BENCHMARK > 0:
                         self.leg_move_cnt = abs(int((Y_BENCHMARK - self.lowest_y) / 2))
                         self.leg_back_cnt = self.leg_move_cnt
+                        self.get_logger().info("向下蹲")
+                        self.get_logger().info(f"向下蹲 {self.leg_move_cnt}")
+
                         for i in range(0,self.leg_move_cnt,1):
                             if i < 2:
                                 self.send.sendBodySector(LEG_DOWN1) #蘿菠蹲
@@ -368,34 +373,34 @@ class Archery(Node):
                 # ------------------- 預備動作 & 復原 -------------------
                 if self.stand == 0: 
                     self.send.sendHeadMotor(1, HORIZON_HEAD, 80)
-                    time.sleep(0.5)
+                    time.sleep(3)
                     self.send.sendBodySector(PREPARE) 
                     time.sleep(2.8)
                     self.stand = 1 
                     self.get_logger().info('預備動作 Done')
                 
-                if self.back_flag:
-                    print("###### in BACK func #####")
-                    if self.turn_right_cnt != 0:
-                        self.send.sendSingleMotor(15,int(-(RIGHT_TURN*self.turn_right)),15)
-                        self.get_logger().info(f"{RIGHT_TURN*self.turn_right}")
-                        time.sleep(2.5)
-                    elif self.turn_left_cnt != 0:
-                        self.send.sendSingleMotor(15,int(-(LEFT_TURN*self.turn_left)),15)
-                        self.get_logger().info(f"{self.end_time - self.start_time}")
-                        time.sleep(2.5)
+                # if self.back_flag:
+                #     print("###### in BACK func #####")
+                #     if self.turn_right_cnt != 0:
+                #         self.send.sendSingleMotor(15,int(-(RIGHT_TURN*self.turn_right)),15)
+                #         self.get_logger().info(f"{RIGHT_TURN*self.turn_right}")
+                #         time.sleep(2.5)
+                #     elif self.turn_left_cnt != 0:
+                #         self.send.sendSingleMotor(15,int(-(LEFT_TURN*self.turn_left)),15)
+                #         self.get_logger().info(f"{self.end_time - self.start_time}")
+                #         time.sleep(2.5)
                     
-                    for i in range(0, self.hand_back_cnt):
-                        # self.send.sendBodySector(HAND_BACK)
-                        time.sleep(0.5)
-                    self.hand_back_cnt = 0 
+                #     for i in range(0, self.hand_back_cnt):
+                #         # self.send.sendBodySector(HAND_BACK)
+                #         time.sleep(0.5)
+                #     self.hand_back_cnt = 0 
 
-                    for i in range(0, self.leg_back_cnt):
-                        # self.send.sendBodySector(LEG_BACK)
-                        time.sleep(0.5)
-                    self.leg_back_cnt = 0 
+                #     for i in range(0, self.leg_back_cnt):
+                #         # self.send.sendBodySector(LEG_BACK)
+                #         time.sleep(0.5)
+                #     self.leg_back_cnt = 0 
                     
-                    self.back_flag = False
+                #     self.back_flag = False
 
                 time.sleep(1) 
 
