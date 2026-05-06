@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding=utf-8
-
+# adult
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
@@ -59,9 +59,11 @@ class MotionNode(Node):
         self.anchor_reset_pub = self.create_publisher(Bool, '/walking_reset_anchor', 10)
         self.get_logger().info("Motion Strategy Node initialized. Waiting for Driver...")
         
-        self.stand_dir = "/home/iclab/ros2_adult/src/strategy/strategy/Parameter"
-        self.stand_file = os.path.join(self.stand_dir, "stand.ini")
+        home_path = os.path.expanduser("~")
 
+        self.stand_dir = os.path.join(home_path, "ros2_adult/src/strategy/strategy/Parameter")
+        self.stand_file = os.path.join(self.stand_dir, "stand.ini")
+        
         self.load_startup_stand_motion()
         self.load_all_strategy_motions()
 
@@ -129,7 +131,7 @@ class MotionNode(Node):
             msg = Bool(); msg.data = True; self.motion_callback_pub.publish(msg)
 
     # ==========================================================
-    # [新增] 單一 Sector 存檔功能
+    # 單一 Sector 存檔功能
     # ==========================================================
     def save_sector_to_disk(self, sector_id, opcode, data_list):
         """
@@ -335,7 +337,7 @@ class MotionNode(Node):
             return response
 
         # 1. 載入到 RAM
-        self._internal_load_ini(full_path, f"{filename}.ini", is_common=False)
+        # self._internal_load_ini(full_path, f"{filename}.ini", is_common=False)
 
         # 2. 回填 Response
         config = configparser.ConfigParser()
@@ -559,35 +561,26 @@ class MotionNode(Node):
         sector_id = str(msg.data)
 
         if sector_id == "29":
-            full_path = "/home/iclab/ros2_adult/src/strategy/strategy/Parameter/stand.ini"
-            self.get_logger().info(f"[Stand] Execute -> Force reload: {full_path}")
-
-            # 先清掉 RAM 裡舊的 0，避免默默用舊資料
-            with self.joints_lock:
-                self.saved_sectors.pop("0", None)
-                self.id_source_map.pop("0", None)
-
-            # 讀 stand.ini
-            self._internal_load_ini(full_path, "stand.ini", is_common=True)
-
-            # ★強制：不管 stand.ini 的 id 是多少，都把它當作 sector 0
-            # 找出 stand.ini 這次載入後新增/更新的內容，選一個最像站姿的（通常是 242/243）
-            # 你如果確定 stand.ini 裡只有一筆站姿，這樣做最穩。
-            stand_candidate = None
-            for sid, rec in self.saved_sectors.items():
-                if self.id_source_map.get(sid) == "stand.ini" and rec.get("opcode") in (242, 243):
-                    stand_candidate = rec
-                    break
-
-            if stand_candidate is None:
-                self.get_logger().error("[Stand] Reload OK but cannot find stand data from stand.ini")
+            self.get_logger().info(f"[Stand] 直接從硬碟讀取並執行: {self.stand_file}")
+            config = configparser.ConfigParser()
+            try:
+                config.read(self.stand_file)
+                # 假設站姿只會有一組數據，讀取第一個 section
+                for section in config.sections():
+                    opcode = int(config[section]['motionstate'])
+                    data_str = config[section]['motordata']
+                    data_list = [int(x) for x in data_str.split(',')]
+                    
+                    # 將 1/2 (相對) 轉為 243，3/4 (絕對) 轉為 242 傳給 execute_pose
+                    if opcode in [3, 4]:
+                        self.execute_pose(data_list, "ABSOLUTE")
+                    elif opcode in [1, 2]:
+                        self.execute_pose(data_list, "RELATIVE")
+                    break # 讀完第一筆就跳出
                 return
-
-            with self.joints_lock:
-                self.saved_sectors["0"] = stand_candidate
-                self.id_source_map["0"] = "stand.ini"
-
-            self.get_logger().info("[Stand] sector 0 overwritten from stand.ini")
+            except Exception as e:
+                self.get_logger().error(f"[Stand] 硬碟讀取執行失敗: {e}")
+                return
 
         # 下面保持原本執行流程
         if sector_id in self.saved_sectors:
@@ -629,7 +622,6 @@ class MotionNode(Node):
         for i in range(count):
             # 提取速度 (偶數索引)
             raw_spd = data[i*2]
-            
             # 提取位置 (奇數索引)
             raw_val = data[i*2+1]
             
@@ -639,8 +631,13 @@ class MotionNode(Node):
             
             # --- 修改核心邏輯 ---
             if mode == "RELATIVE":
-                # 直接讀取當下真實的物理位置。如果讀不到(例如剛開機)，則預設為 2048
-                base_pos = self.last_goals.get(mid, self.current_joints.get(mid, 2048))
+                # 直接讀取當下真實的物理位置
+                if mid in self.current_joints:
+                    base_pos = self.current_joints[mid]
+                else:
+                    base_pos = self.last_goals.get(mid, 2048)
+                    self.get_logger().warn(f"[Execute Pose] Motor {mid} no feedback, using last goal/default.")
+                    
                 final_target = base_pos + raw_val
             else: 
                 # ABSOLUTE 模式：直接使用目標值
