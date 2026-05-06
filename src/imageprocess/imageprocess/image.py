@@ -1211,6 +1211,10 @@ class ImageNode(Node):
                         # cv2.line(draw_fram, pt1, pt2, color, 2)
                     elif draw_item.mode == 2: # 假設 2 是 etDrawObject (Rectangle)
                         cv2.rectangle(draw_fram, pt1, pt2, color, draw_item.thickness)
+                    elif draw_item.mode == 3:
+                        pt1 = (int(draw_item.xmin),int(draw_item.ymin))
+                        pt2 = (int(draw_item.xmax))
+                        cv2.circle(draw_fram, pt1, pt2, color, draw_item.thickness)
                         # cv2.rectangle(draw_fram, pt1, pt2, color, 2)
                 except Exception as e:
                     self.get_logger().error(f"Drawing error: {e}")

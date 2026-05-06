@@ -15,18 +15,18 @@ import numpy as np
 from strategy.API import API
 
 # 定義常數
-HORIZON_HEAD = 3010
+HORIZON_HEAD = 3015
 HEAD_CHECK = 2080
 HAND_BACK = 222 
 LEG_BACK = 1812
-VERTICAL_HEAD = 2155
-X_BENCHMARK = [210, 200, 189, 178, 169] # [最左,中左,中間,中右,最右]    #改大射左
+VERTICAL_HEAD = 2125
+X_BENCHMARK = [199, 189, 184, 177, 171] # [最左,中左,中間,中右,最右]    #改大射左
 
-Y_BENCHMARK = 74 #改大射高
-SHOOT_DELAY = 0.78
+Y_BENCHMARK = 140 #改大射高
+SHOOT_DELAY = 0.69
 
 # motion sector
-PREPARE = 9999   
+PREPARE = 9998 
 SHOOT = 456       
 HAND_UP = 111
 LEG_DOWN1 = 1218 
@@ -298,16 +298,16 @@ class Archery(Node):
 
                 elif self.ctrl_status == 'archery_action':
                     # 決定要轉多少
-                    if 0 < self.lowest_x <= 110: 
+                    if 0 < self.lowest_x <= 90: 
                         self.x_benchmark_type = 4 # 最右(97,1794)
                         print("44444444444444444444444444")
-                    elif 110 < self.lowest_x <= 150: 
-                        self.x_benchmark_type = 3 # 中右(146,1914)(150,1928)
+                    elif 90 < self.lowest_x <= 120: 
+                        self.x_benchmark_type = 3 # 中右(102,112
                         print("33333333333333333333333333")
-                    elif self.lowest_x >= 190: 
+                    elif self.lowest_x >= 170: 
                         self.x_benchmark_type = 0 # 最左(219,2093)
                         print("00000000000000000000000000")
-                    elif 190 > self.lowest_x >= 170 :   
+                    elif 170 > self.lowest_x >= 150 :   
                         self.x_benchmark_type = 1 # 中左(197,2042)
                         print("11111111111111111111111111")
                     else:   
@@ -339,10 +339,10 @@ class Archery(Node):
                         self.get_logger().info(f"向下蹲 {self.leg_move_cnt}")
 
                         for i in range(0,self.leg_move_cnt,1):
-                            if i < 2:
-                                self.send.sendBodySector(LEG_DOWN1) #蘿菠蹲
-                            else:
-                                self.send.sendBodySector(LEG_DOWN2) #蘿菠蹲
+                            # if i < 2:
+                            #     self.send.sendBodySector(LEG_DOWN1) #蘿菠蹲
+                            # else:
+                            self.send.sendBodySector(LEG_DOWN2) #蘿菠蹲
                             time.sleep(0.5)
 
                     else:

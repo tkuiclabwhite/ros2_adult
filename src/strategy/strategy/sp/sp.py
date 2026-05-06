@@ -11,10 +11,10 @@ import time
 # 走路速度 / 轉向相關參數
 # =========================
 FORWARD_START_SPEED = -1000     # 起步前進速度 2000
-BACK_START_SPEED = 3000       # 起步後退速度（負值代表反方向) 
-FORWARD_MAX_SPEED = -3000       # 前進速度上限
+BACK_START_SPEED = 2000       # 起步後退速度（負值代表反方向) 
+FORWARD_MAX_SPEED = -4000       # 前進速度上限
 FORWARD_MIN_SPEED = -1000       # 前進減速階段的下限（這裡設成 2000 => 等於不會真的降到更慢）
-BACK_MAX_SPEED = 8000         # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
+BACK_MAX_SPEED = 6500         # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
 
 # 每圈更新速度的變化量
 FORWARD_SPEED_ADD = -100        # 前進加速量
@@ -22,7 +22,7 @@ FORWARD_SPEED_SUB = -50       # 減速量（負值代表速度往小變）
 BACK_SPEED_ADD = 500          # 後退加速量（更負 => 更快後退）
 
 # theta(轉向)的基準偏移
-FORWARD_ORIGIN_THETA = 0     # 前進的基準修正
+FORWARD_ORIGIN_THETA = 1     # 前進的基準修正
 BACK_ORIGIN_THETA = 0      # 後退的基準修正（通常後退要稍微修方向）
 
 # =========================
@@ -118,9 +118,9 @@ class SP():
         #     return 'Forward'
 
         # 門檻之後一定要現場調整
-        if 500 >= self.tag_area >= 3000:
+        if 2200 >= self.tag_area >= 1000:
             return 'Decelerating'
-        elif self.tag_area > 5000:
+        elif self.tag_area > 2200:
             return 'Backward'
         
     def head_control(self):
@@ -213,7 +213,7 @@ class SP():
         #-球 size 清 0
         #-前進/後退速度回起始值
         #-頭部馬達回到初始角度
-        self.walk_status = 'Forward'
+        
         self.head_y = 1800
         self.sp_ball.size = 0
         self.forward.speed = FORWARD_START_SPEED
@@ -253,7 +253,7 @@ def main(args=None):
                 if first_in:
                     print("123")
                     sp.init()
-                    # self.sendbodyAuto(1)         # 開啟自動走路模式
+                    self.sendbodyAuto(1)         # 開啟自動走路模式
                     first_in = False
                     self.sendSensorReset(True)    # 重置感測器（例如 IMU 或步態狀態）
                 # self.sendbodyAuto(1)         # 開啟自動走路模式
@@ -263,7 +263,8 @@ def main(args=None):
 
                 # ==============
                 # 三種行走狀態
-                # ==============
+                # =============
+
                 
                 if walk_status == 'Forward':
                     # 用 yaw 修正方向 + 設定前進 theta

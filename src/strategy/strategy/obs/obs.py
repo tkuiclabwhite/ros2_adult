@@ -40,33 +40,33 @@ SMALL_FOEWARD_X     = -3000
 SMALL_FOEWARD_Y     = 0
 SMALL_FOEWARD_THETA = 0
 #dx右轉(45)
-TURN_RIGHT_X     = 2200
+TURN_RIGHT_X     = 2000
 TURN_RIGHT_Y     = -1000
 TURN_RIGHT_THETA = -5
 #右轉(90)
-TURN_RIGHT_90_X     = 2200
+TURN_RIGHT_90_X     = 2000
 TURN_RIGHT_90_Y     = -1000
 TURN_RIGHT_90_THETA = -5
 #imu右轉
-IMU_RIGHT_X = 1700
+IMU_RIGHT_X = 2000
 IMU_RIGHT_Y = -1000
 #IMU__RIGHT_THETA max(5,-5)
 #dx左轉(45)
-TURN_LEFT_X = 2200
+TURN_LEFT_X = 1900
 TURN_LEFT_Y = 800
 TURN_LEFT_THETA = 5
 #左轉(90)
-TURN_LEFT_90_X     = 2200
+TURN_LEFT_90_X     = 1900
 TURN_LEFT_90_Y     = 800
 TURN_LEFT_90_THETA = 5
 #imu左轉
-IMU_LEFT_X = 2200
+IMU_LEFT_X = 1900
 IMU_LEFT_Y = 800
 #IMU_LEFT_THETA max(5,-5)
 
 #開局動作
-PRE_ACT = 'start' # 'start' 'preturn_L' 'preturn_R'
-PRE_TURN_ANGLE = 60
+PRE_ACT = 'preturn_R' # 'start' 'preturn_L' 'preturn_R'
+PRE_TURN_ANGLE = 20
 TURN_HEAD_RANGE = 12
 TURN_HEAD_FLAG  = False #是否啟用轉90度判斷
 WALK_FORWARD_ZONE = 4   #可從障礙物中間通過的可容忍範圍
@@ -116,6 +116,7 @@ class Calculate():
         self.deep_sum = 0
         self.deep_sum_l = 0
         self.deep_sum_r = 0
+        self.deep_sum_canter = 0
         
         self.now_speed = 0
         self.speed_x = 0
