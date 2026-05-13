@@ -6,8 +6,10 @@ import cv2, time
 import numpy as np
 import json
 import configparser
-from tku_msgs.msg import HSVValue, YUVValue, Location, Zoom, OpenCvOrder,DrawImage
-from tku_msgs.srv import HSVInfo,SaveHSV,YUVInfo,SaveYUV,OpenCvInfo,SaveOpenCv,BuildModel
+from tku_msgs.msg import HSVValue, Location, Zoom,DrawImage
+# from tku_msgs.msg import YUVValue, OpenCvOrder
+from tku_msgs.srv import HSVInfo,SaveHSV,BuildModel
+# from tku_msgs.srv import YUVInfo,SaveYUV,OpenCvInfo,SaveOpenCv
 from std_msgs.msg import String,Int16
 from dataclasses import dataclass
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
@@ -25,15 +27,15 @@ class ColorRange:
     BrightnessMin: float = 0.0
     LabelName: str = ""
 
-@dataclass
-class YUVColorRange:
-    YMax: float = 1.0
-    YMin: float = 0.0
-    CRMax: float = 128.0
-    CRMin: float = 127.0
-    CBMax: float = 128.0
-    CBMin: float = 127.0
-    YUVLabelName: str = ""
+# @dataclass
+# class YUVColorRange:
+#     YMax: float = 1.0
+#     YMin: float = 0.0
+#     CRMax: float = 128.0
+#     CRMin: float = 127.0
+#     CBMax: float = 128.0
+#     CBMin: float = 127.0
+#     YUVLabelName: str = ""
 
 
 class ImageNode(Node):
@@ -47,8 +49,8 @@ class ImageNode(Node):
         self.lower = None
         self.upper = None
         #YUV
-        self.yuv_lower = None
-        self.yuv_upper = None
+        # self.yuv_lower = None
+        # self.yuv_upper = None
 
 
 
@@ -74,16 +76,16 @@ class ImageNode(Node):
             # 後援：沿用舊的 image/config/hsv.ini
             self.path = str(self.path_dir / "hsv.ini")
 
-        if raw:
-            # 轉成絕對路徑：<workspace>/tku/src/strategy/strategy/ar/Parameter
-            self.yuv_location = self._canon_location(raw)
-            # 解析實際 hsv.ini 路徑（若 location 指到資料夾，就自動補上 "hsv.ini"）
-            ini = self._resolve_yuv_path()
-            self.yuv_path = str(ini)
-            self.get_logger().info(f"[BOOT] strategy.ini -> {raw} => {self.yuv_path}")
-        else:
-            # 後援：沿用舊的 image/config/hsv.ini
-            self.yuv_path = str(self.path_dir / "yuv.ini")
+        # if raw:
+        #     # 轉成絕對路徑：<workspace>/tku/src/strategy/strategy/ar/Parameter
+        #     self.yuv_location = self._canon_location(raw)
+        #     # 解析實際 hsv.ini 路徑（若 location 指到資料夾，就自動補上 "hsv.ini"）
+        #     ini = self._resolve_yuv_path()
+        #     self.yuv_path = str(ini)
+        #     self.get_logger().info(f"[BOOT] strategy.ini -> {raw} => {self.yuv_path}")
+        # else:
+        #     # 後援：沿用舊的 image/config/hsv.ini
+        #     self.yuv_path = str(self.path_dir / "yuv.ini")
         
         # # 設定顏色範圍的標籤（保留原名）
         self.labels = ["orange", "yellow", "blue", "green", "black", "red", "white", "others"]
@@ -100,7 +102,7 @@ class ImageNode(Node):
 
         # # 顏色參數表
         self.HSVColorRange = {label: ColorRange(LabelName=label) for label in self.labels}
-        self.YUVColorRange = {label: YUVColorRange(YUVLabelName=label) for label in self.labels}
+        # self.YUVColorRange = {label: YUVColorRange(YUVLabelName=label) for label in self.labels}
         qos_latest = QoSProfile(
             history=HistoryPolicy.KEEP_LAST, depth=1,
             reliability=ReliabilityPolicy.RELIABLE,
@@ -114,18 +116,18 @@ class ImageNode(Node):
         )
         qos_img = 10
         self.info_pub = self.create_publisher(String, 'object_info', qos_latest)
-        self.yuv_info_pub = self.create_publisher(String, 'yuv_object_info', qos_latest)
+        # self.yuv_info_pub = self.create_publisher(String, 'yuv_object_info', qos_latest)
         self.label_pub = self.create_publisher(Image, 'label_matrix', 10)
-        self.yuv_label_pub = self.create_publisher(Image, 'yuv_label_matrix', 10)
+        # self.yuv_label_pub = self.create_publisher(Image, 'yuv_label_matrix', 10)
         # 每個顏色各一個 Publisher：detections/<label>
         self.det_pubs = {
             label: self.create_publisher(String, f'detections/{label}', qos_latest)
             for label in self.labels
         }
-        self.yuv_det_pubs = {
-            label: self.create_publisher(String, f'yuv_detections/{label}', qos_latest)
-            for label in self.labels
-        }
+        # self.yuv_det_pubs = {
+        #     label: self.create_publisher(String, f'yuv_detections/{label}', qos_latest)
+        #     for label in self.labels
+        # }
 
         self.kernel3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
         # ===== JSON 類 Topic 的「節流 + 去抖」狀態 =====
@@ -133,13 +135,13 @@ class ImageNode(Node):
         self._pub_period = 0.05  # 秒
         # 每個顏色一個時間戳 + 總表一個
         self._last_pub_t = {"info": 0.0, **{f"det_{l}": 0.0 for l in self.labels}}
-        self._yuv_last_pub_t = {"info": 0.0, **{f"det_{l}": 0.0 for l in self.labels}}
+        # self._yuv_last_pub_t = {"info": 0.0, **{f"det_{l}": 0.0 for l in self.labels}}
         # 每個顏色上一份 payload（字串）—用來判斷「內容是否有變化」
         self._last_payload = {l: "" for l in self.labels}
-        self._yuv_last_payload = {l: "" for l in self.labels}
+        # self._yuv_last_payload = {l: "" for l in self.labels}
         # 總表上一份 payload（字串）
         self._last_info_payload = ""
-        self._yuv_last_info_payload = ""
+        # self._yuv_last_info_payload = ""
 
         self.declare_parameter('zoom_in', 1.0)
         self.zoom = float(self.get_parameter('zoom_in').value)
@@ -152,12 +154,12 @@ class ImageNode(Node):
 
 
         self.OpenCvOrders = []
-        self.OpenCv_sub = self.create_subscription(OpenCvOrder, '/openCvOrder', self.OpenCvOrder_callback, 10)
-        self.OpenCv_pub = self.create_publisher(
-            OpenCvOrder,
-            '/openCvOrder_back',
-            qos_latched
-        )
+        # self.OpenCv_sub = self.create_subscription(OpenCvOrder, '/openCvOrder', self.OpenCvOrder_callback, 10)
+        # self.OpenCv_pub = self.create_publisher(
+        #     OpenCvOrder,
+        #     '/openCvOrder_back',
+        #     qos_latched
+        # )
         self.op_table = {
             "ERODE": self.op_erode,
             "DILATE": self.op_dilate,
@@ -177,22 +179,22 @@ class ImageNode(Node):
         self.build_status_sub = self.create_subscription(
             Int16, '/BuildStatus', self.build_status_callback, 10
         )
-        self.yuv_build_status_sub = self.create_subscription(
-            Int16, '/yuv_BuildStatus', self.yuv_build_status_callback, 10
-        )
+        # self.yuv_build_status_sub = self.create_subscription(
+        #     Int16, '/yuv_BuildStatus', self.yuv_build_status_callback, 10
+        # )
         self.build_status = 0
         self.select_color = "red"
 
-        self.yuv_build_status = 0
-        self.yuv_select_color = "red"
+        # self.yuv_build_status = 0
+        # self.yuv_select_color = "red"
 
 
         self.color_model_HSV = self.create_subscription(
             HSVValue, '/HSVValue_Topic', self.color_model_HSV_callback, 1000
         )
-        self.color_model_YUV = self.create_subscription(
-            YUVValue, '/YUVValue_Topic', self.color_model_YUV_callback, 1000
-        )
+        # self.color_model_YUV = self.create_subscription(
+        #     YUVValue, '/YUVValue_Topic', self.color_model_YUV_callback, 1000
+        # )
         self.location_sub = self.create_subscription(
             Location, '/location', self.location_callback, 1000
         )
@@ -207,23 +209,24 @@ class ImageNode(Node):
         self.save_hsv = self.create_service(SaveHSV, '/SaveHSV', self.save_hsv_callback)
         self.hsv_load = self.create_service(HSVInfo, '/LoadHSVInfo', self.load_hsv_info_callback)
 
-        self.save_yuv = self.create_service(SaveYUV, '/SaveYUV', self.save_yuv_callback)
-        self.yuv_load = self.create_service(YUVInfo, '/LoadYUVInfo', self.load_yuv_info_callback)
+        # self.save_yuv = self.create_service(SaveYUV, '/SaveYUV', self.save_yuv_callback)
+        # self.yuv_load = self.create_service(YUVInfo, '/LoadYUVInfo', self.load_yuv_info_callback)
 
-        self.save_opencv = self.create_service(SaveOpenCv, '/SaveOpenCv', self.save_opencv_callback)
-        self.opencv_load = self.create_service(OpenCvInfo, '/LoadOpenCvInfo', self.load_opencv_info_callback)
+        # self.save_opencv = self.create_service(SaveOpenCv, '/SaveOpenCv', self.save_opencv_callback)
+        # self.opencv_load = self.create_service(OpenCvInfo, '/LoadOpenCvInfo', self.load_opencv_info_callback)
 
         self.processed_image = self.create_publisher(Image, 'processed_image', qos_img)
-        self.yuv_processed_image = self.create_publisher(Image, 'yuvprocessed_image', qos_img)
+        # self.yuv_processed_image = self.create_publisher(Image, 'yuvprocessed_image', qos_img)
         self._img_period = 0.001 
         # self._last_img_pub = {"build_image": 0.0, "mask_image": 0.0, "zoom_in": 0.0}
         # self._last_yuv_img_pub = {"build_image": 0.0, "mask_image": 0.0}
         self._last_hsv_img_pub = {"build_image": 0.0, "mask_image": 0.0}
-        self._last_yuv_img_pub = {"build_image": 0.0, "mask_image": 0.0}
-        self._last_img_pub = {"zoom_in": 0.0} 
+        # self._last_yuv_img_pub = {"build_image": 0.0, "mask_image": 0.0}
+        self._last_img_pub = {"zoom_in": 0.0}
 
         self.init_hsv_from_ini(active_label=self.select_color)
-        self.init_yuv_from_ini(active_label=self.yuv_select_color)
+        self.load_zoomin_from_camera_ini()
+        # self.init_yuv_from_ini(active_label=self.yuv_select_color)
         self.init_opencv_from_ini()
 
         self.draw_image_array = [] # 儲存繪圖資訊
@@ -252,15 +255,15 @@ class ImageNode(Node):
             # 新增圖形
             self.draw_image_array.append(msg)
 
-    def publish_opencv_order(self):
-        msg = OpenCvOrder()
-        msg.order = self.OpenCvOrders
-        self.OpenCv_pub.publish(msg)
-        self.get_logger().info(f"[OpenCV INI] pushed to web: {self.OpenCvOrders}")
+    # def publish_opencv_order(self):
+    #     msg = OpenCvOrder()
+    #     msg.order = self.OpenCvOrders
+    #     self.OpenCv_pub.publish(msg)
+    #     self.get_logger().info(f"[OpenCV INI] pushed to web: {self.OpenCvOrders}")
 
-    def OpenCvOrder_callback(self,msg):
-        self.OpenCvOrders = list(msg.order)
-        self.get_logger().info(f"OpenCvOrders: {self.OpenCvOrders}")
+    # def OpenCvOrder_callback(self,msg):
+    #     self.OpenCvOrders = list(msg.order)
+    #     self.get_logger().info(f"OpenCvOrders: {self.OpenCvOrders}")
     
     def make_kernel(self, n=None, *, allow_even: bool = False) -> np.ndarray:
         # 1) 先處理沒有給或給奇怪值的情況
@@ -546,27 +549,27 @@ class ImageNode(Node):
         # 不論 default 或 location，都確保父資料夾存在
         ini.parent.mkdir(parents=True, exist_ok=True)
         return ini
-    def _resolve_yuv_path(self) -> Path:
-        if getattr(self, "location", None):
-            p = Path(self.location)
-            ini = p if p.suffix else (p / "yuv.ini")
-        else:
-            ini = Path(self.path_dir) / "yuv.ini"
+    # def _resolve_yuv_path(self) -> Path:
+    #     if getattr(self, "location", None):
+    #         p = Path(self.location)
+    #         ini = p if p.suffix else (p / "yuv.ini")
+    #     else:
+    #         ini = Path(self.path_dir) / "yuv.ini"
 
-        # 不論 default 或 location，都確保父資料夾存在
-        ini.parent.mkdir(parents=True, exist_ok=True)
-        return ini
+    #     # 不論 default 或 location，都確保父資料夾存在
+    #     ini.parent.mkdir(parents=True, exist_ok=True)
+    #     return ini
     
-    def _resolve_opencv_path(self) -> Path:
-        if getattr(self, "location", None):
-            p = Path(self.location)
-            ini = p if p.suffix else (p / "opencv.ini")
-        else:
-            # 沒指定路徑就跟以前一樣丟到 image/config
-            ini = Path(self.path_dir) / "opencv.ini"
+    # def _resolve_opencv_path(self) -> Path:
+    #     if getattr(self, "location", None):
+    #         p = Path(self.location)
+    #         ini = p if p.suffix else (p / "opencv.ini")
+    #     else:
+    #         # 沒指定路徑就跟以前一樣丟到 image/config
+    #         ini = Path(self.path_dir) / "opencv.ini"
 
-        ini.parent.mkdir(parents=True, exist_ok=True)
-        return ini
+    #     ini.parent.mkdir(parents=True, exist_ok=True)
+    #     return ini
     def _canon_location(self, raw: str) -> str:
         if not raw:
             return ""
@@ -608,9 +611,9 @@ class ImageNode(Node):
         print("BuildStatus:", msg.data)
         self.build_status = msg.data
     
-    def yuv_build_status_callback(self, msg):
-        print("yuvBuildStatus:", msg.data)
-        self.yuv_build_status = msg.data
+    # def yuv_build_status_callback(self, msg):
+    #     print("yuvBuildStatus:", msg.data)
+    #     self.yuv_build_status = msg.data
 
     def color_model_HSV_callback(self, msg):
         self.HSVColorRange[self.select_color].HueMax = msg.hmax
@@ -622,15 +625,15 @@ class ImageNode(Node):
         self.lower = np.array([msg.hmin, msg.smin, msg.vmin], dtype=np.uint8)
         self.upper = np.array([msg.hmax, msg.smax, msg.vmax], dtype=np.uint8)
 
-    def color_model_YUV_callback(self, msg):
-        self.YUVColorRange[self.yuv_select_color].YMax = msg.ymax
-        self.YUVColorRange[self.yuv_select_color].YMin = msg.ymin
-        self.YUVColorRange[self.yuv_select_color].CRMax = msg.crmax
-        self.YUVColorRange[self.yuv_select_color].CRMin = msg.crmin
-        self.YUVColorRange[self.yuv_select_color].CBMax = msg.cbmax
-        self.YUVColorRange[self.yuv_select_color].CBMin = msg.cbmin
-        self.yuv_lower = np.array([msg.ymin, msg.crmin, msg.cbmin], dtype=np.uint8)
-        self.yuv_upper = np.array([msg.ymax, msg.crmax, msg.cbmax], dtype=np.uint8)
+    # def color_model_YUV_callback(self, msg):
+    #     self.YUVColorRange[self.yuv_select_color].YMax = msg.ymax
+    #     self.YUVColorRange[self.yuv_select_color].YMin = msg.ymin
+    #     self.YUVColorRange[self.yuv_select_color].CRMax = msg.crmax
+    #     self.YUVColorRange[self.yuv_select_color].CRMin = msg.crmin
+    #     self.YUVColorRange[self.yuv_select_color].CBMax = msg.cbmax
+    #     self.YUVColorRange[self.yuv_select_color].CBMin = msg.cbmin
+    #     self.yuv_lower = np.array([msg.ymin, msg.crmin, msg.cbmin], dtype=np.uint8)
+    #     self.yuv_upper = np.array([msg.ymax, msg.crmax, msg.cbmax], dtype=np.uint8)
 
     def _strategy_ini_path(self) -> Path:
         env = os.environ.get("tku_STRATEGY_INI")
@@ -669,28 +672,28 @@ class ImageNode(Node):
         js_tmp.replace(js_path)
         # =======================================
 
-    def _write_autoload_js_from_raw(self, raw: str) -> str:
-        s = (raw or "").strip()
-        loc = s.strip("/").split("/", 1)[0] if s else ""
+    # def _write_autoload_js_from_raw(self, raw: str) -> str:
+    #     s = (raw or "").strip()
+    #     loc = s.strip("/").split("/", 1)[0] if s else ""
 
-        env = os.environ.get("tku_STRATEGY_AUTOLOAD")
-        if env:
-            js_path = Path(env).expanduser().resolve()
-        else:
-            # [修正] 使用 Path.home() 自動抓取當前使用者目錄 (例如 /home/aa)
-            # 避免寫死 /home/iclab 導致 Permission denied
-            js_path = Path.home() / "ros2_adult" / "hurocup_interface" / "strategy_autoload.js"
-            
-        js_path.parent.mkdir(parents=True, exist_ok=True)
+    #     env = os.environ.get("tku_STRATEGY_AUTOLOAD")
+    #     if env:
+    #         js_path = Path(env).expanduser().resolve()
+    #     else:
+    #         # [修正] 使用 Path.home() 自動抓取當前使用者目錄 (例如 /home/aa)
+    #         # 避免寫死 /home/iclab 導致 Permission denied
+    #         js_path = Path.home() / "ros2_adult" / "hurocup_interface" / "strategy_autoload.js"
 
-        tmp = js_path.with_suffix(".tmp")
-        # 注意：這裡原本是用 write_text，但我保留你的寫法以防萬一，改用 open 比較保險
-        with open(tmp, "w", encoding="utf-8") as f:
-             f.write(f'window._strategy_location = {json.dumps(loc)};\n')
-             
-        tmp.replace(js_path)
-        self.loc = loc
-        return loc
+    #     js_path.parent.mkdir(parents=True, exist_ok=True)
+
+    #     tmp = js_path.with_suffix(".tmp")
+    #     # 注意：這裡原本是用 write_text，但我保留你的寫法以防萬一，改用 open 比較保險
+    #     with open(tmp, "w", encoding="utf-8") as f:
+    #          f.write(f'window._strategy_location = {json.dumps(loc)};\n')
+
+    #     tmp.replace(js_path)
+    #     self.loc = loc
+    #     return loc
 
     def build_model_callback(self, request, response):
         self.get_logger().info(f"[BuildModel] request, build={request.build}")
@@ -716,24 +719,24 @@ class ImageNode(Node):
             self.get_logger().error(f"[BuildModel] reload HSV failed: {e}")
 
         # 2) 同樣方式讀 yuv.ini 回 YUVColorRange（可選）
-        try:
-            yuv_ini = self._resolve_yuv_path()
-            if yuv_ini.exists():
-                config = configparser.ConfigParser()
-                config.read(yuv_ini)
-                for label, data in self.YUVColorRange.items():
-                    if label in config:
-                        sec = config[label]
-                        data.YMax  = float(sec.get("y_max",  data.YMax))
-                        data.YMin  = float(sec.get("y_min",  data.YMin))
-                        data.CRMax = float(sec.get("cr_max", data.CRMax))
-                        data.CRMin = float(sec.get("cr_min", data.CRMin))
-                        data.CBMax = float(sec.get("cb_max", data.CBMax))
-                        data.CBMin = float(sec.get("cb_min", data.CBMin))
-            else:
-                self.get_logger().warn(f"[BuildModel] YUV ini not found: {yuv_ini}")
-        except Exception as e:
-            self.get_logger().error(f"[BuildModel] reload YUV failed: {e}")
+        # try:
+        #     yuv_ini = self._resolve_yuv_path()
+        #     if yuv_ini.exists():
+        #         config = configparser.ConfigParser()
+        #         config.read(yuv_ini)
+        #         for label, data in self.YUVColorRange.items():
+        #             if label in config:
+        #                 sec = config[label]
+        #                 data.YMax  = float(sec.get("y_max",  data.YMax))
+        #                 data.YMin  = float(sec.get("y_min",  data.YMin))
+        #                 data.CRMax = float(sec.get("cr_max", data.CRMax))
+        #                 data.CRMin = float(sec.get("cr_min", data.CRMin))
+        #                 data.CBMax = float(sec.get("cb_max", data.CBMax))
+        #                 data.CBMin = float(sec.get("cb_min", data.CBMin))
+        #     else:
+        #         self.get_logger().warn(f"[BuildModel] YUV ini not found: {yuv_ini}")
+        # except Exception as e:
+        #     self.get_logger().error(f"[BuildModel] reload YUV failed: {e}")
 
         # 3) 讓前端知道「建好了」，解鎖按鈕
         response.already = True
@@ -761,11 +764,11 @@ class ImageNode(Node):
         self._write_strategy_ini_raw(loc_str)
 
         # 4. 寫 autoload.js（只寫 ar / bb 那一段給前端）
-        try:
-            loc = self._write_autoload_js_from_raw(loc_str)
-            self.get_logger().info(f"[AUTOLOAD.JS] write ok: {loc}")
-        except Exception as e:
-            self.get_logger().error(f"[AUTOLOAD.JS] write fail: {e}")
+        # try:
+        #     loc = self._write_autoload_js_from_raw(loc_str)
+        #     self.get_logger().info(f"[AUTOLOAD.JS] write ok: {loc}")
+        # except Exception as e:
+        #     self.get_logger().error(f"[AUTOLOAD.JS] write fail: {e}")
 
         # 5. 更新內部 location / path，後續 _resolve_hsv_path() 就會指到正確目錄
         self.location = self._canon_location(loc_str)
@@ -774,7 +777,8 @@ class ImageNode(Node):
 
         # 立刻用新路徑 reload HSV/YUV/OpenCV（如果檔案不存在會自動建）
         self.init_hsv_from_ini(active_label=self.select_color)
-        self.init_yuv_from_ini(active_label=self.yuv_select_color)
+        self.load_zoomin_from_camera_ini()
+        # self.init_yuv_from_ini(active_label=self.yuv_select_color)
         self.init_opencv_from_ini()
 
         # 6. 對外轉發「乾淨的」 loc（ar/Parameter / bb/Parameter）
@@ -856,89 +860,89 @@ class ImageNode(Node):
 
         return response
     
-    def load_yuv_info_callback(self, request, response):
-        color = request.colorlabel
-        self.yuv_select_color = color
-        ini_path = str(self._resolve_yuv_path())
-        self.get_logger().info(f"[YUV INI] load request for '{color}' from: {ini_path}")
+    # def load_yuv_info_callback(self, request, response):
+    #     color = request.colorlabel
+    #     self.yuv_select_color = color
+    #     ini_path = str(self._resolve_yuv_path())
+    #     self.get_logger().info(f"[YUV INI] load request for '{color}' from: {ini_path}")
 
-                # 預設回傳值（先用目前記憶體，沒有就 0）
-        def yuv_defaults_from_memory():
-            cd = self.YUVColorRange.get(color)
-            if cd is None:
-                return 0, 0, 0, 0, 0, 0
-            return (
-                int(cd.YMin ), int(cd.YMax ),
-                int(cd.CRMin ), int(cd.CRMax ),
-                int(cd.CBMin), int(cd.CBMax )
-            )
+    #             # 預設回傳值（先用目前記憶體，沒有就 0）
+    #     def yuv_defaults_from_memory():
+    #         cd = self.YUVColorRange.get(color)
+    #         if cd is None:
+    #             return 0, 0, 0, 0, 0, 0
+    #         return (
+    #             int(cd.YMin ), int(cd.YMax ),
+    #             int(cd.CRMin ), int(cd.CRMax ),
+    #             int(cd.CBMin), int(cd.CBMax )
+    #         )
 
-        ymin, ymax, crmin, crmax, cbmin, cbmax = yuv_defaults_from_memory()
+    #     ymin, ymax, crmin, crmax, cbmin, cbmax = yuv_defaults_from_memory()
 
-        try:
-            config = configparser.ConfigParser()
-            read_ok = config.read(ini_path)  # 讀檔
-            if not read_ok:
-                self.get_logger().warn(f"[YUV INI] ini not found, using memory/defaults: {self.path}")
-            elif color in config:
-                sec = config[color]
+    #     try:
+    #         config = configparser.ConfigParser()
+    #         read_ok = config.read(ini_path)  # 讀檔
+    #         if not read_ok:
+    #             self.get_logger().warn(f"[YUV INI] ini not found, using memory/defaults: {self.path}")
+    #         elif color in config:
+    #             sec = config[color]
 
-                # 取值並做邊界限制
-                ymin = max(0,   min(255, int(sec.get("y_min",  ymin ))))
-                ymax = max(0,   min(255, int(sec.get("y_max",  ymax ))))
-                crmin = max(0,   min(255, int(sec.get("cr_min", crmin ))))
-                crmax = max(0,   min(255, int(sec.get("cr_max", crmax ))))
-                cbmin = max(0,   min(255, int(sec.get("cb_min", cbmin))))
-                cbmax = max(0,   min(255, int(sec.get("cb_max",cbmax ))))
-            else:
-                self.get_logger().warn(f"[YUV INI] section '{color}' not found, using memory/defaults.")
+    #             # 取值並做邊界限制
+    #             ymin = max(0,   min(255, int(sec.get("y_min",  ymin ))))
+    #             ymax = max(0,   min(255, int(sec.get("y_max",  ymax ))))
+    #             crmin = max(0,   min(255, int(sec.get("cr_min", crmin ))))
+    #             crmax = max(0,   min(255, int(sec.get("cr_max", crmax ))))
+    #             cbmin = max(0,   min(255, int(sec.get("cb_min", cbmin))))
+    #             cbmax = max(0,   min(255, int(sec.get("cb_max",cbmax ))))
+    #         else:
+    #             self.get_logger().warn(f"[YUV INI] section '{color}' not found, using memory/defaults.")
 
-            # 寫回 response
-            response.ymin = ymin 
-            response.ymax = ymax 
-            response.crmin = crmin 
-            response.crmax = crmax 
-            response.cbmin = cbmin
-            response.cbmax = cbmax 
+    #         # 寫回 response
+    #         response.ymin = ymin 
+    #         response.ymax = ymax 
+    #         response.crmin = crmin 
+    #         response.crmax = crmax 
+    #         response.cbmin = cbmin
+    #         response.cbmax = cbmax 
 
-            # 更新記憶體表與 inRange 門檻
-            if color not in self.YUVColorRange:
-                self.YUVColorRange[color] = YUVColorRange(YUVLabelName=color)
+    #         # 更新記憶體表與 inRange 門檻
+    #         if color not in self.YUVColorRange:
+    #             self.YUVColorRange[color] = YUVColorRange(YUVLabelName=color)
 
-            self.YUVColorRange[color].YMin   = ymin 
-            self.YUVColorRange[color].YMax   = ymax 
-            self.YUVColorRange[color].CRMin  = crmin 
-            self.YUVColorRange[color].CRMax  = crmax 
-            self.YUVColorRange[color].CBMin  = cbmin
-            self.YUVColorRange[color].CBMax  = cbmax 
+    #         self.YUVColorRange[color].YMin   = ymin 
+    #         self.YUVColorRange[color].YMax   = ymax 
+    #         self.YUVColorRange[color].CRMin  = crmin 
+    #         self.YUVColorRange[color].CRMax  = crmax 
+    #         self.YUVColorRange[color].CBMin  = cbmin
+    #         self.YUVColorRange[color].CBMax  = cbmax 
 
-            self.yuv_lower = np.array([ymin, crmin, cbmin], dtype=np.uint8)
-            self.yuv_upper = np.array([ymax, crmax, cbmax], dtype=np.uint8)
+    #         self.yuv_lower = np.array([ymin, crmin, cbmin], dtype=np.uint8)
+    #         self.yuv_upper = np.array([ymax, crmax, cbmax], dtype=np.uint8)
 
-            self.get_logger().info(
-                f"[YUV INI] '{color}' -> Y[{ymin},{ymax}] CR[{crmin},{crmax}] CB[{cbmin},{cbmax}]"
-            )
-        except Exception as e:
-            self.get_logger().error(f"[YUV INI] load failed: {e}")
-            # 讀檔失敗時仍回目前記憶體/預設值
-            response.ymin = ymin
-            response.ymax = ymax
-            response.crmin = crmin
-            response.crmax = crmax
-            response.cbmin = cbmin
-            response.cbmax = cbmax
+    #         self.get_logger().info(
+    #             f"[YUV INI] '{color}' -> Y[{ymin},{ymax}] CR[{crmin},{crmax}] CB[{cbmin},{cbmax}]"
+    #         )
+    #     except Exception as e:
+    #         self.get_logger().error(f"[YUV INI] load failed: {e}")
+    #         # 讀檔失敗時仍回目前記憶體/預設值
+    #         response.ymin = ymin
+    #         response.ymax = ymax
+    #         response.crmin = crmin
+    #         response.crmax = crmax
+    #         response.cbmin = cbmin
+    #         response.cbmax = cbmax
 
-        return response
+    #     return response
     
-    def load_opencv_info_callback(self, request, response):
-        # 1) 確保記憶體是最新的（因為你可能剛剛 changeLocation）
-        self.init_opencv_from_ini()
+    # def load_opencv_info_callback(self, request, response):
+    #     # 1) 確保記憶體是最新的（因為你可能剛剛 changeLocation）
+    #     self.init_opencv_from_ini()
 
-        # 2) 把目前這個節點裡的順序丟回去
-        response.order = list(self.OpenCvOrders)
-        response.already = True
-        self.get_logger().info(f"[OpenCV INI] send to client: {response.order}")
-        return response
+    #     # 2) 把目前這個節點裡的順序丟回去
+    #     response.order = list(self.OpenCvOrders)
+    #     response.already = True
+    #     self.get_logger().info(f"[OpenCV INI] send to client: {response.order}")
+    #     return response
 
     
     def _clamp(self, v, lo, hi):
@@ -1007,98 +1011,127 @@ class ImageNode(Node):
             f"V[{cd.BrightnessMin},{cd.BrightnessMax}]"
         )
 
-    def init_yuv_from_ini(self, active_label: str = None):
-        ini_path = str(self._resolve_yuv_path())
-        cfg = configparser.ConfigParser()
-
-        # 1) 檢查並讀入檔案
-        read_ok = cfg.read(ini_path)
-        if not read_ok:
-            # 沒檔 -> 建立模板 (不改變記憶體中的數值，只是寫檔)
-            
-            Path(ini_path).parent.mkdir(parents=True, exist_ok=True)
-            for label in self.labels:
-                # 這裡給「全通」作為模板，方便第一次看到效果；你也可以改成 0~1
-                cfg[label] = {
-                    "y_min": "0",   "y_max": "255",
-                    "cr_min": "0",   "cr_max": "255",
-                    "cb_min": "0",   "cb_max": "255",
-                }
-            try:
-                with open(ini_path, "w") as f:
-                    cfg.write(f)
-                self.get_logger().info(f"[YUV INI] created template: {ini_path}")
-            except Exception as e:
-                self.get_logger().error(f"[YUV INI] failed to create template: {e}")
+    def load_zoomin_from_camera_ini(self):
+        if getattr(self, "location", None):
+            p = Path(self.location)
+            ini_path = p if p.suffix else (p / "CameraSet.ini")
         else:
-            # 2) 有檔 -> 逐 label 載入到記憶體
-            for label in self.labels:
-                if label in cfg:
-                    sec = cfg[label]
-                    ymin = self._clamp(sec.get("y_min",         0),   0, 255)
-                    ymax  = self._clamp(sec.get("y_max",       255),   0, 255)
-                    crmin  = self._clamp(sec.get("cr_min",  0),   0, 255)
-                    crmax  = self._clamp(sec.get("cr_max",255),   0, 255)
-                    cbmin = self._clamp(sec.get("cb_min",  0),   0, 255)
-                    cbmax  = self._clamp(sec.get("cb_max",255),   0, 255)
+            ini_path = Path(self.path_dir) / "CameraSet.ini"
 
-                    self.YUVColorRange[label].YMin   = ymin 
-                    self.YUVColorRange[label].YMax   = ymax 
-                    self.YUVColorRange[label].CRMin  = crmin
-                    self.YUVColorRange[label].CRMax  = crmax 
-                    self.YUVColorRange[label].CBMin  = cbmin
-                    self.YUVColorRange[label].CBMax  = cbmax 
+        cfg = configparser.ConfigParser()
+        read_ok = cfg.read(str(ini_path))
+        if not read_ok:
+            self.get_logger().warn(f"[CameraSet INI] not found, keep zoom={self.zoom}: {ini_path}")
+            return
 
-            self.get_logger().info(f"[YUV INI] loaded from: {ini_path}")
+        section = "Camera Set Parameter"
+        if section not in cfg:
+            self.get_logger().warn(f"[CameraSet INI] section '{section}' missing, keep zoom={self.zoom}")
+            return
 
-        # 3) 決定哪個 label 要作為當前色並回填 lower/upper
-        active = active_label if active_label else self.yuv_select_color
-        if active not in self.labels:
-            # 若傳入的 active_label 不在名單，用原本 select_color；再不行就用第一個
-            active = self.yuv_select_color if self.yuv_select_color in self.labels else self.labels[0]
+        try:
+            self.zoom = float(cfg[section].get("zoomin", str(self.zoom)))
+            self.get_logger().info(f"[CameraSet INI] zoom={self.zoom} from {ini_path}")
+        except ValueError as e:
+            self.get_logger().error(f"[CameraSet INI] invalid zoomin value: {e}")
 
-        self.yuv_select_color = active
-        cd = self.YUVColorRange[active]
-        self.yuv_lower = np.array([int(cd.YMin ), int(cd.CRMin ), int(cd.CBMin)], dtype=np.uint8)
-        self.yuv_upper = np.array([int(cd.YMax ), int(cd.CRMax ), int(cd.CBMax )], dtype=np.uint8)
-        self.get_logger().info(
-            f"[YUV INI] active '{active}' -> "
-            f"Y[{cd.YMin },{cd.YMax }] CR[{cd.CRMin },{cd.CRMax }] "
-            f"CB[{cd.CBMin},{cd.CBMax }]"
-        )
+    # def init_yuv_from_ini(self, active_label: str = None):
+    #     ini_path = str(self._resolve_yuv_path())
+    #     cfg = configparser.ConfigParser()
+
+    #     # 1) 檢查並讀入檔案
+    #     read_ok = cfg.read(ini_path)
+    #     if not read_ok:
+    #         # 沒檔 -> 建立模板 (不改變記憶體中的數值，只是寫檔)
+            
+    #         Path(ini_path).parent.mkdir(parents=True, exist_ok=True)
+    #         for label in self.labels:
+    #             # 這裡給「全通」作為模板，方便第一次看到效果；你也可以改成 0~1
+    #             cfg[label] = {
+    #                 "y_min": "0",   "y_max": "255",
+    #                 "cr_min": "0",   "cr_max": "255",
+    #                 "cb_min": "0",   "cb_max": "255",
+    #             }
+    #         try:
+    #             with open(ini_path, "w") as f:
+    #                 cfg.write(f)
+    #             self.get_logger().info(f"[YUV INI] created template: {ini_path}")
+    #         except Exception as e:
+    #             self.get_logger().error(f"[YUV INI] failed to create template: {e}")
+    #     else:
+    #         # 2) 有檔 -> 逐 label 載入到記憶體
+    #         for label in self.labels:
+    #             if label in cfg:
+    #                 sec = cfg[label]
+    #                 ymin = self._clamp(sec.get("y_min",         0),   0, 255)
+    #                 ymax  = self._clamp(sec.get("y_max",       255),   0, 255)
+    #                 crmin  = self._clamp(sec.get("cr_min",  0),   0, 255)
+    #                 crmax  = self._clamp(sec.get("cr_max",255),   0, 255)
+    #                 cbmin = self._clamp(sec.get("cb_min",  0),   0, 255)
+    #                 cbmax  = self._clamp(sec.get("cb_max",255),   0, 255)
+
+    #                 self.YUVColorRange[label].YMin   = ymin 
+    #                 self.YUVColorRange[label].YMax   = ymax 
+    #                 self.YUVColorRange[label].CRMin  = crmin
+    #                 self.YUVColorRange[label].CRMax  = crmax 
+    #                 self.YUVColorRange[label].CBMin  = cbmin
+    #                 self.YUVColorRange[label].CBMax  = cbmax 
+
+    #         self.get_logger().info(f"[YUV INI] loaded from: {ini_path}")
+
+    #     # 3) 決定哪個 label 要作為當前色並回填 lower/upper
+    #     active = active_label if active_label else self.yuv_select_color
+    #     if active not in self.labels:
+    #         # 若傳入的 active_label 不在名單，用原本 select_color；再不行就用第一個
+    #         active = self.yuv_select_color if self.yuv_select_color in self.labels else self.labels[0]
+
+    #     self.yuv_select_color = active
+    #     cd = self.YUVColorRange[active]
+    #     self.yuv_lower = np.array([int(cd.YMin ), int(cd.CRMin ), int(cd.CBMin)], dtype=np.uint8)
+    #     self.yuv_upper = np.array([int(cd.YMax ), int(cd.CRMax ), int(cd.CBMax )], dtype=np.uint8)
+    #     self.get_logger().info(
+    #         f"[YUV INI] active '{active}' -> "
+    #         f"Y[{cd.YMin },{cd.YMax }] CR[{cd.CRMin },{cd.CRMax }] "
+    #         f"CB[{cd.CBMin},{cd.CBMax }]"
+    #     )
 
         
     def init_opencv_from_ini(self):
-        ini_path = str(self._resolve_opencv_path())
-        cfg = configparser.ConfigParser()
+        # self.OpenCvOrders = ["ERODE:3", "DILATE:5"]
+        self.OpenCvOrders = ["OPEN:3"]
+        # self.OpenCvOrders = []
+        self.get_logger().info(f"[OpenCV] default orders: {self.OpenCvOrders}")
 
-        read_ok = cfg.read(ini_path)
-        if not read_ok:
-            # 沒檔就建一個空的，跟 HSV/YUV 一樣的寫法
-            cfg["OpenCvOrder"] = {"order": ""}
-            try:
-                with open(ini_path, "w") as f:
-                    cfg.write(f)
-                self.get_logger().info(f"[OpenCV INI] created empty: {ini_path}")
-            except Exception as e:
-                self.get_logger().error(f"[OpenCV INI] create failed: {e}")
-            # 記憶體維持現在的 self.OpenCvOrders，不動或清空都可以
-            self.OpenCvOrders = []
-            return
+        # ini_path = str(self._resolve_opencv_path())
+        # cfg = configparser.ConfigParser()
 
-        # 有檔案就載進記憶體
-        sec = cfg["OpenCvOrder"] if "OpenCvOrder" in cfg else None
-        if sec:
-            raw = sec.get("order", "")
-            if raw.strip():
-                self.OpenCvOrders = [s.strip() for s in raw.split(",") if s.strip()]
-            else:
-                self.OpenCvOrders = []
-        else:
-            self.OpenCvOrders = []
+        # read_ok = cfg.read(ini_path)
+        # if not read_ok:
+        #     # 沒檔就建一個空的，跟 HSV/YUV 一樣的寫法
+        #     cfg["OpenCvOrder"] = {"order": ""}
+        #     try:
+        #         with open(ini_path, "w") as f:
+        #             cfg.write(f)
+        #         self.get_logger().info(f"[OpenCV INI] created empty: {ini_path}")
+        #     except Exception as e:
+        #         self.get_logger().error(f"[OpenCV INI] create failed: {e}")
+        #     # 記憶體維持現在的 self.OpenCvOrders，不動或清空都可以
+        #     self.OpenCvOrders = []
+        #     return
 
-        self.get_logger().info(f"[OpenCV INI] loaded from {ini_path}: {self.OpenCvOrders}")
-        self.publish_opencv_order()
+        # # 有檔案就載進記憶體
+        # sec = cfg["OpenCvOrder"] if "OpenCvOrder" in cfg else None
+        # if sec:
+        #     raw = sec.get("order", "")
+        #     if raw.strip():
+        #         self.OpenCvOrders = [s.strip() for s in raw.split(",") if s.strip()]
+        #     else:
+        #         self.OpenCvOrders = []
+        # else:
+        #     self.OpenCvOrders = []
+
+        # self.get_logger().info(f"[OpenCV INI] loaded from {ini_path}: {self.OpenCvOrders}")
+        # self.publish_opencv_order()
 
     
     def save_hsv_callback(self, request, response):
@@ -1130,51 +1163,51 @@ class ImageNode(Node):
 
         return response
     
-    def save_yuv_callback(self, request, response):
-        try:
-            # 確保資料夾存在
-            ini_path = self._resolve_yuv_path()
-            ini_path.parent.mkdir(parents=True, exist_ok=True)
+    # def save_yuv_callback(self, request, response):
+    #     try:
+    #         # 確保資料夾存在
+    #         ini_path = self._resolve_yuv_path()
+    #         ini_path.parent.mkdir(parents=True, exist_ok=True)
 
-            config = configparser.ConfigParser()
+    #         config = configparser.ConfigParser()
 
-            for label, data in self.YUVColorRange.items():
-                config[label] = {
-                    "y_max":        str(int(round(float(data.YMax )))),
-                    "y_min":        str(int(round(float(data.YMin )))),
-                    "cr_max": str(int(round(float(data.CRMax )))),
-                    "cr_min": str(int(round(float(data.CRMin)))),
-                    "cb_max": str(int(round(float(data.CBMax )))),
-                    "cb_min": str(int(round(float(data.CBMin))))
-                }
+    #         for label, data in self.YUVColorRange.items():
+    #             config[label] = {
+    #                 "y_max":        str(int(round(float(data.YMax )))),
+    #                 "y_min":        str(int(round(float(data.YMin )))),
+    #                 "cr_max": str(int(round(float(data.CRMax )))),
+    #                 "cr_min": str(int(round(float(data.CRMin)))),
+    #                 "cb_max": str(int(round(float(data.CBMax )))),
+    #                 "cb_min": str(int(round(float(data.CBMin))))
+    #             }
 
-            with open(ini_path, "w") as configfile:
-                config.write(configfile)
-            self.yuv_path = str(ini_path)
-            self.get_logger().info(f"[YUV INI] saved: {self.yuv_path}")
-            response.already = True
-        except Exception as e:
-            self.get_logger().error(f"[YUV INI] save failed: {e}")
-            response.already = False
+    #         with open(ini_path, "w") as configfile:
+    #             config.write(configfile)
+    #         self.yuv_path = str(ini_path)
+    #         self.get_logger().info(f"[YUV INI] saved: {self.yuv_path}")
+    #         response.already = True
+    #     except Exception as e:
+    #         self.get_logger().error(f"[YUV INI] save failed: {e}")
+    #         response.already = False
 
-        return response
+    #     return response
     
-    def save_opencv_callback(self, request, response):
-        try:
-            ini_path = self._resolve_opencv_path()
-            cfg = configparser.ConfigParser()
-            cfg["OpenCvOrder"] = {
-                "order": ",".join(self.OpenCvOrders)
-            }
-            with open(ini_path, "w") as f:
-                cfg.write(f)
-            self.get_logger().info(f"[OpenCV INI] saved to {ini_path}: {self.OpenCvOrders}")
-            self.publish_opencv_order()
-            response.already = True
-        except Exception as e:
-            self.get_logger().error(f"[OpenCV INI] save failed: {e}")
-            response.already = False
-        return response
+    # def save_opencv_callback(self, request, response):
+    #     try:
+    #         ini_path = self._resolve_opencv_path()
+    #         cfg = configparser.ConfigParser()
+    #         cfg["OpenCvOrder"] = {
+    #             "order": ",".join(self.OpenCvOrders)
+    #         }
+    #         with open(ini_path, "w") as f:
+    #             cfg.write(f)
+    #         self.get_logger().info(f"[OpenCV INI] saved to {ini_path}: {self.OpenCvOrders}")
+    #         self.publish_opencv_order()
+    #         response.already = True
+    #     except Exception as e:
+    #         self.get_logger().error(f"[OpenCV INI] save failed: {e}")
+    #         response.already = False
+    #     return response
 
     
     def image_callback(self, msg):
@@ -1208,14 +1241,12 @@ class ImageNode(Node):
                     draw_item.thickness = int(draw_item.thickness)
                     if draw_item.mode == 1: # 假設 1 是 etDrawLine
                         cv2.line(draw_fram, pt1, pt2, color, draw_item.thickness)
-                        # cv2.line(draw_fram, pt1, pt2, color, 2)
                     elif draw_item.mode == 2: # 假設 2 是 etDrawObject (Rectangle)
                         cv2.rectangle(draw_fram, pt1, pt2, color, draw_item.thickness)
                     elif draw_item.mode == 3:
                         pt1 = (int(draw_item.xmin),int(draw_item.ymin))
                         pt2 = (int(draw_item.xmax))
                         cv2.circle(draw_fram, pt1, pt2, color, draw_item.thickness)
-                        # cv2.rectangle(draw_fram, pt1, pt2, color, 2)
                 except Exception as e:
                     self.get_logger().error(f"Drawing error: {e}")
             
@@ -1232,7 +1263,7 @@ class ImageNode(Node):
             proc_w, proc_h = 320, 240
             proc_frame = cv2.resize(zoomed_frame, (proc_w, proc_h), interpolation=cv2.INTER_LINEAR)
             hsv_proc = cv2.cvtColor(proc_frame, cv2.COLOR_BGR2HSV)
-            yuv_proc = cv2.cvtColor(proc_frame, cv2.COLOR_BGR2YCrCb)
+            # yuv_proc = cv2.cvtColor(proc_frame, cv2.COLOR_BGR2YCrCb)
 
             if self.build_status == 1:                
                 # 4) 單色 build（僅在 lower/upper 已設定時跑；保持你原本邏輯）
@@ -1245,15 +1276,15 @@ class ImageNode(Node):
                 stamp = {'sec': msg.header.stamp.sec, 'nanosec': msg.header.stamp.nanosec}
                 self.build_all_hsv_table(hsv_proc, proc_frame, stamp)
 
-            if self.yuv_build_status == 1:  
-                # 4) 單色 build（僅在 lower/upper 已設定時跑；保持你原本邏輯）
-                if self.yuv_lower is not None and self.yuv_upper is not None:
-                    self.build_yuv_table(yuv_proc, proc_frame)
+            # if self.yuv_build_status == 1:  
+            #     # 4) 單色 build（僅在 lower/upper 已設定時跑；保持你原本邏輯）
+            #     if self.yuv_lower is not None and self.yuv_upper is not None:
+            #         self.build_yuv_table(yuv_proc, proc_frame)
 
-            elif self.yuv_build_status == 0:
-                # 5) 取 header 時間戳，丟給多色偵測（節流＋去抖在函式內處理）
-                stamp = {'sec': msg.header.stamp.sec, 'nanosec': msg.header.stamp.nanosec}
-                self.build_all_yuv_table(yuv_proc, proc_frame, stamp)
+            # elif self.yuv_build_status == 0:
+            #     # 5) 取 header 時間戳，丟給多色偵測（節流＋去抖在函式內處理）
+            #     stamp = {'sec': msg.header.stamp.sec, 'nanosec': msg.header.stamp.nanosec}
+            #     self.build_all_yuv_table(yuv_proc, proc_frame, stamp)
         except Exception as e:
             self.get_logger().error(f"Failed to process image: {e}")
 
@@ -1310,56 +1341,56 @@ class ImageNode(Node):
         vis_msg = self.bridge.cv2_to_imgmsg(resized, encoding='bgr8')
         self.label_pub.publish(mask_msg)
         return vis_msg, mask_msg
-    def build_yuv_table(self, yuv, resized):
-        Y_MAX, CR_MAX, CB_MAX = 255, 255, 255
+    # def build_yuv_table(self, yuv, resized):
+    #     Y_MAX, CR_MAX, CB_MAX = 255, 255, 255
 
-        y_low, cr_low, cb_low = map(int, self.yuv_lower)
-        y_high, cr_high, cb_high = map(int, self.yuv_upper)
+    #     y_low, cr_low, cb_low = map(int, self.yuv_lower)
+    #     y_high, cr_high, cb_high = map(int, self.yuv_upper)
 
-        # --- 特殊情況：全0 → 空選取；全滿 → 全選取 ---
-        if (y_low, cr_low, cb_low) == (0, 0, 0) and (y_high, cr_high, cb_high) == (0, 0, 0):
-            mask = np.zeros(yuv.shape[:2], dtype=np.uint8)
-        elif (y_low, cr_low, cb_low) == (0, 0, 0) and (y_high, cr_high, cb_high) == (Y_MAX, CR_MAX, CB_MAX):
-            mask = np.full(yuv.shape[:2], 255, dtype=np.uint8)
-        elif (y_low, cr_low, cb_low) == (Y_MAX, CR_MAX, CB_MAX) and (y_high, cr_high, cb_high) == (Y_MAX, CR_MAX, CB_MAX):
-            # 兼容：若上下限都被拉到最大，也視為全選
-            mask = np.full(yuv.shape[:2], 255, dtype=np.uint8)
-        else:
-            # --- 一般情況：沿用你原本的區間與跨零點邏輯 ---
+    #     # --- 特殊情況：全0 → 空選取；全滿 → 全選取 ---
+    #     if (y_low, cr_low, cb_low) == (0, 0, 0) and (y_high, cr_high, cb_high) == (0, 0, 0):
+    #         mask = np.zeros(yuv.shape[:2], dtype=np.uint8)
+    #     elif (y_low, cr_low, cb_low) == (0, 0, 0) and (y_high, cr_high, cb_high) == (Y_MAX, CR_MAX, CB_MAX):
+    #         mask = np.full(yuv.shape[:2], 255, dtype=np.uint8)
+    #     elif (y_low, cr_low, cb_low) == (Y_MAX, CR_MAX, CB_MAX) and (y_high, cr_high, cb_high) == (Y_MAX, CR_MAX, CB_MAX):
+    #         # 兼容：若上下限都被拉到最大，也視為全選
+    #         mask = np.full(yuv.shape[:2], 255, dtype=np.uint8)
+    #     else:
+    #         # --- 一般情況：沿用你原本的區間與跨零點邏輯 ---
 
-            mask = cv2.inRange(
-                yuv,
-                (y_low, cr_low, cb_low),
-                (y_high, cr_high, cb_high)
-            )
+    #         mask = cv2.inRange(
+    #             yuv,
+    #             (y_low, cr_low, cb_low),
+    #             (y_high, cr_high, cb_high)
+    #         )
 
 
-            # 形態學清雜訊（只在一般情況下做，避免把「全選」變稀疏）
-            mask = self.process_by_order(mask, self.OpenCvOrders,"a")
-            # mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.kernel3, iterations=2)
+    #         # 形態學清雜訊（只在一般情況下做，避免把「全選」變稀疏）
+    #         mask = self.process_by_order(mask, self.OpenCvOrders,"a")
+    #         # mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.kernel3, iterations=2)
 
-        # 後處理與發佈：保持你原本的流程
-        mask_msg = self.bridge.cv2_to_imgmsg(mask, encoding='mono8')
+    #     # 後處理與發佈：保持你原本的流程
+    #     mask_msg = self.bridge.cv2_to_imgmsg(mask, encoding='mono8')
 
-        key = f"{self.yuv_select_color.capitalize()}Label"
-        if key in self.color_labels:
-            b, g, r = self.color_labels[key]['color']
-            color_img = np.zeros_like(resized)
-            color_img[:] = (b, g, r)
+    #     key = f"{self.yuv_select_color.capitalize()}Label"
+    #     if key in self.color_labels:
+    #         b, g, r = self.color_labels[key]['color']
+    #         color_img = np.zeros_like(resized)
+    #         color_img[:] = (b, g, r)
 
-            fg = cv2.bitwise_and(color_img, color_img, mask=mask)
-            inv = cv2.bitwise_not(mask)
-            bg = cv2.bitwise_and(resized, resized, mask=inv)
-            composed = cv2.add(bg, fg)
+    #         fg = cv2.bitwise_and(color_img, color_img, mask=mask)
+    #         inv = cv2.bitwise_not(mask)
+    #         bg = cv2.bitwise_and(resized, resized, mask=inv)
+    #         composed = cv2.add(bg, fg)
 
-            color_msg = self.bridge.cv2_to_imgmsg(composed, encoding='bgr8')
-            self.yuv_processed_image.publish(color_msg)
-        else:
-            self.yuv_processed_image.publish(self.bridge.cv2_to_imgmsg(resized, encoding='bgr8'))
+    #         color_msg = self.bridge.cv2_to_imgmsg(composed, encoding='bgr8')
+    #         self.yuv_processed_image.publish(color_msg)
+    #     else:
+    #         self.yuv_processed_image.publish(self.bridge.cv2_to_imgmsg(resized, encoding='bgr8'))
 
-        vis_msg = self.bridge.cv2_to_imgmsg(resized, encoding='bgr8')
-        self.yuv_label_pub.publish(mask_msg)
-        return vis_msg, mask_msg
+    #     vis_msg = self.bridge.cv2_to_imgmsg(resized, encoding='bgr8')
+    #     self.yuv_label_pub.publish(mask_msg)
+    #     return vis_msg, mask_msg
 
 
     def build_all_hsv_table(self, hsv, resized, stamp):
@@ -1479,116 +1510,116 @@ class ImageNode(Node):
             self.processed_image.publish(vis_msg_all)
             self._last_hsv_img_pub["build_image"] = now
 
-    def build_all_yuv_table(self, yuv, resized, stamp):
-        h, w = yuv.shape[:2]
-        total_mask = np.zeros((h, w), dtype=np.uint8)     # 純黑白二值化
-        color_mask = np.zeros((h, w, 3), dtype=np.uint8)  # BGR 偽彩色輸出
+    # def build_all_yuv_table(self, yuv, resized, stamp):
+    #     h, w = yuv.shape[:2]
+    #     total_mask = np.zeros((h, w), dtype=np.uint8)     # 純黑白二值化
+    #     color_mask = np.zeros((h, w, 3), dtype=np.uint8)  # BGR 偽彩色輸出
 
-        # 全色偵測結果（精簡）
-        detections_all = {label: [] for label in self.YUVColorRange.keys()}
+    #     # 全色偵測結果（精簡）
+    #     detections_all = {label: [] for label in self.YUVColorRange.keys()}
 
-        # === 逐色門檻 + 形態學 + 蒐集結果 ===
-        for label, color_obj in self.YUVColorRange.items():
-            y_low, y_high = int(color_obj.YMin ), int(color_obj.YMax  )
-            cr_low, cr_high = int(color_obj.CRMin ), int(color_obj.CRMax)
-            cb_low, cb_high = int(color_obj.CBMin), int(color_obj.CBMax )
+    #     # === 逐色門檻 + 形態學 + 蒐集結果 ===
+    #     for label, color_obj in self.YUVColorRange.items():
+    #         y_low, y_high = int(color_obj.YMin ), int(color_obj.YMax  )
+    #         cr_low, cr_high = int(color_obj.CRMin ), int(color_obj.CRMax)
+    #         cb_low, cb_high = int(color_obj.CBMin), int(color_obj.CBMax )
 
-            # 空設定直接跳過
-            if (y_low, y_high, cr_low, cr_high, cb_low, cb_high) == (0, 0, 128, 128, 128, 128):
-                continue
+    #         # 空設定直接跳過
+    #         if (y_low, y_high, cr_low, cr_high, cb_low, cb_high) == (0, 0, 128, 128, 128, 128):
+    #             continue
 
-            mask_i = cv2.inRange(
-                yuv,
-                (y_low, cr_low, cb_low),
-                (y_high, cr_high, cb_high)
-            )
+    #         mask_i = cv2.inRange(
+    #             yuv,
+    #             (y_low, cr_low, cb_low),
+    #             (y_high, cr_high, cb_high)
+    #         )
 
-            # 形態學開運算去雜訊（只建一次的 kernel：self.kernel3）
-            mask_i = self.process_by_order(mask_i, self.OpenCvOrders,"a")
-            # mask_i = cv2.morphologyEx(mask_i, cv2.MORPH_OPEN, self.kernel3, iterations=2)
+    #         # 形態學開運算去雜訊（只建一次的 kernel：self.kernel3）
+    #         mask_i = self.process_by_order(mask_i, self.OpenCvOrders,"a")
+    #         # mask_i = cv2.morphologyEx(mask_i, cv2.MORPH_OPEN, self.kernel3, iterations=2)
 
-            # 累積總 mask（用清理後的 mask_i）
-            total_mask = cv2.bitwise_or(total_mask, mask_i)
+    #         # 累積總 mask（用清理後的 mask_i）
+    #         total_mask = cv2.bitwise_or(total_mask, mask_i)
 
-            # 偽彩色（用清理後的 mask_i）
-            label_key = label.capitalize() + "Label"
-            bgr_color = np.array(self.color_labels.get(label_key, {"color": [255, 255, 255]})["color"],
-                                dtype=np.uint8)
-            color_mask[mask_i > 0] = bgr_color
-            # vis_msg_all = self.bridge.cv2_to_imgmsg(color_mask, encoding='bgr8')
-            # self.yuv_processed_image.publish(vis_msg_all)
-            # ====== 連通元件（比 findContours 更省） ======
-            num, labels_cc, stats, centroids = cv2.connectedComponentsWithStats(mask_i, connectivity=8)
-            color_list_compact = []
-            for i in range(1, num):  # 0 是背景
-                x, y, w_box, h_box, area = stats[i]
-                if area < 50:
-                    continue
-                cx, cy = centroids[i]
-                item = {
-                    "bbox": (int(x), int(y), int(w_box), int(h_box)),
-                    "centroid": (int(cx), int(cy)),
-                    "area": float(area),
-                    "aspect_ratio": float(w_box) / float(h_box) if h_box > 0 else 0.0,
-                    "label": label
-                }
-                color_list_compact.append(item)
-                detections_all[label].append(item)
+    #         # 偽彩色（用清理後的 mask_i）
+    #         label_key = label.capitalize() + "Label"
+    #         bgr_color = np.array(self.color_labels.get(label_key, {"color": [255, 255, 255]})["color"],
+    #                             dtype=np.uint8)
+    #         color_mask[mask_i > 0] = bgr_color
+    #         # vis_msg_all = self.bridge.cv2_to_imgmsg(color_mask, encoding='bgr8')
+    #         # self.yuv_processed_image.publish(vis_msg_all)
+    #         # ====== 連通元件（比 findContours 更省） ======
+    #         num, labels_cc, stats, centroids = cv2.connectedComponentsWithStats(mask_i, connectivity=8)
+    #         color_list_compact = []
+    #         for i in range(1, num):  # 0 是背景
+    #             x, y, w_box, h_box, area = stats[i]
+    #             if area < 50:
+    #                 continue
+    #             cx, cy = centroids[i]
+    #             item = {
+    #                 "bbox": (int(x), int(y), int(w_box), int(h_box)),
+    #                 "centroid": (int(cx), int(cy)),
+    #                 "area": float(area),
+    #                 "aspect_ratio": float(w_box) / float(h_box) if h_box > 0 else 0.0,
+    #                 "label": label
+    #             }
+    #             color_list_compact.append(item)
+    #             detections_all[label].append(item)
 
-            # ====== 每色各發一則 JSON（節流 + 去抖） ======
-            msg_color = {
-                "stamp": stamp,
-                "width": w, "height": h,
-                "label": label,
-                "objects": color_list_compact
-            }
-            payload = json.dumps(msg_color, separators=(',', ':'))
-            now = time.time()
-            key = f"det_{label}"
-            if payload != self._yuv_last_payload[label] and (now - self._yuv_last_pub_t[key] >= self._pub_period):
-                try:
-                    self.yuv_det_pubs[label].publish(String(data=payload))
-                    self._yuv_last_payload[label] = payload
-                    self._yuv_last_pub_t[key] = now
-                except Exception as e:
-                    self.get_logger().warning(f"publish detections/{label} failed: {e}")
+    #         # ====== 每色各發一則 JSON（節流 + 去抖） ======
+    #         msg_color = {
+    #             "stamp": stamp,
+    #             "width": w, "height": h,
+    #             "label": label,
+    #             "objects": color_list_compact
+    #         }
+    #         payload = json.dumps(msg_color, separators=(',', ':'))
+    #         now = time.time()
+    #         key = f"det_{label}"
+    #         if payload != self._yuv_last_payload[label] and (now - self._yuv_last_pub_t[key] >= self._pub_period):
+    #             try:
+    #                 self.yuv_det_pubs[label].publish(String(data=payload))
+    #                 self._yuv_last_payload[label] = payload
+    #                 self._yuv_last_pub_t[key] = now
+    #             except Exception as e:
+    #                 self.get_logger().warning(f"publish detections/{label} failed: {e}")
 
-        # === 發佈總表 object_info（節流 + 去抖） ===
-        detections_all["_stamp"] = stamp
-        payload_all = json.dumps(detections_all, separators=(',', ':'))
-        now = time.time()
-        if payload_all != self._yuv_last_info_payload and (now - self._yuv_last_pub_t["info"] >= self._pub_period):
-            try:
-                self.yuv_info_pub.publish(String(data=payload_all))
-                self._yuv_last_info_payload = payload_all
-                self._yuv_last_pub_t["info"] = now
-            except Exception as e:
-                self.get_logger().warning(f"publish object_info failed: {e}")
+    #     # === 發佈總表 object_info（節流 + 去抖） ===
+    #     detections_all["_stamp"] = stamp
+    #     payload_all = json.dumps(detections_all, separators=(',', ':'))
+    #     now = time.time()
+    #     if payload_all != self._yuv_last_info_payload and (now - self._yuv_last_pub_t["info"] >= self._pub_period):
+    #         try:
+    #             self.yuv_info_pub.publish(String(data=payload_all))
+    #             self._yuv_last_info_payload = payload_all
+    #             self._yuv_last_pub_t["info"] = now
+    #         except Exception as e:
+    #             self.get_logger().warning(f"publish object_info failed: {e}")
 
-        # === 發佈 total_mask 為 mono8 Image（影像節流） ===
-        img_msg = self.bridge.cv2_to_imgmsg(total_mask, encoding='mono8')
-        try:
-            img_msg.header.stamp.sec = int(stamp.get('sec', 0))
-            img_msg.header.stamp.nanosec = int(stamp.get('nanosec', 0))
-        except Exception:
-            pass
-        now = time.time()
-        if now - self._last_yuv_img_pub["mask_image"] >= self._img_period:
-            self.yuv_label_pub.publish(img_msg)   # ← 用 YUV 專用 topic
-            self._last_yuv_img_pub["mask_image"] = now
+    #     # === 發佈 total_mask 為 mono8 Image（影像節流） ===
+    #     img_msg = self.bridge.cv2_to_imgmsg(total_mask, encoding='mono8')
+    #     try:
+    #         img_msg.header.stamp.sec = int(stamp.get('sec', 0))
+    #         img_msg.header.stamp.nanosec = int(stamp.get('nanosec', 0))
+    #     except Exception:
+    #         pass
+    #     now = time.time()
+    #     if now - self._last_yuv_img_pub["mask_image"] >= self._img_period:
+    #         self.yuv_label_pub.publish(img_msg)   # ← 用 YUV 專用 topic
+    #         self._last_yuv_img_pub["mask_image"] = now
 
-        # === 彩色可視化影像（把 color_mask 套 total_mask，影像節流） ===
-        vis_all = cv2.bitwise_and(color_mask, color_mask, mask=total_mask)
-        vis_msg_all = self.bridge.cv2_to_imgmsg(vis_all, encoding='bgr8')
-        try:
-            vis_msg_all.header.stamp.sec = int(stamp.get('sec', 0))
-            vis_msg_all.header.stamp.nanosec = int(stamp.get('nanosec', 0))
-        except Exception:
-            pass
-        now = time.time()
-        if now - self._last_yuv_img_pub["build_image"] >= self._img_period:
-            self.yuv_processed_image.publish(vis_msg_all)
-            self._last_yuv_img_pub["build_image"] = now
+    #     # === 彩色可視化影像（把 color_mask 套 total_mask，影像節流） ===
+    #     vis_all = cv2.bitwise_and(color_mask, color_mask, mask=total_mask)
+    #     vis_msg_all = self.bridge.cv2_to_imgmsg(vis_all, encoding='bgr8')
+    #     try:
+    #         vis_msg_all.header.stamp.sec = int(stamp.get('sec', 0))
+    #         vis_msg_all.header.stamp.nanosec = int(stamp.get('nanosec', 0))
+    #     except Exception:
+    #         pass
+    #     now = time.time()
+    #     if now - self._last_yuv_img_pub["build_image"] >= self._img_period:
+    #         self.yuv_processed_image.publish(vis_msg_all)
+    #         self._last_yuv_img_pub["build_image"] = now
 
 
 def main():

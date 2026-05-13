@@ -124,6 +124,9 @@ class WalkingWebBridge(Node):
             p.parent.mkdir(parents=True, exist_ok=True)
             with open(p, "w", encoding="utf-8") as f:
                 f.write((raw or "").strip() + "\n")
+            js_path = p.with_suffix(".js")
+            with open(js_path, "w", encoding="utf-8") as f:
+                f.write(f'window.currentStrategy = "{(raw or "").strip()}";\n')
         except Exception as e:
             self.get_logger().error(f"ERROR: Write ini failed: {e}")
 

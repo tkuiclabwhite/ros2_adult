@@ -102,7 +102,102 @@
     box-shadow: 0 0 15px currentColor; /* 根據背景色產生對應光暈 */
     transform: scale(1.05);
 }
+
+        .strategy-box {
+            display: inline-block;
+            background-color: #222;
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 8px 20px;
+            box-shadow: inset 0 0 10px #000;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .strategy-label {
+            color: #888;
+            font-size: 12px;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        #current-strategy-name {
+            color: #00D600;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 22px;
+            font-weight: bold;
+            text-shadow: 0 0 8px rgba(0, 214, 0, 0.5);
+        }
+
+        .robot-overlay-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .pos-motor-btn {
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            background-color: rgba(255, 0, 0, 0.4);
+            border: 2px solid #ff4d4d;
+            border-radius: 50%;
+            color: black;
+            font-weight: bold;
+            font-size: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 10;
+            user-select: none;
+        }
+
+        .pos-motor-btn.torque-on {
+            background-color: rgba(0, 255, 0, 0.6);
+            border-color: #00ff00;
+            box-shadow: 0 0 15px #00ff00;
+            color: black;
+        }
+
+        .pos-motor-btn:hover {
+            transform: scale(1.2);
+            background-color: rgba(3, 233, 244, 0.5);
+        }
+
+        #history-panel {
+            width: 160px;
+            height: 110px;
+            flex-shrink: 0;
+            background: rgba(20, 30, 33, 0.95);
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 6px 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+        }
+
+        #history-panel .hp-title {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 4px;
+            margin-bottom: 4px;
+        }
+
+        #history-list { max-height: 80px; overflow-y: auto; }
+        #history-list .hp-item        { color: #555;    padding: 1px 4px; }
+        #history-list .hp-item-undo   { color: #03e9f4; padding: 1px 4px; }
+        #history-list .hp-now         { color: #00D600; text-align: center; border-top: 1px solid #00D600; border-bottom: 1px solid #00D600; margin: 3px 0; padding: 1px 0; font-size: 10px; letter-spacing: 2px; }
+        #history-list .hp-item-redo   { color: #ffaa00; padding: 1px 4px; }
+        #history-list .hp-item-future { color: #554400; padding: 1px 4px; }
+        #history-list .hp-empty       { color: #444;    text-align: center; padding: 4px; }
     </style>
+    <script src="../src/strategy/strategy/strategy.js"></script>
 </head>
 
 <body>
@@ -114,15 +209,23 @@
         <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
         <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
         <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+        <li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
     </ul>
-    <br>
-    <p id="connected" style="color:#00D600; display:none; font-size: 20px;">
-        Connected
-    </p>
+    <div style="padding-left: 30px; height: 100px; width: 1010px;">
+        <div style="height: 30px;">
+            <p id="connected" style="color:#00D600; display:none; font-size: 20px; margin: 0;">
+                Connected
+            </p>
+        </div>
+        <div class="strategy-box" style="margin-top: 10px;">
+            <span class="strategy-label">Strategy</span>
+            <span id="current-strategy-name">---</span>
+        </div>
+    </div>
 
     <form id="childform" name="childform">
         <div id="container">
-			<div style="margin-left: 180px;"> 
+			<div style="margin-left: 180px;">
 				<input type="text" id="filename" name="filename" value="Your_File_Name" style="width: 179px;">
 				<input type="button" id="SaveButton" value="Save" style="width:80px;" disabled="disabled">
 				<input type="button" id="ReadButton" value="Read" onclick="Read();" style="width:80px;" disabled="disabled">
@@ -131,22 +234,37 @@
                 <input type="button" id="resetButton" value="reset" onclick="resetfunction();" style="width:80px;" disabled="disabled">
 			</div>
 
-            <div style="width: 800px; margin-top: 16px; margin-bottom: 16px; margin-left: 180px;">
-                ID: <input type="text" id="SendID" value=-1 style="width:50px;">
-                Sector: <input type="text" id="Sector" value=-1 style="width:50px;">
-                <input type="button" id="SendButton" value="Send" onclick="Send();" style="width:80px;" disabled="disabled">
-                <input type="checkbox" id="Locked29" value="Locked" onclick="Locked();" checked>Locked 29
-                <input type="checkbox" id="Lockedstand" value="LockedStand" onclick="Locked2()" checked>Locked Stand
-                <input type="button" id="executeButton" value="execute" onclick="execute();" style="width:80px; margin-left:5px;" disabled="disabled">
-                <input type="button" id="standButton" value="stand" onclick="stand();" style="width:80px;" disabled="disabled">
-            </div>
+            <div style="display: flex; align-items: flex-start; margin-left: 10px; margin-top: 8px;">
+                <div id="history-panel">
+                    <div class="hp-title">History</div>
+                    <div id="history-list"><div class="hp-empty">empty</div></div>
+                </div>
 
-            <div style="width: 800px; margin-top: 16px; margin-bottom: 16px; margin-left: 180px;">
-                ID:&nbsp;<input type="text" id="chose_multiple" value= "-1" style="width:50px">
-                multipy&nbsp;<input type="text" id="times" value= "-1" style="width:50px">
-				times&nbsp;<input type="button" id="MultipleButton" value="Multiple" onclick="Multiple();" style="width:80px; margin-right:23px;" disabled="disabled">
-                ID1:&nbsp;<input type="text" id="Merge1" value="-1" style="width:50px;">&nbsp;merge&nbsp;to&nbsp;ID2:&nbsp;<input type="text" id="Merge2" value="-1" style="width:50px;">
-				<input type="button" id="MergeButton" value="Merge" onclick="Merge();" style="width:80px;" disabled="disabled">
+                <div style="margin-left: 12px;">
+                    <div style="width: 800px; margin-top: 8px; margin-bottom: 16px;">
+                        ID: <input type="text" id="SendID" value=-1 style="width:50px;">
+                        Sector: <input type="text" id="Sector" value=-1 style="width:50px;">
+                        <input type="button" id="SendButton" value="Send" onclick="Send();" style="width:80px;" disabled="disabled">
+                        <input type="checkbox" id="Locked29" value="Locked" onclick="Locked();" checked>Locked 29
+                        <input type="checkbox" id="Lockedstand" value="LockedStand" onclick="Locked2()" checked>Locked Stand
+                        <input type="button" id="executeButton" value="execute" onclick="execute();" style="width:80px; margin-left:5px;" disabled="disabled">
+                        <input type="button" id="standButton" value="stand" onclick="stand();" style="width:80px;" disabled="disabled">
+                    </div>
+
+                    <div style="width: 800px; margin-bottom: 16px;">
+                        <input type="button" id="undoButton" value="↩ Undo" onclick="undoAction();" style="width:80px;" disabled="disabled">
+                        <input type="button" id="redoButton" value="↪ Redo" onclick="redoAction();" style="width:80px;" disabled="disabled">
+                        <input type="button" id="clearHistoryButton" value="Clear History" onclick="clearHistoryAction();" style="width:100px; margin-left:10px;" disabled="disabled">
+                    </div>
+
+                    <div style="width: 800px; margin-bottom: 16px;">
+                        ID:&nbsp;<input type="text" id="chose_multiple" value= "-1" style="width:50px">
+                        multipy&nbsp;<input type="text" id="times" value= "-1" style="width:50px">
+                        times&nbsp;<input type="button" id="MultipleButton" value="Multiple" onclick="Multiple();" style="width:80px; margin-right:23px;" disabled="disabled">
+                        ID1:&nbsp;<input type="text" id="Merge1" value="-1" style="width:50px;">&nbsp;merge&nbsp;to&nbsp;ID2:&nbsp;<input type="text" id="Merge2" value="-1" style="width:50px;">
+                        <input type="button" id="MergeButton" value="Merge" onclick="Merge();" style="width:80px;" disabled="disabled">
+                    </div>
+                </div>
             </div>
 
             <div style="margin-left: 120px;">
@@ -178,7 +296,7 @@
                     <input type="button" id="CopyButton" value="Copy" onclick="Copy();" style="width:65px" disabled="disabled"> : <input type="text" id="chose_copy" value="-1" style="width:50px;">
                 	<input type="button" id="CheckSumButton" value="CheckSum" onclick="CheckSum();" style=" margin-top:20px;" disabled="disabled"><br>
 					ID: <input type="text" id="CheckSumID" value=-1 style="width:50px; margin-top:5px;">
-					<div id="CheckSumBox" style="height: 240px; margin-top:30px;">
+					<div id="CheckSumBox" style="height: 240px; margin-top:135px;">
                         <div class="checksumsmallbox">M1: </div>
                         <div class="checksumsmallbox">M2: </div>
                         <div class="checksumsmallbox">M3: </div>
@@ -418,10 +536,47 @@
         </div> 
         <div id="rightarea">
             <div id="robotpic">
-                <div style="float: left; height: 470px ; width: 300px"> 
+                <div style="float: left; height: 470px; width: 300px;">
                     <button type="button" id="TorqueButton" onclick="TorqueSwitch();" class="neon-btn">扭力關閉</button>
-                    <img src="./picture/towen.webp" style="margin-top: 1px;width:100%; height: 110%; border: solid black 2px;">
-                </div> 
+                    <div id="robot-container" class="robot-overlay-container">
+                        <img src="./picture/towen.webp" style="width: 300px; height: 470px; border: solid black 2px;">
+                        <!-- 左手 -->
+                        <div id="pos-btn-1"  class="pos-motor-btn" style="top:8%; left:67%;" onclick="toggleTorqueAtPosition(1)">1</div>
+                        <div id="pos-btn-2"  class="pos-motor-btn" style="top:16%; left:86%;" onclick="toggleTorqueAtPosition(2)">2</div>
+                        <div id="pos-btn-3"  class="pos-motor-btn" style="top:25%; left:86%;" onclick="toggleTorqueAtPosition(3)">3</div>
+                        <div id="pos-btn-4"  class="pos-motor-btn" style="top:33%; left:86%;" onclick="toggleTorqueAtPosition(4)">4</div>
+                        <div id="pos-btn-5"  class="pos-motor-btn" style="top:38%; left:86%;" onclick="toggleTorqueAtPosition(5)">5</div>
+                        <div id="pos-btn-6"  class="pos-motor-btn" style="top:43%; left:86%;" onclick="toggleTorqueAtPosition(6)">6</div>
+                        <div id="pos-btn-7"  class="pos-motor-btn" style="top:48%; left:86%;" onclick="toggleTorqueAtPosition(7)">7</div>
+                        <!-- 右手 -->
+                        <div id="pos-btn-8"  class="pos-motor-btn" style="top:8%; left:26%;" onclick="toggleTorqueAtPosition(8)">8</div>
+                        <div id="pos-btn-9"  class="pos-motor-btn" style="top:16%; left:7%;" onclick="toggleTorqueAtPosition(9)">9</div>
+                        <div id="pos-btn-10" class="pos-motor-btn" style="top:25%; left:7%;" onclick="toggleTorqueAtPosition(10)">10</div>
+                        <div id="pos-btn-11" class="pos-motor-btn" style="top:33%; left:7%;" onclick="toggleTorqueAtPosition(11)">11</div>
+                        <div id="pos-btn-12" class="pos-motor-btn" style="top:38%; left:7%;"  onclick="toggleTorqueAtPosition(12)">12</div>
+                        <div id="pos-btn-13" class="pos-motor-btn" style="top:43%; left:7%;"  onclick="toggleTorqueAtPosition(13)">13</div>
+                        <div id="pos-btn-14" class="pos-motor-btn" style="top:48%; left:7%;"  onclick="toggleTorqueAtPosition(14)">14</div>
+                        <!-- 腰 -->
+                        <div id="pos-btn-15" class="pos-motor-btn" style="top:27%; left:47%;" onclick="toggleTorqueAtPosition(15)">15</div>
+                        <!-- 左腿 -->
+                        <div id="pos-btn-16" class="pos-motor-btn" style="top:43%; left:53%;" onclick="toggleTorqueAtPosition(16)">16</div>
+                        <div id="pos-btn-17" class="pos-motor-btn" style="top:43%; left:64%;" onclick="toggleTorqueAtPosition(17)">17</div>
+                        <div id="pos-btn-18" class="pos-motor-btn" style="top:52%; left:64%;" onclick="toggleTorqueAtPosition(18)">18</div>
+                        <div id="pos-btn-19" class="pos-motor-btn" style="top:67%; left:64%;" onclick="toggleTorqueAtPosition(19)">19</div>
+                        <div id="pos-btn-20" class="pos-motor-btn" style="top:77%; left:64%;" onclick="toggleTorqueAtPosition(20)">20</div>
+                        <div id="pos-btn-21" class="pos-motor-btn" style="top:84%; left:64%;" onclick="toggleTorqueAtPosition(21)">21</div>
+                        <!-- 右腿 -->
+                        <div id="pos-btn-22" class="pos-motor-btn" style="top:43%; left:42%;" onclick="toggleTorqueAtPosition(22)">22</div>
+                        <div id="pos-btn-23" class="pos-motor-btn" style="top:43%; left:30%;" onclick="toggleTorqueAtPosition(23)">23</div>
+                        <div id="pos-btn-24" class="pos-motor-btn" style="top:52%; left:30%;" onclick="toggleTorqueAtPosition(24)">24</div>
+                        <div id="pos-btn-25" class="pos-motor-btn" style="top:67%; left:30%;" onclick="toggleTorqueAtPosition(25)">25</div>
+                        <div id="pos-btn-26" class="pos-motor-btn" style="top:77%; left:30%;" onclick="toggleTorqueAtPosition(26)">26</div>
+                        <div id="pos-btn-27" class="pos-motor-btn" style="top:84%; left:30%;" onclick="toggleTorqueAtPosition(27)">27</div>
+                        <!-- 頭部 -->
+                        <div id="pos-btn-28" class="pos-motor-btn" style="top:9%; left:47%;" onclick="toggleTorqueAtPosition(28)">28</div>
+                        <div id="pos-btn-29" class="pos-motor-btn" style="top:3%; left:47%;" onclick="toggleTorqueAtPosition(29)">29</div>
+                    </div>
+                </div>
             </div>
         </div>
         <div id="motor_area" style="width: 450px;">
@@ -558,15 +713,159 @@
         const btn = document.getElementById('TorqueButton');
 
         btn.addEventListener('click', function() {
-            // 切換 active class
             btn.classList.toggle('active');
-
-            // 改變文字內容
             if (btn.classList.contains('active')) {
                 btn.innerText = "扭力已開啟";
             } else {
                 btn.innerText = "扭力已關閉";
             }
+        });
+
+        // --- Strategy Location ---
+        var locationBack_Subscriber = new ROSLIB.Topic({
+            ros: ros,
+            name: '/locationBack',
+            messageType: 'tku_msgs/msg/Location'
+        });
+
+        var location_strategy = new ROSLIB.Topic({
+            ros: ros,
+            name: '/location',
+            messageType: 'tku_msgs/location'
+        });
+
+        var location_msg = new ROSLIB.Message({ data: "" });
+
+        function parseStrategyName(path) {
+            if (typeof path !== 'string' || path === "") return "---";
+            const parts = path.split('/').filter(p => p.length > 0);
+            const paramIndex = parts.indexOf("Parameter");
+            if (paramIndex > 0) return parts[paramIndex - 1];
+            return parts[parts.length - 1];
+        }
+
+        locationBack_Subscriber.subscribe(function (msg) {
+            console.log("收到完整路徑:", msg.data);
+            let strategyName = parseStrategyName(msg.data);
+            const displayElement = document.getElementById('current-strategy-name');
+            if (displayElement) displayElement.innerText = strategyName;
+            clearHistoryAction();
+        });
+
+        function strategylocation() {
+            var current_display = document.getElementById('current-strategy-name').innerText;
+            var target_strategy = (current_display === "---" || current_display === "WAITING...") ? "ar" : current_display;
+            location_msg.data = "/home/iclab/ros2_adult/src/strategy/strategy/" + target_strategy + "/Parameter";
+            console.log("連線後保持策略: " + target_strategy + ", 路徑: " + location_msg.data);
+            location_strategy.publish(location_msg);
+        }
+
+        window.addEventListener('DOMContentLoaded', function () {
+            let initialPath = window.currentStrategy || "";
+            let strategyName = parseStrategyName(initialPath);
+            if (strategyName !== "---") {
+                document.getElementById('current-strategy-name').innerText = strategyName;
+            }
+        });
+
+        // --- Undo / Redo ---
+        var undoTopic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/package/Undo',
+            messageType: 'std_msgs/Bool'
+        });
+
+        var redoTopic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/package/Redo',
+            messageType: 'std_msgs/Bool'
+        });
+
+        var clearHistoryTopic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/package/ClearHistory',
+            messageType: 'std_msgs/Bool'
+        });
+
+        var historyStateSub = new ROSLIB.Topic({
+            ros: ros,
+            name: '/package/HistoryState',
+            messageType: 'std_msgs/Int16MultiArray'
+        });
+
+        historyStateSub.subscribe(function(msg) {
+            var hasHistory = msg.data[0] > 0;
+            var hasFuture  = msg.data[1] > 0;
+            document.getElementById('undoButton').disabled = !hasHistory;
+            document.getElementById('redoButton').disabled = !hasFuture;
+            document.getElementById('clearHistoryButton').disabled = !(hasHistory || hasFuture);
+        });
+
+        var undoRedoStatusSub = new ROSLIB.Topic({
+            ros: ros,
+            name: '/package/UndoRedoStatus',
+            messageType: 'std_msgs/String'
+        });
+
+        undoRedoStatusSub.subscribe(function(msg) {
+            document.getElementById('label').innerHTML = msg.data;
+        });
+
+        var historyInfoSub = new ROSLIB.Topic({
+            ros: ros,
+            name: '/package/HistoryInfo',
+            messageType: 'std_msgs/String'
+        });
+
+        historyInfoSub.subscribe(function(msg) {
+            var info = JSON.parse(msg.data);
+            renderHistoryPanel(info.history, info.future);
+        });
+
+        function renderHistoryPanel(history, future) {
+            var html = '';
+            if (history.length === 0 && future.length === 0) {
+                html = '<div class="hp-empty">empty</div>';
+            } else {
+                for (var i = 0; i < history.length; i++) {
+                    var isNextUndo = (i === history.length - 1);
+                    html += '<div class="' + (isNextUndo ? 'hp-item-undo' : 'hp-item') + '">'
+                          + (isNextUndo ? '← ' : '&nbsp;&nbsp;') + history[i] + '</div>';
+                }
+                html += '<div class="hp-now">▶ NOW</div>';
+                for (var j = future.length - 1; j >= 0; j--) {
+                    var isNextRedo = (j === future.length - 1);
+                    html += '<div class="' + (isNextRedo ? 'hp-item-redo' : 'hp-item-future') + '">'
+                          + (isNextRedo ? '→ ' : '&nbsp;&nbsp;') + future[j] + '</div>';
+                }
+            }
+            document.getElementById('history-list').innerHTML = html;
+        }
+
+        function undoAction() {
+            undoTopic.publish(new ROSLIB.Message({ data: true }));
+        }
+
+        function redoAction() {
+            redoTopic.publish(new ROSLIB.Message({ data: true }));
+        }
+
+        function clearHistoryAction() {
+            clearHistoryTopic.publish(new ROSLIB.Message({ data: true }));
+        }
+
+        ros.on('error', function() {
+            document.getElementById('undoButton').disabled = true;
+            document.getElementById('redoButton').disabled = true;
+            document.getElementById('clearHistoryButton').disabled = true;
+            document.getElementById('history-list').innerHTML = '<div class="hp-empty">empty</div>';
+        });
+
+        ros.on('close', function() {
+            document.getElementById('undoButton').disabled = true;
+            document.getElementById('redoButton').disabled = true;
+            document.getElementById('clearHistoryButton').disabled = true;
+            document.getElementById('history-list').innerHTML = '<div class="hp-empty">empty</div>';
         });
     </script>
 </body>

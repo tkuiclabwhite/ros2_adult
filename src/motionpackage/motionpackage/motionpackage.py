@@ -5,13 +5,14 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool, Int16, Int16MultiArray
+from std_msgs.msg import Bool, Int16, Int16MultiArray, String
 
 from tku_msgs.msg import InterfaceSend2Sector, SaveMotion, SingleMotorData
 from tku_msgs.srv import CheckSector, ReadMotion
 from rcl_interfaces.msg import SetParametersResult
 
 import configparser
+import json
 import os
 import time
 import threading
@@ -39,33 +40,126 @@ class MotionNode(Node):
         self.SingleAbsolutePosition_sub = self.create_subscription(SingleMotorData, '/package/SingleAbsolutePosition', self.cb_SingleAbsolutePosition, 10)
 
         # Variables
-        self.current_joints = {} 
+        self.current_joints = {}
         self.joints_lock = threading.Lock()
-        self.web_buffer = [] 
-        self.current_sector_name = "0" 
-        self.saved_sectors = {}        
-        self.id_source_map = {} 
+        self.web_buffer = []
+        self.current_sector_name = "0"
+        self.saved_sectors = {}
+        self.id_source_map = {}
         self.file_save_buffer = {}
-        
-        self.last_goals = {} 
+
+        self.last_goals = {}
 
         # Services
         self.check_sector_srv = self.create_service(CheckSector, '/package/InterfaceCheckSector', self.cb_check_sector)
         self.sector_execute_sub = self.create_subscription(Int16, '/package/Sector', self.cb_sector_execute, qos)
+        self.stand_execute_sub = self.create_subscription(Bool, '/package/StandExecute', self.cb_stand_execute, 10)
         self.read_motion_srv = self.create_service(ReadMotion, '/package/InterfaceReadSaveMotion', self.cb_read_motion)
-        
+
         self.motion_callback_pub = self.create_publisher(Bool, '/package/motioncallback', qos)
         self.execute_callback_pub = self.create_publisher(Bool, '/package/executecallback', qos)
         self.anchor_reset_pub = self.create_publisher(Bool, '/walking_reset_anchor', 10)
         self.get_logger().info("Motion Strategy Node initialized. Waiting for Driver...")
-        
-        home_path = os.path.expanduser("~")
 
+        home_path = os.path.expanduser("~")
         self.stand_dir = os.path.join(home_path, "ros2_adult/src/strategy/strategy/Parameter")
         self.stand_file = os.path.join(self.stand_dir, "stand.ini")
-        
+        self.ini29_file = os.path.join(self.stand_dir, "29.ini")
+
+        # 啟動時先讀 strategy.ini，確保 location_folder 正確，再載入動作檔
+        strategy_ini_path = os.path.join(home_path, "ros2_adult/src/strategy/strategy/strategy.ini")
+        try:
+            if os.path.exists(strategy_ini_path):
+                with open(strategy_ini_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                if "Parameter" in content:
+                    new_loc = content.split('Parameter')[0].replace("/", "").strip()
+                else:
+                    new_loc = content.replace("/", "").strip()
+                if new_loc and new_loc != self.location_folder:
+                    self.get_logger().info(f"[Init] strategy.ini 指定策略: {self.location_folder} -> {new_loc}")
+                    self.location_folder = new_loc
+        except Exception as e:
+            self.get_logger().warn(f"[Init] 讀取 strategy.ini 失敗，使用預設: {e}")
+
         self.load_startup_stand_motion()
         self.load_all_strategy_motions()
+
+        # --- Undo / Redo ---
+        self._undo_speed = 50
+        self._max_history = 20
+        self._history_stack = []   # entries: {'state': {motor_id: pos}, 'label': str}
+        self._future_stack = []
+        self._in_motion_list = False
+        self._executing_sector_id = "?"
+        self._orig_ep_ref  = None
+        self._orig_eml_ref = None
+        self._ml_step_captures = None
+
+        self.history_state_pub = self.create_publisher(Int16MultiArray, '/package/HistoryState', 10)
+        self.undo_status_pub   = self.create_publisher(String, '/package/UndoRedoStatus', 10)
+        self.history_info_pub  = self.create_publisher(String, '/package/HistoryInfo', 10)
+        self.create_subscription(Bool, '/package/Undo', self.cb_undo, 10)
+        self.create_subscription(Bool, '/package/Redo', self.cb_redo, 10)
+        self.create_subscription(Bool, '/package/ClearHistory', self.cb_clear_history, 10)
+
+        # 重建 /package/Sector 訂閱，在執行前記錄 sector 名稱
+        self.destroy_subscription(self.sector_execute_sub)
+        def _track_and_execute(msg):
+            sector_id = str(msg.data)
+            self._executing_sector_id = "Stand" if sector_id == "29" else f"Sector {sector_id}"
+            self.cb_sector_execute(msg)
+        self.sector_execute_sub = self.create_subscription(
+            Int16, '/package/Sector', _track_and_execute, QoSProfile(depth=1000))
+
+        _orig_ep = self.execute_pose
+        self._orig_ep_ref = _orig_ep
+        def _wrapped_ep(data, mode, trigger_callback=True):
+            if not self._in_motion_list:
+                self._push_history(mode=mode, exec_data=list(data))
+                self._future_stack.clear()
+                self._publish_history_state()
+            else:
+                if self._ml_step_captures is not None:
+                    self._ml_step_captures.append({
+                        'opcode':    242 if mode == 'ABSOLUTE' else 243,
+                        'data':      list(data),
+                        'pre_state': dict(self.last_goals),
+                    })
+            _orig_ep(data, mode, trigger_callback)
+            if not self._in_motion_list and self._history_stack:
+                speeds = {i + 1: data[i * 2] for i in range(len(data) // 2)}
+                self._history_stack[-1]['speeds'] = speeds
+        self.execute_pose = _wrapped_ep
+
+        _orig_eml = self.execute_motion_list
+        self._orig_eml_ref = _orig_eml
+        def _wrapped_eml(data):
+            self._push_history(motion_data=data)
+            self._future_stack.clear()
+            self._publish_history_state()
+            self._in_motion_list = True
+            self._ml_step_captures = []
+            _orig_eml(data)
+            captures = list(self._ml_step_captures)
+            self._ml_step_captures = None
+            self._in_motion_list = False
+            undo_steps = []
+            cap_idx = 0
+            for i in range(0, len(data), 2):
+                if i + 1 >= len(data): break
+                sec_id_str = str(data[i])
+                delay_ms   = data[i + 1]
+                if sec_id_str == '0':
+                    continue
+                if sec_id_str in self.saved_sectors and cap_idx < len(captures):
+                    step = captures[cap_idx]
+                    step['delay_ms'] = delay_ms
+                    undo_steps.append(step)
+                    cap_idx += 1
+            if self._history_stack:
+                self._history_stack[-1]['undo_steps'] = undo_steps
+        self.execute_motion_list = _wrapped_eml
 
     # ==========================================================
     # Web Communication
@@ -73,8 +167,7 @@ class MotionNode(Node):
     def web_interface_cb(self, msg):
         self.get_logger().info(f"[DEBUG] 收到網頁數據: {msg.package}")
         if msg.sectorname: self.current_sector_name = msg.sectorname
-        
-        # 使用 extend 展開數據
+
         self.web_buffer.extend(msg.package)
         self.parse_and_process_buffer()
 
@@ -83,12 +176,13 @@ class MotionNode(Node):
             if self.web_buffer[0] != 83 or self.web_buffer[1] != 84:
                 self.web_buffer.pop(0)
                 continue
-            
+
             opcode = self.web_buffer[2]
             expected_len = 0
             if opcode == 246: expected_len = 7
-            elif opcode == 242: expected_len = 59
-            elif opcode == 243: expected_len = 59
+            elif opcode == 241: expected_len = 59  # adult: Absolute (Lockedstand unchecked)
+            elif opcode == 242: expected_len = 59  # adult: Absolute (Lockedstand checked)
+            elif opcode == 243: expected_len = 59  # adult: Relative
             elif opcode == 244: expected_len = 45
             elif opcode == 245: expected_len = 59
             else:
@@ -96,7 +190,7 @@ class MotionNode(Node):
                 self.web_buffer.pop(0)
                 continue
 
-            if len(self.web_buffer) < expected_len: return 
+            if len(self.web_buffer) < expected_len: return
 
             if self.web_buffer[expected_len-2] == 78 and self.web_buffer[expected_len-1] == 69:
                 packet = self.web_buffer[:expected_len]
@@ -114,17 +208,17 @@ class MotionNode(Node):
             msg.data = [motor_id, state]
             self.torque_pub.publish(msg)
 
-        elif opcode in [242, 243, 244]: # Save Sector Data (RAM) & Backup to Sector Folder
+        elif opcode in [241, 242, 243, 244]: # Save Sector Data (RAM) & Backup to Sector Folder
             data_content = list(packet[3:-2])
             sector_id = str(self.current_sector_name)
-            
-            # 1. 更新記憶體 (RAM)
+
+            # 1. 更新記憶體
             self.saved_sectors[sector_id] = {
                 'opcode': opcode,
                 'data': data_content
             }
-            
-            # 2. ★★★ [新增] 自動備份到 sector 資料夾 (Disk) ★★★
+
+            # 2. 自動備份到 sector 資料夾
             self.save_sector_to_disk(sector_id, opcode, data_content)
 
             # 3. 回報網頁
@@ -134,26 +228,13 @@ class MotionNode(Node):
     # 單一 Sector 存檔功能
     # ==========================================================
     def save_sector_to_disk(self, sector_id, opcode, data_list):
-        """
-        將單一 ID 的動作數據儲存到 Disk
-        ★ 修正策略：允許所有類型的存檔，但過濾掉「全 0」的無效數據
-        """
-        
-        # --- [Smart Filter: 內容過濾] ---
-        # 網頁端在 Send 時會自動發送其他 ID 的預設值 (通常全為 0)
-        # 我們檢查：如果這一包數據的位置參數全都是 0，就視為垃圾丟棄
-        
         is_empty_data = False
-        
-        if opcode in [242, 243]: # Relative or Absolute
-            # 資料結構: [Speed, Pos, Speed, Pos...]
-            # 我們只檢查 "Position" (奇數索引: 1, 3, 5...) 是否有數值
-            # 如果所有 Position 都是 0，代表這是「原地不動」的無效指令
+
+        if opcode in [241, 242, 243]: # Absolute or Relative
             positions = data_list[1::2]
             if all(p == 0 for p in positions):
                 is_empty_data = True
-                
-        # MotionList (244) 通常不應該是空的，如果全是 0 也過濾掉
+
         elif opcode == 244:
             if all(v == 0 for v in data_list):
                 is_empty_data = True
@@ -161,46 +242,45 @@ class MotionNode(Node):
         if is_empty_data:
             self.get_logger().info(f"[Sector Save] ID {sector_id} (Opcode {opcode}) 數值全為 0，忽略存檔。")
             return
-        # ---------------------------------------
 
         try:
-            home_path = os.path.expanduser("~")
-            sector_dir = os.path.join(home_path, "ros2_adult/src/strategy/strategy", self.location_folder, "Parameter", "sector")
-            
-            if not os.path.exists(sector_dir):
-                os.makedirs(sector_dir)
-                
-            # 檔名只用 ID
-            file_path = os.path.join(sector_dir, f"{sector_id}.ini")
-            
+            # sector 29 存到公用資料夾（與 stand.ini 同層），其餘存到策略專屬 sector/ 子資料夾
+            if sector_id == "29":
+                file_path = self.ini29_file
+            else:
+                home_path = os.path.expanduser("~")
+                sector_dir = os.path.join(home_path, "ros2_adult/src/strategy/strategy", self.location_folder, "Parameter", "sector")
+                if not os.path.exists(sector_dir):
+                    os.makedirs(sector_dir)
+                file_path = os.path.join(sector_dir, f"{sector_id}.ini")
+
             config = configparser.ConfigParser()
             config['Data'] = {}
             section = config['Data']
-            
+
             section['id'] = str(sector_id)
-            
+
             if opcode == 244: # MotionList
                 section['motionstate'] = '0'
                 section['motionlist'] = ','.join(map(str, data_list))
             elif opcode == 243: # Relative
                 section['motionstate'] = '2'
                 section['motordata'] = ','.join(map(str, data_list))
-            elif opcode == 242: # Absolute
+            elif opcode in [241, 242]: # Absolute
                 section['motionstate'] = '4'
                 section['motordata'] = ','.join(map(str, data_list))
-                
+
             with open(file_path, 'w', encoding='utf-8') as f:
                 config.write(f)
-                
+
             self.get_logger().info(f"[Sector Save] ID {sector_id} 已備份至: {file_path}")
-            
+
         except Exception as e:
             self.get_logger().error(f"[Sector Save] 存檔失敗: {e}")
 
     # ==========================================================
     # Initialization & File Loading
     # ==========================================================
-
     def load_startup_stand_motion(self):
         full_path = self.stand_file
         if not os.path.exists(full_path):
@@ -208,21 +288,31 @@ class MotionNode(Node):
             return
         self.get_logger().info(f"[Init] 載入 Stand: {full_path}")
         self._internal_load_ini(full_path, is_common=True)
-        
+        # 若 29.ini 存在則覆蓋 saved_sectors["29"]（working copy）
+        if os.path.exists(self.ini29_file):
+            self.get_logger().info(f"[Init] 載入 29.ini: {self.ini29_file}")
+            self._internal_load_ini(self.ini29_file, "29.ini", is_common=True)
 
     def load_all_strategy_motions(self):
         home_path = os.path.expanduser("~")
         base_strategy_path = os.path.join(home_path, "ros2_adult/src/strategy/strategy")
-        
+
         path_common = os.path.join(base_strategy_path, "common", "Parameter")
         if os.path.exists(path_common):
             self.get_logger().info(f"[Init] 載入 Common: {path_common}")
             self._load_folder(path_common, is_common=True)
-        
+            path_common_sector = os.path.join(path_common, "sector")
+            if os.path.exists(path_common_sector):
+                self._load_folder(path_common_sector, is_common=True)
+
         path_specific = os.path.join(base_strategy_path, self.location_folder, "Parameter")
         if os.path.exists(path_specific):
             self.get_logger().info(f"[Init] 載入 Specific ({self.location_folder}): {path_specific}")
             self._load_folder(path_specific, is_common=False)
+            path_specific_sector = os.path.join(path_specific, "sector")
+            if os.path.exists(path_specific_sector):
+                self.get_logger().info(f"[Init] 載入 Sector 資料夾: {path_specific_sector}")
+                self._load_folder(path_specific_sector, is_common=False)
 
     def _load_folder(self, folder_path, is_common):
         try:
@@ -248,13 +338,13 @@ class MotionNode(Node):
                     data_array = []
                     if m_state == 0: data_array = parse_list('motionlist')
                     elif m_state in [1, 2, 3, 4]: data_array = parse_list('motordata')
-                    
+
                     if m_id not in temp_load: temp_load[m_id] = {}
                     temp_load[m_id][m_state] = data_array
                 except: pass
-            
+
             self.auto_load_sectors(temp_load, filename, is_common)
-            
+
         except Exception as e:
             self.get_logger().error(f"INI Parse Error ({full_path}): {e}")
 
@@ -262,7 +352,7 @@ class MotionNode(Node):
         for m_id, data_map in temp_load.items():
             sector_name = str(m_id)
             if sector_name in self.saved_sectors:
-                if not is_common: pass 
+                if not is_common: pass
 
             self.id_source_map[sector_name] = source_filename
 
@@ -270,47 +360,54 @@ class MotionNode(Node):
                 pos_list = data_map[3]; spd_list = data_map[4]
                 merged = []; [merged.extend([s,p]) for p,s in zip(pos_list, spd_list)]
                 self.saved_sectors[sector_name] = {'opcode': 242, 'data': merged}
+            elif 4 in data_map:  # sector 檔的 merged absolute 格式 [spd,pos,...]
+                self.saved_sectors[sector_name] = {'opcode': 242, 'data': data_map[4]}
             elif 1 in data_map and 2 in data_map:
                 pos_list = data_map[1]; spd_list = data_map[2]
                 merged = []; [merged.extend([s,p]) for p,s in zip(pos_list, spd_list)]
                 self.saved_sectors[sector_name] = {'opcode': 243, 'data': merged}
+            elif 2 in data_map:  # sector 檔的 merged relative 格式
+                self.saved_sectors[sector_name] = {'opcode': 243, 'data': data_map[2]}
             elif 0 in data_map:
                 self.saved_sectors[sector_name] = {'opcode': 244, 'data': data_map[0]}
-        
+
         self.get_logger().info(f"[AutoLoad] 載入 {len(temp_load)} 個 Sector ({source_filename})")
 
     # ==========================================================
     # Read / Save / Callbacks
     # ==========================================================
     def cb_read_motion(self, request, response):
-        strategy_ini_path = "/home/iclab/ros2_adult/src/strategy/strategy/strategy.ini"
-        
+        home_path = os.path.expanduser("~")
+        strategy_ini_path = os.path.join(home_path, "ros2_adult/src/strategy/strategy/strategy.ini")
+
         try:
             if os.path.exists(strategy_ini_path):
                 with open(strategy_ini_path, 'r', encoding='utf-8') as f:
-                    content = f.read().strip() # 讀取並去除前後空白/換行
-               
+                    content = f.read().strip()
+
                 new_loc = ""
                 if "Parameter" in content:
                     parts = content.split('Parameter')
-                    raw_loc = parts[0] # 拿到 "sp/" 或 "/sp/"
-                    new_loc = raw_loc.replace("/", "").strip() # 去除斜線 -> "sp"
+                    raw_loc = parts[0]
+                    new_loc = raw_loc.replace("/", "").strip()
                 else:
                     new_loc = content.replace("/", "").strip()
 
-                # ★ 執行切換邏輯
                 if new_loc and new_loc != self.location_folder:
-                    self.get_logger().info(f"🔄 [Auto-Switch] 原始內容 '{content}' -> 解析為 '{new_loc}'")
+                    self.get_logger().info(f"🔄 原始內容 '{content}' -> 解析為 '{new_loc}'")
                     self.get_logger().info(f"🔄 偵測到策略變更: {self.location_folder} -> {new_loc}")
-                    
+
                     self.location_folder = new_loc
-                    
-                    # 清空舊記憶體
+
                     with self.joints_lock:
                         self.saved_sectors.clear()
                         self.id_source_map.clear()
-                    
-                    # 重載
+
+                    # 清空歷史（策略切換後歷史無效）
+                    self._history_stack.clear()
+                    self._future_stack.clear()
+                    self._publish_history_state()
+
                     self.load_startup_stand_motion()
                     self.load_all_strategy_motions()
                     self.get_logger().info(f"✅ 已切換至 {self.location_folder} 並完成重載")
@@ -319,13 +416,11 @@ class MotionNode(Node):
             self.get_logger().warn(f"[Check Strategy] 讀取 strategy.ini 失敗: {e}")
 
         filename = request.name
-        read_state = request.readstate 
-        home_path = os.path.expanduser("~")
-        
+        read_state = request.readstate
+
         if read_state == 1:
             base_path = self.stand_dir
         else:
-            # 這裡現在會是正確的 location (例如 sp)
             base_path = os.path.join(home_path, "ros2_adult/src/strategy/strategy", self.location_folder, "Parameter")
 
         full_path = os.path.join(base_path, f"{filename}.ini")
@@ -337,7 +432,7 @@ class MotionNode(Node):
             return response
 
         # 1. 載入到 RAM
-        # self._internal_load_ini(full_path, f"{filename}.ini", is_common=False)
+        self._internal_load_ini(full_path, f"{filename}.ini", is_common=False)
 
         # 2. 回填 Response
         config = configparser.ConfigParser()
@@ -369,7 +464,7 @@ class MotionNode(Node):
                     elif m_state in [1, 2]: response.relativedata.extend(parse_list('motordata'))
                     elif m_state in [3, 4]: response.absolutedata.extend(parse_list('motordata'))
                 except: pass
-            
+
             response.readcheck = True
             self.get_logger().info(f"[Read] 回傳 {response.vectorcnt} 筆數據給網頁")
         except Exception as e:
@@ -390,30 +485,25 @@ class MotionNode(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = []
         msg.position = []
-        msg.velocity = [] # ★ 新增：初始化速度陣列
-        
-        # ★ 修改：解包 (pos, vel)
+        msg.velocity = []
+
         for mid, (pos, vel) in target_joints_dict.items():
             msg.name.append(str(mid))
             msg.position.append(float(pos))
-            msg.velocity.append(float(vel)) # ★ 新增：填入速度
-            
+            msg.velocity.append(float(vel))
+
         self.cmd_pub.publish(msg)
 
     def cb_single_motor(self, msg: SingleMotorData):
         mid = int(msg.id)
-        pos = int(msg.position)  # 這是相對位移量
+        pos = int(msg.position)
         spd = int(msg.speed)
 
-        # --- 修改重點：強制讀取馬達當前的真實位置 ---
-        # 使用 .get(mid, 2048) 確保如果沒讀到數值時有個預設值
         if mid in self.current_joints:
             base_pos = self.current_joints[mid]
         else:
-            # 如果連 current_joints 都沒抓到，才考慮用 last_goals 或預設中立點
             base_pos = self.last_goals.get(mid, 2048)
             self.get_logger().warn(f"[SingleMotor] Motor {mid} no feedback, using last goal/default.")
-        # ---------------------------------------
 
         final_target = base_pos + pos
 
@@ -424,10 +514,8 @@ class MotionNode(Node):
         js.velocity = [float(spd)]
         self.cmd_pub.publish(js)
 
-        # 更新最後目標值，確保其他邏輯同步
         self.last_goals[mid] = final_target
 
-        # 通知 WalkingNode 定錨點已改變
         reset_msg = Bool()
         reset_msg.data = True
         self.anchor_reset_pub.publish(reset_msg)
@@ -436,18 +524,14 @@ class MotionNode(Node):
 
     def cb_SingleAbsolutePosition(self, msg: SingleMotorData):
         mid = int(msg.id)
-        pos = int(msg.position)  # 這是相對位移量
+        pos = int(msg.position)
         spd = int(msg.speed)
 
-        # --- 修改重點：強制讀取馬達當前的真實位置 ---
-        # 使用 .get(mid, 2048) 確保如果沒讀到數值時有個預設值
         if mid in self.current_joints:
             base_pos = self.current_joints[mid]
         else:
-            # 如果連 current_joints 都沒抓到，才考慮用 last_goals 或預設中立點
             base_pos = self.last_goals.get(mid, 2048)
             self.get_logger().warn(f"[SingleMotor] Motor {mid} no feedback, using last goal/default.")
-        # ---------------------------------------
 
         final_target = pos
 
@@ -458,38 +542,37 @@ class MotionNode(Node):
         js.velocity = [float(spd)]
         self.cmd_pub.publish(js)
 
-        # 更新最後目標值，確保其他邏輯同步
         self.last_goals[mid] = final_target
 
-        # 通知 WalkingNode 定錨點已改變
         reset_msg = Bool()
         reset_msg.data = True
         self.anchor_reset_pub.publish(reset_msg)
 
         self.get_logger().info(f"[SingleMotor] ID={mid} Base={base_pos} Target={final_target} (Rel={pos})")
-        
+
     def cb_param_update(self, params):
         for p in params:
             if p.name == "location" and p.type_ == p.Type.STRING:
                 new_location = p.value
-                
-                # 只有當路徑真的改變時才執行重載，避免無意義的消耗
+
                 if new_location != self.location_folder:
-                    self.get_logger().info(f"🔄 收到策略切換指令: {self.location_folder} -> {new_location}")
-                    
-                    # 1. 更新路徑變數
+                    self.get_logger().info(f"收到策略切換指令: {self.location_folder} -> {new_location}")
+
                     self.location_folder = new_location
-                    
-                    # 2. 清空現有記憶體 (重要！避免新舊策略混雜)
-                    with self.joints_lock: # 建議加上鎖，避免讀取時剛好被清空
+
+                    with self.joints_lock:
                         self.saved_sectors.clear()
                         self.id_source_map.clear()
-                    
-                    # 3. 重新載入檔案
+
+                    # 清空歷史（策略切換後歷史無效）
+                    self._history_stack.clear()
+                    self._future_stack.clear()
+                    self._publish_history_state()
+
                     self.get_logger().info("正在重新載入策略檔案...")
-                    self.load_startup_stand_motion() # 重新載入站姿 (通常是通用的)
-                    self.load_all_strategy_motions() # 載入新策略資料夾
-                    
+                    self.load_startup_stand_motion()
+                    self.load_all_strategy_motions()
+
                     self.get_logger().info(f"✅ 策略已切換為: {self.location_folder}")
 
         return SetParametersResult(successful=True)
@@ -501,7 +584,7 @@ class MotionNode(Node):
             self.write_to_ini(filename, msg.savestate)
             self.file_save_buffer[filename] = []
         else:
-            record = {'savestate': msg.savestate, 'motionstate': msg.motionstate, 'id': msg.id, 
+            record = {'savestate': msg.savestate, 'motionstate': msg.motionstate, 'id': msg.id,
                       'item_name': getattr(msg, 'item_name', ''), 'motionlist': list(msg.motionlist), 'motordata': list(msg.motordata)}
             self.file_save_buffer[filename].append(record)
 
@@ -514,15 +597,9 @@ class MotionNode(Node):
 
         if not os.path.exists(base_path): os.makedirs(base_path)
         full_path = os.path.join(base_path, f"{filename}.ini")
-        
-        # =========================================================
-        # ★ 核心修改：建立一個全新的空字典 (database_to_save)
-        # 不再去讀取 os.path.exists(full_path) 的舊檔案
-        # 這樣就能保證檔案內容 = 網頁傳過來的 Buffer 內容
-        # =========================================================
-        database_to_save = {} 
-        
-        # 讀取這次 Buffer 裡面的資料
+
+        database_to_save = {}
+
         if filename in self.file_save_buffer:
             for record in self.file_save_buffer[filename]:
                 data_entry = {
@@ -533,59 +610,86 @@ class MotionNode(Node):
                     'motionlist': ','.join(map(str, record['motionlist'])),
                     'motordata': ','.join(map(str, record['motordata']))
                 }
-                
-                # 我們依然使用 "ID_State" 作為 Key 來暫存
-                # 這可以避免網頁端如果不小心送了兩次重複的資料，這裡會自動過濾剩下一筆
                 key = f"{record['id']}_{record['motionstate']}"
                 database_to_save[key] = data_entry
-            
-        # 準備寫入檔案
+
         new_config = configparser.ConfigParser()
-        
-        # 將整理好的資料依序填入 Config，Section 名稱流水號化 (0, 1, 2...)
-        for idx, key in enumerate(database_to_save): 
+
+        for idx, key in enumerate(database_to_save):
             new_config[str(idx)] = database_to_save[key]
-            
+
         try:
-            with open(full_path, 'w', encoding='utf-8') as f: 
+            with open(full_path, 'w', encoding='utf-8') as f:
                 new_config.write(f)
             self.get_logger().info(f"Saved (Overwrite Mode): {full_path} | 筆數: {len(database_to_save)}")
-        except Exception as e: 
+        except Exception as e:
             self.get_logger().error(f"Save Failed: {e}")
+
+        # SaveStand 同時寫入 29.ini（working copy 與 stand.ini 同步）
+        if savestate == 1:
+            try:
+                with open(self.ini29_file, 'w', encoding='utf-8') as f:
+                    new_config.write(f)
+                self.get_logger().info(f"Saved 29.ini: {self.ini29_file}")
+                self._internal_load_ini(self.ini29_file, "29.ini", is_common=True)
+            except Exception as e:
+                self.get_logger().error(f"29.ini Save Failed: {e}")
 
     def cb_check_sector(self, request, response):
         response.checkflag = str(request.data) in self.saved_sectors
         return response
 
+    # Stand 按鈕專用：直接從 stand.ini 讀取並執行，不修改 saved_sectors
+    def cb_stand_execute(self, msg):
+        self.get_logger().info("[Stand] Executing from stand.ini")
+        self._executing_sector_id = "Stand"
+        self._execute_pose_from_file(self.stand_file)
+
+    def _execute_pose_from_file(self, file_path):
+        config = configparser.ConfigParser()
+        try:
+            config.read(file_path)
+            temp = {}
+            for section in config.sections():
+                try:
+                    m_state = int(config[section]['motionstate'])
+                    m_id = int(config[section]['id'])
+                    def parse_list(key, sec=section):
+                        if key in config[sec] and config[sec][key]:
+                            return [int(x) for x in config[sec][key].split(',')]
+                        return []
+                    if m_id not in temp: temp[m_id] = {}
+                    if m_state in [1, 2, 3, 4]: temp[m_id][m_state] = parse_list('motordata')
+                    elif m_state == 0: temp[m_id][m_state] = parse_list('motionlist')
+                except: pass
+
+            for m_id, data_map in temp.items():
+                if 3 in data_map and 4 in data_map:
+                    pos_list = data_map[3]; spd_list = data_map[4]
+                    merged = []; [merged.extend([s, p]) for p, s in zip(pos_list, spd_list)]
+                    self.execute_pose(merged, "ABSOLUTE")
+                    return
+                elif 4 in data_map:
+                    self.execute_pose(data_map[4], "ABSOLUTE")
+                    return
+            self.get_logger().error(f"[Stand] No valid pose in {file_path}")
+        except Exception as e:
+            self.get_logger().error(f"[Stand] Read error {file_path}: {e}")
+
     def cb_sector_execute(self, msg):
         sector_id = str(msg.data)
 
+        # Execute 29 → 從 29.ini 重新載入（working copy）
         if sector_id == "29":
-            self.get_logger().info(f"[Stand] 直接從硬碟讀取並執行: {self.stand_file}")
-            config = configparser.ConfigParser()
-            try:
-                config.read(self.stand_file)
-                # 假設站姿只會有一組數據，讀取第一個 section
-                for section in config.sections():
-                    opcode = int(config[section]['motionstate'])
-                    data_str = config[section]['motordata']
-                    data_list = [int(x) for x in data_str.split(',')]
-                    
-                    # 將 1/2 (相對) 轉為 243，3/4 (絕對) 轉為 242 傳給 execute_pose
-                    if opcode in [3, 4]:
-                        self.execute_pose(data_list, "ABSOLUTE")
-                    elif opcode in [1, 2]:
-                        self.execute_pose(data_list, "RELATIVE")
-                    break # 讀完第一筆就跳出
-                return
-            except Exception as e:
-                self.get_logger().error(f"[Stand] 硬碟讀取執行失敗: {e}")
-                return
+            if os.path.exists(self.ini29_file):
+                self.get_logger().info(f"[Execute29] Reloading 29.ini: {self.ini29_file}")
+                self._internal_load_ini(self.ini29_file, "29.ini", is_common=True)
+            else:
+                self.get_logger().info("[Execute29] 29.ini not found, using stand.ini fallback in RAM")
 
-        # 下面保持原本執行流程
         if sector_id in self.saved_sectors:
             record = self.saved_sectors[sector_id]
-            if record['opcode'] == 242:
+            if record['opcode'] in [241, 242]:
                 self.execute_pose(record['data'], "ABSOLUTE")
             elif record['opcode'] == 243:
                 self.execute_pose(record['data'], "RELATIVE")
@@ -600,14 +704,14 @@ class MotionNode(Node):
             if i+1 >= len(data): break
             sec_id = str(data[i])
             delay = float(data[i+1])/1000.0
-            
+
             self.get_logger().info(f" -> Step {i//2 + 1}: ID={sec_id}, Delay={data[i+1]}")
 
             if sec_id == '0':
                 self.get_logger().info(" -> 遇到 ID 0，跳過動作")
             elif sec_id in self.saved_sectors:
                 rec = self.saved_sectors[sec_id]
-                self.execute_pose(rec['data'], "ABSOLUTE" if rec['opcode']==242 else "RELATIVE", False)
+                self.execute_pose(rec['data'], "ABSOLUTE" if rec['opcode'] in [241, 242] else "RELATIVE", False)
             else:
                 self.get_logger().warn(f" -> [警告] 找不到 Sector ID: {sec_id}，跳過！")
 
@@ -617,51 +721,169 @@ class MotionNode(Node):
 
     def execute_pose(self, data, mode, trigger_callback=True):
         count = len(data) // 2
-        target_joints = {} # 結構：{id: (pos, vel)}
-        
+        target_joints = {}
+
         for i in range(count):
-            # 提取速度 (偶數索引)
             raw_spd = data[i*2]
-            # 提取位置 (奇數索引)
             raw_val = data[i*2+1]
-            
-            # 處理負數轉換 (16-bit signed)
+
+            # adult: 大刻度馬達數值可到 3 萬多，閾值設高避免誤判為負數
             if raw_val > 1000000: raw_val -= 65536
             mid = i + 1
-            
-            # --- 修改核心邏輯 ---
+
             if mode == "RELATIVE":
-                # 直接讀取當下真實的物理位置
+                # adult: 優先讀真實回授位置
                 if mid in self.current_joints:
                     base_pos = self.current_joints[mid]
                 else:
                     base_pos = self.last_goals.get(mid, 2048)
                     self.get_logger().warn(f"[Execute Pose] Motor {mid} no feedback, using last goal/default.")
-                    
                 final_target = base_pos + raw_val
-            else: 
-                # ABSOLUTE 模式：直接使用目標值
+            else:
                 final_target = raw_val
-            # ------------------
-            
-            # 儲存目標位置與速度
-            target_joints[mid] = (final_target, raw_spd)
-            # 更新最後一次指令目標 (為了之後可能的 Absolute 計算)
-            self.last_goals[mid] = final_target 
 
-        # 發送指令
+            target_joints[mid] = (final_target, raw_spd)
+            self.last_goals[mid] = final_target
+
         self.publish_command(target_joints)
-        
-        # 通知 Walking Node：姿勢已改變，請重設錨點
+
         reset_msg = Bool()
         reset_msg.data = True
         self.anchor_reset_pub.publish(reset_msg)
         self.get_logger().info(f"[Notify] Mode: {mode}, Anchor Reset Flag sent to Walking Node.")
 
-        if trigger_callback: 
+        if trigger_callback:
             msg = Bool()
             msg.data = True
             self.execute_callback_pub.publish(msg)
+
+    # ==========================================================
+    # Undo / Redo
+    # ==========================================================
+    def _push_history(self, motion_data=None, mode=None, exec_data=None):
+        entry = {
+            'state':       dict(self.last_goals),
+            'label':       self._executing_sector_id,
+            'speeds':      {},
+            'type':        'motion_list' if motion_data is not None else 'pose',
+            'motion_data': list(motion_data) if motion_data is not None else None,
+            'exec_mode':   mode,
+            'exec_data':   exec_data,
+            'undo_steps':  None,
+        }
+        self._history_stack.append(entry)
+        if len(self._history_stack) > self._max_history:
+            self._history_stack.pop(0)
+
+    def _undo_motion_list(self, undo_steps):
+        for step in reversed(undo_steps):
+            if step['opcode'] == 243:  # Relative：反向 delta，固定 undo 速度
+                data = step['data']
+                reverse_data = []
+                for i in range(len(data) // 2):
+                    reverse_data.extend([self._undo_speed, -data[i * 2 + 1]])
+                self._orig_ep_ref(reverse_data, 'RELATIVE', False)
+            else:                      # Absolute：還原到該步執行前的刻度
+                self._restore_state(step['pre_state'])
+            time.sleep(max(0.05, step['delay_ms'] / 1000.0))
+
+    def _publish_history_state(self):
+        msg = Int16MultiArray()
+        msg.data = [len(self._history_stack), len(self._future_stack)]
+        self.history_state_pub.publish(msg)
+
+        info = {
+            'history': [e['label'] for e in self._history_stack],
+            'future':  [e['label'] for e in self._future_stack]
+        }
+        info_msg = String()
+        info_msg.data = json.dumps(info)
+        self.history_info_pub.publish(info_msg)
+
+    def cb_undo(self, _msg):
+        if not self._history_stack:
+            self.get_logger().warn("[Undo] History is empty.")
+            return
+        prev_entry = self._history_stack.pop()
+        self._future_stack.append({
+            'state':       dict(self.last_goals),
+            'label':       prev_entry['label'],
+            'speeds':      prev_entry.get('speeds', {}),
+            'type':        prev_entry.get('type', 'pose'),
+            'motion_data': prev_entry.get('motion_data'),
+            'exec_mode':   prev_entry.get('exec_mode'),
+            'exec_data':   prev_entry.get('exec_data'),
+            'undo_steps':  prev_entry.get('undo_steps'),
+        })
+        if prev_entry.get('type') == 'motion_list' and prev_entry.get('undo_steps'):
+            self._undo_motion_list(prev_entry['undo_steps'])
+        elif prev_entry.get('exec_mode') == 'RELATIVE' and prev_entry.get('exec_data'):
+            data = prev_entry['exec_data']
+            reverse_data = []
+            for i in range(len(data) // 2):
+                reverse_data.extend([self._undo_speed, -data[i * 2 + 1]])
+            self._orig_ep_ref(reverse_data, 'RELATIVE', False)
+        else:
+            self._restore_state(prev_entry['state'])
+
+        status = String()
+        status.data = f"↩ Undo: {prev_entry['label']}"
+        self.undo_status_pub.publish(status)
+        self.get_logger().info(f"[Undo] {status.data} | History: {len(self._history_stack)}, Future: {len(self._future_stack)}")
+        self._publish_history_state()
+
+    def cb_redo(self, _msg):
+        if not self._future_stack:
+            self.get_logger().warn("[Redo] Future is empty.")
+            return
+        next_entry = self._future_stack.pop()
+        self._history_stack.append({
+            'state':       dict(self.last_goals),
+            'label':       next_entry['label'],
+            'speeds':      next_entry.get('speeds', {}),
+            'type':        next_entry.get('type', 'pose'),
+            'motion_data': next_entry.get('motion_data'),
+            'exec_mode':   next_entry.get('exec_mode'),
+            'exec_data':   next_entry.get('exec_data'),
+            'undo_steps':  next_entry.get('undo_steps'),
+        })
+        if next_entry.get('type') == 'motion_list' and next_entry.get('motion_data'):
+            self._in_motion_list = True
+            self._orig_eml_ref(next_entry['motion_data'])
+            self._in_motion_list = False
+        elif next_entry.get('exec_data') and next_entry.get('exec_mode'):
+            self._orig_ep_ref(next_entry['exec_data'], next_entry['exec_mode'], False)
+        else:
+            self._restore_state(next_entry['state'], speeds=next_entry.get('speeds'))
+
+        status = String()
+        status.data = f"↪ Redo: {next_entry['label']}"
+        self.undo_status_pub.publish(status)
+        self.get_logger().info(f"[Redo] {status.data} | History: {len(self._history_stack)}, Future: {len(self._future_stack)}")
+        self._publish_history_state()
+
+    def cb_clear_history(self, _msg):
+        self._history_stack.clear()
+        self._future_stack.clear()
+        self._publish_history_state()
+        status = String()
+        status.data = "History cleared !!"
+        self.undo_status_pub.publish(status)
+        self.get_logger().info("[ClearHistory] History and future cleared.")
+
+    def _restore_state(self, snapshot, speeds=None):
+        if not snapshot:
+            self.get_logger().warn("[Restore] Snapshot is empty, nothing to restore.")
+            return
+        if speeds:
+            target_joints = {mid: (pos, speeds.get(mid, self._undo_speed)) for mid, pos in snapshot.items()}
+        else:
+            target_joints = {mid: (pos, self._undo_speed) for mid, pos in snapshot.items()}
+        self.publish_command(target_joints)
+        self.last_goals.update(snapshot)
+        reset_msg = Bool()
+        reset_msg.data = True
+        self.anchor_reset_pub.publish(reset_msg)
 
 def main(args=None):
     rclpy.init(args=args)

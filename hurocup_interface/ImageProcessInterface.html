@@ -53,41 +53,6 @@
 			document.getElementById("orign_image").style.display = 'inline';
 			document.getElementById("color_image").style.display = 'inline';
 			// document.getElementById("filter_image").style.display = 'inline';
-			locationBack_Subscriber.subscribe(function (msg) {
-				console.log("locationBack:", msg.data);
-
-				let loc = msg.data;
-
-				// 如果是 "/ar/Parameter" 這種格式，拆出中間那段 "ar"
-				if (typeof loc === 'string' && loc.startsWith('/')) {
-					const parts = loc.split('/');
-					// parts 可能是 ["", "ar", "Parameter"]
-					if (parts.length > 1 && parts[1].length > 0) {
-						loc = parts[1].trim();
-					}
-				}
-
-				const select = document.getElementById('strategy_location');
-
-				// 確認這個值真的在選單裡才設定，避免設錯
-				const hasOption = Array.from(select.options).some(
-					opt => opt.value.trim() === loc
-				);
-
-				if (hasOption) {
-					select.value = loc;   // ex: "ar"
-					console.log("Set strategy_location to:", loc);
-				} else {
-					console.warn("locationBack value not in select options:", loc);
-				}
-
-				// 下面照原本邏輯
-				changecolorlabel(document.getElementById("colorlabel").value);
-				// changeYUVcolorlabel 有實作才叫，避免沒有定義直接噴錯
-				if (typeof changeYUVcolorlabel === 'function' && document.getElementById("yuv_colorlabel")) {
-					changeYUVcolorlabel(document.getElementById("yuv_colorlabel").value);
-				}
-			});
 
 			checkConnectionInterval = setInterval(checkConnection, 10);
 		});
@@ -113,6 +78,41 @@
 			ros: ros,
 			name: '/locationBack',
 			messageType: 'tku_msgs/msg/Location'
+		});
+		locationBack_Subscriber.subscribe(function (msg) {
+			console.log("locationBack:", msg.data);
+
+			let loc = msg.data;
+
+			// 如果是 "/ar/Parameter" 這種格式，拆出中間那段 "ar"
+			if (typeof loc === 'string' && loc.startsWith('/')) {
+				const parts = loc.split('/');
+				// parts 可能是 ["", "ar", "Parameter"]
+				if (parts.length > 1 && parts[1].length > 0) {
+					loc = parts[1].trim();
+				}
+			}
+
+			const select = document.getElementById('strategy_location');
+
+			// 確認這個值真的在選單裡才設定，避免設錯
+			const hasOption = Array.from(select.options).some(
+				opt => opt.value.trim() === loc
+			);
+
+			if (hasOption) {
+				select.value = loc;   // ex: "ar"
+				console.log("Set strategy_location to:", loc);
+			} else {
+				console.warn("locationBack value not in select options:", loc);
+			}
+
+			// 下面照原本邏輯
+			changecolorlabel(document.getElementById("colorlabel").value);
+			// changeYUVcolorlabel 有實作才叫，避免沒有定義直接噴錯
+			if (typeof changeYUVcolorlabel === 'function' && document.getElementById("yuv_colorlabel")) {
+				changeYUVcolorlabel(document.getElementById("yuv_colorlabel").value);
+			}
 		});
 
 		var ColorModelForm_Topic = new ROSLIB.Topic({
@@ -171,7 +171,8 @@
 			saturation: 0.5,
 			whitebalance: 0.5,
 			autowhitebalance: false,
-			auto_exposure: false
+			auto_exposure: false,
+			zoomin : 1.0
 			// 如果你的 msg 裡有其他欄位記得補齊
 		});
 
@@ -188,6 +189,7 @@
 			whitebalance: 0.5,
 			autowhitebalance: false,
 			auto_exposure: false,
+			zoomin: 1.0
 			// autoBacklightCompensation: false
 		});
 
@@ -267,6 +269,15 @@
 			load: true
 		});
 
+		var ZoomInTopic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/Zoom_In_Topic',
+			messageType: 'tku_msgs/Zoom'
+		});
+		var ZoomInMsg = new ROSLIB.Message({
+			zoomin : 1,
+		});
+
 		//-----
 		var connectFlag = false;
 		var myAddress = "172.17.121.10";
@@ -286,8 +297,10 @@
 		var CamContrastValue = 100;
 		var CamSaturationValue = 50;
 		var CamWhiteBalanceValue = 4000;
+		var ZoomIn = 1;
 		var CamautowhitebalanceValue = false;
 		var Camauto_exposureValue = false;
+		var CamZoomInValue = 1.0;
 
 		function enterAddress() {
 			if (connectFlag) {
@@ -351,6 +364,7 @@
 				console.log("white_balance: ", LoadCameraresult.white_balance);
 				console.log("auto_white_balance: ", LoadCameraresult.auto_white_balance);
 				console.log("auto_exposure: ", LoadCameraresult.auto_exposure);
+				console.log("zoom_in:",LoadCameraresult.zoomin);
 				console.log("LoadCameraresult: ", LoadCameraresult);
 				CamBrightnessValue = LoadCameraresult.brightness;
 				CamContrastValue = LoadCameraresult.contrast;
@@ -358,7 +372,7 @@
 				CamWhiteBalanceValue = LoadCameraresult.white_balance;
 				CamautowhitebalanceValue = LoadCameraresult.auto_white_balance;
 				Camauto_exposureValue = LoadCameraresult.auto_exposure;
-				
+				CamZoomInValue = parseFloat(parseFloat(LoadCameraresult.zoomin).toFixed(1));
 				document.getElementById("CamBrightness").value = CamBrightnessValue;
 				document.getElementById("CamBrightnessValue").value = CamBrightnessValue;
 				document.getElementById("CamContrast").value = CamContrastValue;
@@ -369,13 +383,15 @@
 				document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
 				document.getElementById("AutoWhitBlance").checked = CamautowhitebalanceValue;
 				document.getElementById("auto_exposure").checked = Camauto_exposureValue;
-
+				document.getElementById("ZoomIn").value = CamZoomInValue;
+				document.getElementById("ZoomInValue").value = CamZoomInValue;
 				CameraMsg.brightness = Number(CamBrightnessValue);
 				CameraMsg.contrast = Number(CamContrastValue);
 				CameraMsg.saturation = Number(CamSaturationValue);
 				CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
 				CameraMsg.autowhitebalance = CamautowhitebalanceValue;
 				CameraMsg.auto_exposure = Camauto_exposureValue;
+				SaveCameraMsg.zoomin = Number(CamZoomInValue);
 				Camera.publish(CameraMsg);
 			});
 		}
@@ -407,7 +423,7 @@
 				CamWhiteBalanceValue = LoadCameraresult.white_balance;
 				CamautowhitebalanceValue = LoadCameraresult.auto_white_balance;
 				Camauto_exposureValue = LoadCameraresult.auto_exposure;
-				
+				CamZoomInValue = parseFloat(parseFloat(LoadCameraresult.zoomin).toFixed(1));
 				document.getElementById("CamBrightness").value = CamBrightnessValue;
 				document.getElementById("CamBrightnessValue").value = CamBrightnessValue;
 				document.getElementById("CamContrast").value = CamContrastValue;
@@ -418,13 +434,15 @@
 				document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
 				document.getElementById("AutoWhitBlance").checked = CamautowhitebalanceValue;
 				document.getElementById("auto_exposure").checked = Camauto_exposureValue;
-
+				document.getElementById("ZoomIn").value = CamZoomInValue;
+				document.getElementById("ZoomInValue").value = CamZoomInValue;
 				CameraMsg.brightness = Number(CamBrightnessValue);
 				CameraMsg.contrast = Number(CamContrastValue);
 				CameraMsg.saturation = Number(CamSaturationValue);
 				CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
 				CameraMsg.autowhitebalance = CamautowhitebalanceValue;
 				CameraMsg.auto_exposure = Camauto_exposureValue;
+				CameraMsg.zoomin = CamZoomInValue;
 				Camera.publish(CameraMsg);
 			});
 		}
@@ -525,44 +543,42 @@
 				}
 			});
 		}
-function HeadTorqueSwitch() {
-    // 1. 切換狀態 (Toggle)
-    isHeadTorqueOn = !isHeadTorqueOn;
-    
-    // 轉換成 Python driver 看得懂的數字 (1=On, 0=Off)
-    var state = isHeadTorqueOn ? 1 : 0;
+		function HeadTorqueSwitch() {
+			// 1. 切換狀態 (Toggle)
+			isHeadTorqueOn = !isHeadTorqueOn;
+			
+			// 轉換成 Python driver 看得懂的數字 (1=On, 0=Off)
+			var state = isHeadTorqueOn ? 1 : 0;
 
-    // 2. 準備訊息 (Int16MultiArray 格式)
-    // 【修正重點】：必須加上 layout 欄位，否則 rosbridge 會報錯並拒收
-    var msg_pan = new ROSLIB.Message({
-        layout: {
-            dim: [],
-            data_offset: 0
-        },
-        data: [28, state]
-    });
+			// 2. 準備訊息 (Int16MultiArray 格式: [ID, State])
+			
+			// 針對 ID 22 (水平)
+			var msg_pan = new ROSLIB.Message({
+				data: [28, state]
+			});
 
-    var msg_tilt = new ROSLIB.Message({
-        layout: {
-            dim: [],
-            data_offset: 0
-        },
-        data: [29, state]
-    });
+			// 針對 ID 23 (垂直)
+			var msg_tilt = new ROSLIB.Message({
+				data: [29, state]
+			});
 
-    // 3. 發送指令 (連發兩次，分別給兩顆馬達)
-    Torque_Topic.publish(msg_pan);
-    Torque_Topic.publish(msg_tilt);
+			// 3. 發送指令 (連發兩次，分別給兩顆馬達)
+			Torque_Topic.publish(msg_pan);
+			Torque_Topic.publish(msg_tilt);
 
-    // 4. UI 與 Log 回饋
-    if (isHeadTorqueOn) {
-        console.log("[Head Torque] ON (ID 28, 29)");
-        // document.getElementById("B_ColorModelForm").value = " Torque is ON "; 
-    } else {
-        console.log("[Head Torque] OFF (ID 28, 29)");
-        // document.getElementById("B_ColorModelForm").value = " Torque is OFF ";
-    }
-}
+			// 4. UI 與 Log 回饋
+			if (isHeadTorqueOn) {
+				console.log("[Head Torque] ON (ID 22, 23)");
+				// 如果你有按鈕的文字要改，可以解開下面這行
+				// document.getElementById("你的按鈕ID").value = "Torque OFF"; 
+				// document.getElementById("你的按鈕ID").style.backgroundColor = "green";
+			} else {
+				console.log("[Head Torque] OFF (ID 22, 23)");
+				// 如果你有按鈕的文字要改，可以解開下面這行
+				// document.getElementById("你的按鈕ID").value = "Torque ON";
+				// document.getElementById("你的按鈕ID").style.backgroundColor = "red";
+			}
+		}
 		function CameraSave() {
 			console.log("CameraSave");
 			document.getElementById("CamBrightness").value = CamBrightnessValue;
@@ -575,22 +591,24 @@ function HeadTorqueSwitch() {
 			document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
 			document.getElementById("AutoWhitBlance").checked = CamautowhitebalanceValue;
 			document.getElementById("auto_exposure").checked = Camauto_exposureValue;			
+			document.getElementById("ZoomIn").value = CamZoomInValue;
+			document.getElementById("ZoomInValue").value = CamZoomInValue;
 			SaveCameraMsg.brightness = Number(CamBrightnessValue);
 			SaveCameraMsg.contrast = Number(CamContrastValue);
 			SaveCameraMsg.saturation = Number(CamSaturationValue);
 			SaveCameraMsg.whitebalance = Number(CamWhiteBalanceValue);
 			SaveCameraMsg.autowhitebalance = CamautowhitebalanceValue;
 			SaveCameraMsg.auto_exposure = Camauto_exposureValue;
+			SaveCameraMsg.zoomin = Number(CamZoomInValue);
 			console.log("Publish /Camera_Save:", SaveCameraMsg);
 			SaveCamera.publish(SaveCameraMsg);
 		}
-       function saveAll(){
-           CameraSave();
-           // SaveYUVColorModelFunction();
-           SaveColorModelFunction();
-           // opencvSave();
-       }
-
+		function saveAll(){
+			CameraSave();
+			// SaveYUVColorModelFunction();
+			SaveColorModelFunction();
+			// opencvSave();
+		}
 		
 		function changebuild(newValue) {
 			console.log(newValue)
@@ -871,6 +889,26 @@ function HeadTorqueSwitch() {
 			CameraMsg.auto_exposure = Camauto_exposureValue;
 			Camera.publish(CameraMsg);
 		}
+
+		function showZoomIn(newValue) {
+			document.getElementById("ZoomInValue").value = newValue;
+			ZoomIn = newValue;
+			// ★ 限制到小數點後 1 位
+			CamZoomInValue = parseFloat(parseFloat(newValue).toFixed(1)); 
+			
+			ZoomInMsg.zoomin = Number(CamZoomInValue);
+			ZoomInTopic.publish(ZoomInMsg);
+		}
+
+		function rangeZoomIn(newValue) {
+			document.getElementById("ZoomIn").value = newValue;
+			ZoomIn = newValue;
+			// ★ 限制到小數點後 1 位[cite: 7]
+			CamZoomInValue = parseFloat(parseFloat(newValue).toFixed(1)); 
+			
+			ZoomInMsg.zoomin = Number(CamZoomInValue);
+			ZoomInTopic.publish(ZoomInMsg);
+		}
 		function changeAutoWhitBlance() {
 			if (document.getElementById("AutoWhitBlance").checked) {
 				CamautowhitebalanceValue = true;
@@ -998,7 +1036,7 @@ function HeadTorqueSwitch() {
 			background-color: #333;
 			border: 2px black solid;
 			width: 850px;
-			height: 710px;
+			height: 730px;
 			margin: 20px auto;
 			overflow: visible;
 			color: white;
@@ -1132,6 +1170,7 @@ function HeadTorqueSwitch() {
         <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
         <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
 		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
+		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
         <li><a target="_blank" class="navbarright" href="PIDcontroll.html">PIDcontroll</a></li>
 		<li class="logo">
 			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
@@ -1167,8 +1206,7 @@ function HeadTorqueSwitch() {
 							<option value="wl">wl</option>
 							<option value="sr">sr</option>
 							<option value="sp">sp</option>
-							<option value="bm">bm</option>
-							<option value="lc">lc</option>
+							<option value="pk">pk</option>
 						</select>
 					</td>
 					<td>
@@ -1354,7 +1392,7 @@ function HeadTorqueSwitch() {
 						</tr>
 						<tr>
 							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="VerticalPositionValue" size="12" value="2048" onchange="rangeVerticalPosition(this.value)" /></td>
-							<td><input class="Range" id="VerticalPositionRange" name="VerticalPositionRange" type="range" min="1400" max="2900"
+							<td><input class="Range" id="VerticalPositionRange" name="VerticalPositionRange" type="range" min="1023" max="2548"
 								 value="2048" oninput="showVerticalPosition(this.value)" /></td>
 							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="VerticalSpeedValue" size="12" value="1" onchange="rangeVerticalSpeed(this.value)" /></td>
 						</tr>
@@ -1414,6 +1452,24 @@ function HeadTorqueSwitch() {
 							<td><input class="Range" id="CamWhiteBalance" name="CamWhiteBalance" type="range" min="0" max="8000" value="4000"
 								 oninput="showCamWhiteBalance(this.value)" /></td>
 							<td><input type="text" class="ValueText" id="CamWhiteBalanceValue" size="12" value="4000" onchange="rangeCamWhiteBalanceValue(this.value)" /></td>
+						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text">Zoom_in:</p>
+							</td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td>
+							<input class="Range" id="ZoomIn" name="ZoomIn" type="range"
+									min="1" max="5" step="0.1" value="1"
+									oninput="showZoomIn(this.value)" />
+							</td>
+							<td>
+							<input type="text" class="ValueText" id="ZoomInValue" size="12"
+									min="1" max="5" step="0.1" value="1"
+									onchange="rangeZoomIn(this.value)" />
+							</td>
 						</tr>
 					</table>
 				</div>

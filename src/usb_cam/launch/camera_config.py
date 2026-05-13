@@ -1,42 +1,22 @@
-# Copyright 2023 usb_cam Authors
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-#    * Redistributions of source code must retain the above copyright
-#      notice, this list of conditions and the following disclaimer.
-#
-#    * Redistributions in binary form must reproduce the above copyright
-#      notice, this list of conditions and the following disclaimer in the
-#      documentation and/or other materials provided with the distribution.
-#
-#    * Neither the name of the usb_cam Authors nor the names of its
-#      contributors may be used to endorse or promote products derived from
-#      this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
-
-
+"""啟動設定資料模型：定義 CameraConfig 並自動產生 topic 重映射。"""
 from pathlib import Path
 from typing import List, Optional
 
 from ament_index_python.packages import get_package_share_directory
 from pydantic import BaseModel, root_validator, validator
 
+# usb_cam 自己的 share 目錄；params_1.yaml 等都安裝在這裡
 USB_CAM_DIR = get_package_share_directory('usb_cam')
 
 
 class CameraConfig(BaseModel):
+    """單一相機的啟動設定。
+
+    name        節點名稱，會被自動拿去組 remap（image_raw → <name>/image_raw 等）
+    param_path  ROS2 參數檔（YAML）路徑
+    remappings  topic 重映射；若沒指定會由 root_validator 自動生成
+    namespace   節點 namespace；通常留空
+    """
     name: str = 'camera1'
     param_path: Path = Path(USB_CAM_DIR, 'config', 'params_1.yaml')
     remappings: Optional[List]
@@ -44,6 +24,7 @@ class CameraConfig(BaseModel):
 
     @validator('param_path')
     def validate_param_path(cls, value):
+        # 嚴格檢查檔案存在，避免 launch 起來才報錯
         if value and not value.exists():
             raise FileNotFoundError(f'Could not find parameter file: {value}')
         return value
@@ -53,12 +34,9 @@ class CameraConfig(BaseModel):
         name = values.get('name')
         remappings = values.get('remappings')
         if name and not remappings:
-            # Automatically set remappings if name is set
             remappings = [
                 ('image_raw', f'{name}/image_raw'),
                 ('image_raw/compressed', f'{name}/image_compressed'),
-                ('image_raw/compressedDepth', f'{name}/compressedDepth'),
-                ('image_raw/theora', f'{name}/image_raw/theora'),
                 ('camera_info', f'{name}/camera_info'),
             ]
         values['remappings'] = remappings

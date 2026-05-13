@@ -627,7 +627,7 @@ function CheckSum()
   	{
       if (document.getElementById('MotionTable').getElementsByTagName('div')[i].getElementsByClassName('textbox')[0].value == ID) 
       {
-        var Sum = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        var Sum = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         for (var j = 1; j <= (20 * 2); j += 2) 
         {
           if (Number(document.getElementById('MotionTable').getElementsByTagName('div')[i+1].getElementsByClassName('textbox')[j].value)) 
@@ -637,15 +637,15 @@ function CheckSum()
 			        Number(Number(document.getElementById('RelativePositionTable').getElementsByTagName('div')[k].getElementsByClassName('textbox')[0].value));
               if (Number(document.getElementById('MotionTable').getElementsByTagName('div')[i+1].getElementsByClassName('textbox')[j].value) == Number(document.getElementById('RelativePositionTable').getElementsByTagName('div')[k].getElementsByClassName('textbox')[0].value)) 
               {
-                for (var l = 1; l <= 25; l++) 
+                for (var l = 1; l <= 27; l++)
                 {
                   Sum[l-1] += (Number(document.getElementById('RelativePositionTable').getElementsByTagName('div')[k+1].getElementsByClassName('textbox')[l].value));
 				        }
 			        }
 			      }
 		      }
-		    }     
-        for (var j = 1; j <= 25; j++) 
+		    }
+        for (var j = 1; j <= 27; j++)
         {
             document.getElementById("CheckSumBox").getElementsByTagName("div")[j-1].innerHTML = "";
             document.getElementById("CheckSumBox").getElementsByTagName("div")[j-1].innerHTML = "M" + j + ": " + Sum[j-1];
@@ -659,9 +659,9 @@ function CheckSum()
   {
     for (var i = 0; i < document.getElementById('RelativePositionTable').getElementsByTagName('div').length; i += 2) 
     {
-      if (document.getElementById('RelativePositionTable').getElementsByTagName('div')[i].getElementsByClassName('textbox')[0].value == ID) 
+      if (document.getElementById('RelativePositionTable').getElementsByTagName('div')[i].getElementsByClassName('textbox')[0].value == ID)
       {
-        for (var j = 1; j <= 25; j++) 
+        for (var j = 1; j <= 27; j++)
         {
           document.getElementById("CheckSumBox").getElementsByTagName("div")[j-1].innerHTML = "";
           document.getElementById("CheckSumBox").getElementsByTagName("div")[j-1].innerHTML = "M" + j + ": " + (Number(document.getElementById('RelativePositionTable').getElementsByTagName('div')[i+1].getElementsByClassName('textbox')[j].value));
@@ -675,9 +675,9 @@ function CheckSum()
   {
     for (var i = 0; i < document.getElementById('AbsolutePositionTable').getElementsByTagName('div').length; i += 2) 
     {
-      if (document.getElementById('AbsolutePositionTable').getElementsByTagName('div')[i].getElementsByClassName('textbox')[0].value == ID) 
+      if (document.getElementById('AbsolutePositionTable').getElementsByTagName('div')[i].getElementsByClassName('textbox')[0].value == ID)
       {
-        for (var j = 1; j <= 25; j++) 
+        for (var j = 1; j <= 27; j++)
         {
           document.getElementById("CheckSumBox").getElementsByTagName("div")[j-1].innerHTML = "";
           document.getElementById("CheckSumBox").getElementsByTagName("div")[j-1].innerHTML = "M" + j + ": " + (Number(document.getElementById('AbsolutePositionTable').getElementsByTagName('div')[i+1].getElementsByClassName('textbox')[j].value));
@@ -695,6 +695,33 @@ function CheckSum()
   {
     document.getElementById('label').innerHTML = "CheckSum is fail !! No this ID !!";
   }
+}
+
+// 建立一個物件來儲存馬達狀態，預設全為 0 (關閉)
+let motorTorqueStates = {};
+for (let i = 1; i <= 27; i++) {
+    motorTorqueStates[i] = 0;
+}
+
+/**
+ * 直接切換指定 ID 的扭力狀態
+ * @param {number} id 馬達編號
+ */
+function toggleTorqueAtPosition(id) {
+    motorTorqueStates[id] = motorTorqueStates[id] === 0 ? 1 : 0;
+    let newState = motorTorqueStates[id];
+
+    const btn = document.getElementById(`pos-btn-${id}`);
+    if (btn) {
+        if (newState === 1) {
+            btn.classList.add('torque-on');
+        } else {
+            btn.classList.remove('torque-on');
+        }
+    }
+
+    document.getElementById("single_motor_id").value = id;
+    SetSingleTorque(newState);
 }
 
 function MotionList(mode)

@@ -4,3 +4,4 @@ float32 saturation
 float32 whitebalance
 bool autowhitebalance
 bool auto_exposure 
+float32 zoomin

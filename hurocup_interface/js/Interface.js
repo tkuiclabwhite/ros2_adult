@@ -78,6 +78,12 @@ var SendSectorPackage = new ROSLIB.Message({
   data : 0
 });
 
+var StandExecuteTopic = new ROSLIB.Topic({
+  ros: ros,
+  name: '/package/StandExecute',
+  messageType: 'std_msgs/Bool'
+});
+
 var InterfaceSaveMotionData = new ROSLIB.Topic({
   ros: ros,
   name: '/package/InterfaceSaveMotion',
@@ -230,16 +236,25 @@ function createTopics()
   });
 }
 
-function enterAddress() 
-{
-  if(connectFlag)
-  {
+function enterAddress() {
+  if (connectFlag) {
     ros.close();
     connectFlag = false;
   }
+
+  console.log("connect is", connectFlag);
   myAddress = document.getElementById("addressSelect").value;
   console.log("Connecting address is", myAddress);
-  ros.connect("ws://" + myAddress + ":9090");
+
+  const state = ros.socket ? ros.socket.readyState : WebSocket.CLOSED;
+  if (state === WebSocket.OPEN || state === WebSocket.CONNECTING || state === WebSocket.CLOSING) {
+    ros.close();
+    console.log("state is", state);
+    ros.once('close', () => ros.connect("ws://" + myAddress + ":9090"));
+  } else {
+    ros.connect("ws://" + myAddress + ":9090");
+  }
+  strategylocation();
 }
 
 var location_strategy = new ROSLIB.Topic({
@@ -762,6 +777,10 @@ function Read()
 }
 
 function SaveStand() {
+  if (document.getElementById('Lockedstand').checked) {
+    alert("Locked Stand is enabled. Uncheck Locked Stand to save.");
+    return;
+  }
   // [修改] 強制檔名為 "stand"，無視輸入框的內容
   const fileName = "stand";
 
@@ -865,6 +884,10 @@ function SaveStand() {
 
 function ReadStand()
 {
+  if (document.getElementById('Lockedstand').checked) {
+    alert("Locked Stand is enabled. Uncheck Locked Stand to read.");
+    return;
+  }
   console.log("ReadStand (Force 'stand')");
   var LoadParameterClient = new ROSLIB.Service({
     ros : ros,
@@ -1297,14 +1320,10 @@ function execute()
 
 function stand()
 {
-  console.log("aaaaaaaaaaaaaaaaaaaaaaaaa")
-  doStandFlag = true;
   document.getElementById('label').innerHTML = "";
   document.getElementById('standButton').disabled = true;
-  
-  console.log(doStandFlag)
-
-  CheckSector(29);
+  standSubscribeFlag = true;
+  StandExecuteTopic.publish(new ROSLIB.Message({ data: true }));
 }
 
 
@@ -1642,23 +1661,32 @@ var isTorqueOn = false;
 
 function TorqueSwitch() {
   document.getElementById('label').innerHTML = "Switching Torque (1~27)...";
-  
-  // 定義狀態 (這裡簡化邏輯，請依你原本的全域變數管理)
-  var targetState = isTorqueOn ? 0 : 1; // 0:關, 1:開
-  if (isTorqueOn == false) { targetState = 1; }
+
+  var targetState = isTorqueOn ? 0 : 1;
 
   console.log("執行扭力切換: " + (targetState == 1 ? "ON" : "OFF"));
   var fullPackage = [83, 84, 246, 0, targetState, 78, 69];
-  SendPackage.package = fullPackage; 
+  SendPackage.package = fullPackage;
   interface.publish(SendPackage);
-  
+
   console.log("已發送全體扭力指令 (ID=0)");
 
-  // 更新狀態 UI
   isTorqueOn = !isTorqueOn;
   var statusText = isTorqueOn ? "Torque is ON" : "Torque is OFF";
   document.getElementById('label').innerHTML = statusText;
   console.log(statusText);
+
+  for (let i = 1; i <= 29; i++) {
+    motorTorqueStates[i] = targetState;
+    const btn = document.getElementById(`pos-btn-${i}`);
+    if (btn) {
+      if (targetState === 1) {
+        btn.classList.add('torque-on');
+      } else {
+        btn.classList.remove('torque-on');
+      }
+    }
+  }
 }
 
 
@@ -1740,25 +1768,36 @@ function Torque_Choose(partName, buttonID) {
     const targetButton = document.getElementById(buttonID);
     if (!targetButton) return;
 
-    // 判斷目前狀態：如果沒有 active 類別，代表現在要「開啟調整」
     const isEnteringAdjustMode = !targetButton.classList.contains('button_active');
 
+    let targetState = 0;
+
     if (isEnteringAdjustMode) {
-        // --- 進入調整模式 ---
         targetButton.classList.add('button_active');
-        activeParts[partName] = true;  // 【動作 1】允許這個部位更新刻度到畫面上
-        SetGroupTorque(partName, 0);   // 【動作 2】關閉馬達扭力 (讓馬達變軟可以扳動)
-        
-        // UI 視覺反饋 (選配)
-        updateTableUI(partName, true);
+        activeParts[partName] = true;
+        SetGroupTorque(partName, 0);
+        targetState = 0;
     } else {
-        // --- 退出調整模式 ---
         targetButton.classList.remove('button_active');
-        activeParts[partName] = false; // 【動作 1】停止更新該部位刻度
-        SetGroupTorque(partName, 1);   // 【動作 2】開啟馬達扭力 (鎖死馬達)
-        
-        // UI 視覺反饋 (選配)
-        updateTableUI(partName, false);
+        activeParts[partName] = false;
+        SetGroupTorque(partName, 1);
+        targetState = 1;
+    }
+
+    const motors = robotConfig[partName];
+    if (motors) {
+        motors.forEach(motor => {
+            const id = motor.id;
+            motorTorqueStates[id] = targetState;
+            const btn = document.getElementById(`pos-btn-${id}`);
+            if (btn) {
+                if (targetState === 1) {
+                    btn.classList.add('torque-on');
+                } else {
+                    btn.classList.remove('torque-on');
+                }
+            }
+        });
     }
 }
 // =================================================================
@@ -1773,29 +1812,35 @@ function SetSingleTorque(state) {
         return;
     }
 
-    // --- 發送 ROS 封包 ---
     var dataPackage = [83, 84, 246, motorID, state, 78, 69];
     if (typeof SendPackage !== 'undefined' && typeof interface !== 'undefined') {
         SendPackage.sectorname = String(motorID);
         SendPackage.package = dataPackage;
         interface.publish(SendPackage);
-        
-        // --- UI 視覺反饋邏輯 ---
+
         const btnOn = document.getElementById('btn_single_on');
         const btnOff = document.getElementById('btn_single_off');
 
         if (state === 1) {
-            // 按下開啟：ON 亮起，OFF 熄滅
             btnOn.classList.add('active');
             btnOff.classList.remove('active');
         } else {
-            // 按下關閉：OFF 亮起，ON 熄滅
             btnOff.classList.add('active');
             btnOn.classList.remove('active');
         }
 
         const stateText = state === 1 ? "ON (鎖死)" : "OFF (洩力)";
         document.getElementById('label').innerHTML = `Motor ID: ${motorID} Torque is ${stateText}`;
+
+        motorTorqueStates[motorID] = state;
+        const posBtn = document.getElementById(`pos-btn-${motorID}`);
+        if (posBtn) {
+            if (state === 1) {
+                posBtn.classList.add('torque-on');
+            } else {
+                posBtn.classList.remove('torque-on');
+            }
+        }
     }
 }
 function SetGroupTorque(partName, state) {
