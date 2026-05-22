@@ -1019,7 +1019,29 @@
 			CameraId_msg.data = Number(document.getElementById("Camera_Select").value);
 			CameraId_Topic.publish(CameraId_msg);
 		}
+// ==== 定義控制 is_start 的 Topic (對應 API.py 的 /package/dioarray) ====
+		var Dio_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/package/dioarray',
+			messageType: 'tku_msgs/msg/Dio'
+		});
 
+		var Dio_msg = new ROSLIB.Message({
+			strategy: false, // 這個欄位就是對應到 python 的 msg.strategy
+			data: 0
+		});
+
+		// ==== 控制 is_start 變數的 Start / Stop 功能 ====
+		function sendIsStartSignal(is_start_flag) {
+			Dio_msg.strategy = is_start_flag;
+			Dio_Topic.publish(Dio_msg);
+			
+			if(is_start_flag) {
+				console.log("模擬實體開關開啟，發送 START (True) 至 /package/dioarray");
+			} else {
+				console.log("模擬實體開關關閉，發送 STOP (False) 至 /package/dioarray");
+			}
+		}
 	</script>
 	<style type="text/css">
 		body {
@@ -1217,6 +1239,12 @@
 					</td>
 				</tr>
 			</table>
+			<td>
+				<button type="button" style="width:60px ;height:25px;margin-top: 15px; margin-left: 5px; background-color: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;" onclick="sendIsStartSignal(true)">Start</button>
+			</td>
+			<td>
+				<button type="button" style="width:60px ;height:25px;margin-left: 15px; margin-left: 5px; background-color: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;" onclick="sendIsStartSignal(false)">Stop</button>
+			</td>
 		</div>
 		<div id="container" align="center">
 			<!-- <div id="div_orign_image"> -->

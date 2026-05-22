@@ -450,7 +450,60 @@ function executeDRC(motion)
     console.log("3")
     sleep(100)
   }
-  
+  else if(motion == "motion4")
+  {
+    CheckSectorDRC(Number(document.getElementById('Sector4').value));
+    console.log("4")
+    sleep(100)
+  }
+  else if(motion == "motion5")
+  {
+    CheckSectorDRC(Number(document.getElementById('Sector5').value));
+    console.log("5")
+    sleep(100)
+  }
+  else if(motion == "motion6")
+  {
+    CheckSectorDRC(Number(document.getElementById('Sector6').value));
+    console.log("6")
+    sleep(100)
+  }  
+  else if(motion == "motion7")
+  {
+    CheckSectorDRC(Number(document.getElementById('Sector7').value));
+    console.log("7")
+    sleep(100)
+  }  
+  else if(motion == "motion8")
+  {
+    CheckSectorDRC(Number(document.getElementById('Sector8').value));
+    console.log("8")
+    sleep(100)
+  }  
+  else if(motion == "motion9")
+  {
+    CheckSectorDRC(Number(document.getElementById('Sector9').value));
+    console.log("9")
+    sleep(100)
+  }
+  else if(motion == "motion10")
+  {
+    CheckSectorDRC(Number(document.getElementById('Sector10').value));
+    console.log("10")
+    sleep(100)
+  }
+  else if(motion == "motion11")
+  {
+    CheckSectorDRC(Number(document.getElementById('Sector11').value));
+    console.log("11")
+    sleep(100)
+  }
+  else if(motion == "notice")
+  {
+    CheckSectorDRC(Number(document.getElementById('notice').value));
+    console.log("notice")
+    sleep(100)
+  }  
 }
 
 function CheckSector(sectordata)

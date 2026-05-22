@@ -47,6 +47,10 @@ setup(
             'haha = strategy.mar.haha3:main',
             'tag = strategy.sp.apriltag_node:main',
             'mp = strategy.obs.mp:main',
+            'snap = strategy.obs.snap:main',
+            'pk     = strategy.pk.pk:main',
+            'pk_atk = strategy.pk.pk_atk:main',
+            'pk_def = strategy.pk.pk_def:main',
             ],
     },
 )

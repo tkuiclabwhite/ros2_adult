@@ -22,14 +22,14 @@ STAND_GP: Dict[int, int] = {
 
 
 DIR: Dict[int, int] = {
-    16: -1,   # L_HIP_YAW
+    16:  1,   # L_HIP_YAW
     17: -1 ,  # L_HIP_ROLL
     18:  1,   # L_HIP_PITCH
     19: -1,   # L_KNEE
     20:  1,   # L_ANKLE_PITCH
     21:  1,   # L_ANKLE_ROLL
 
-    22:  1,   # R_HIP_YAW
+    22: -1,   # R_HIP_YAW
     23: -1,   # R_HIP_ROLL
     24:  1,   # R_HIP_PITCH
     25:  1,   # R_KNEE

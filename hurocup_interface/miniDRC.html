@@ -46,6 +46,7 @@
 		window.addEventListener('online', checkConnection);
 		window.addEventListener('offline', checkConnection);
 
+		var locationBack_Subscriber = null;
 		ros.on('connection', function () {
 			console.log('Connection made!');
 			connectFlag = true;
@@ -54,6 +55,20 @@
 			document.getElementById("orign_image").style.display = 'inline';
 			// document.getElementById("color_image").style.display = 'inline';
 			checkConnectionInterval = setInterval(checkConnection, 1000);
+			strategylocation();
+			if (locationBack_Subscriber) locationBack_Subscriber.unsubscribe();
+			locationBack_Subscriber = new ROSLIB.Topic({
+				ros: ros,
+				name: '/locationBack',
+				messageType: 'tku_msgs/msg/Location'
+			});
+			locationBack_Subscriber.subscribe(function (msg) {
+				console.log("locationBack:", msg.data);
+				var parts = (msg.data || "").split('/').filter(function(p){ return p.length > 0; });
+				var paramIndex = parts.indexOf("Parameter");
+				var name = (paramIndex > 0) ? parts[paramIndex - 1] : (parts[parts.length - 1] || "---");
+				document.getElementById('current-strategy-name').innerText = name;
+			});
 		});
 		ros.on('error', function (error) {
 			console.log('Error connecting to websocket server: ', error);
@@ -202,8 +217,29 @@
 			name: '/web/LoadWalkingGaitParameter',
 			serviceType: 'tku_msgs/WalkingGaitParameter'
 		});
+		var LoadLCWalkingGaitParameterClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/web/LoadLCWalkingGaitParameter',
+			serviceType: 'tku_msgs/LCWalkingGaitParameter'
+		});
 		var WalkingGaitParameter_request = new ROSLIB.ServiceRequest({
 			mode: 0
+		});
+		var web_lc_parameter_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/web/lc_parameter_Topic',
+			messageType: 'tku_msgs/LCParameter'
+		});
+		var Send_parameter = new ROSLIB.Topic({
+			ros: ros,
+			name: '/Send_parameter',
+			messageType: 'std_msgs/Bool'
+		});
+		var Send_parameter_msg = new ROSLIB.Message({ data: false });
+		var walkingParamsUpdateTopic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/walking_params_update',
+			messageType: 'std_msgs/String'
 		});
 
 		var ColorModelForm_Topic = new ROSLIB.Topic({
@@ -254,6 +290,13 @@
 			auto_exposure: false,
 			auto_Backlight_Compensation: false
 		});
+
+		var ZoomInTopic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/Zoom_In_Topic',
+			messageType: 'tku_msgs/Zoom'
+		});
+		var ZoomInMsg = new ROSLIB.Message({ zoomin: 1 });
 
 		var WebStart_Topic = new ROSLIB.Topic({
 			ros: ros,
@@ -319,7 +362,7 @@
 			serviceType: 'tku_msgs/CameraInfo'
 		});
 		var LoadCamerareqrest = new ROSLIB.ServiceRequest({
-			Load: true
+			load: true
 		});
 
 		//-----
@@ -388,6 +431,7 @@
 		var B_ColorModelForm_Flag = true;
 		var B_SetupCamera_Flag = true;
 		var B_Start_Flag = true;
+		var B_Walking_Flag = true;
 
 		var Hmin = 0;
 		var Hmax = 360;
@@ -402,6 +446,8 @@
 		var CamWhiteBalanceValue = 0;
 		var CamAuto_WhiteBalanceValue = false;
 		var CamAuto_ExposureValue = false;
+		var CamZoomInValue = 1;
+		var ZoomIn = 1;
 
 		function SendSensorSet()
 		{
@@ -441,111 +487,116 @@
 
 		}
 		
+		function showWalkingSection(section) {
+			document.getElementById("walking-section-c").style.display = section === "c" ? "" : "none";
+			document.getElementById("walking-section-lu").style.display = section === "lu" ? "" : "none";
+			document.getElementById("walking-section-ld").style.display = section === "ld" ? "" : "none";
+		}
+
 		function ContinuousFun() {
-			document.getElementById("Xvalue").value = 0;
+			Xvaluetmp = 0;
+			Yvaluetmp = 0;
+			Thetavaluetmp = 0;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
 			statetype = 1;
+			showWalkingSection("c");
 			Load();
 		}
+
 		function LC_upFun() {
-			document.getElementById("Xvalue").value = 16000;
+			Xvaluetmp = 20000;
+			Yvaluetmp = 0;
+			Thetavaluetmp = 0;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
 			statetype = 2;
+			showWalkingSection("lu");
 			Load();
 		}
+
 		function LC_downFun() {
-			document.getElementById("Xvalue").value = 16000;
+			Xvaluetmp = 19000;
+			Yvaluetmp = 0;
+			Thetavaluetmp = 0;
+			document.getElementById("Xvalue").value = Xvaluetmp;
+			document.getElementById("Yvalue").value = Yvaluetmp;
+			document.getElementById("Thetavalue").value = Thetavaluetmp;
 			statetype = 3;
+			showWalkingSection("ld");
 			Load();
 		}
 
 		function Load() {
-			if (document.getElementById("Continuousback").checked) {
-				Continuousback_msg.data = true;
-				console.log("checked");
-			}
-			else {
-				Continuousback_msg.data = false;
-				console.log("unchecked");
-			}
+			var cbEl = document.getElementById("Continuousback");
+			Continuousback_msg.data = (cbEl && cbEl.checked);
 			Continuousback_Topic.publish(Continuousback_msg);
 			console.log('statetype = ', statetype);
-			WalkingGaitParameter_request.mode = Number(statetype);
-			LoadWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (walkinggait_parameter) {
-				X_Swing_Range_tmp = walkinggait_parameter.X_Swing_Range;
-				Y_Swing_Range_tmp = walkinggait_parameter.Y_Swing_Range;
-				Z_Swing_Range_tmp = walkinggait_parameter.Z_Swing_Range;
-				Period_T_tmp = walkinggait_parameter.Period_T;
-				Period_T2_tmp = walkinggait_parameter.Period_T2;
-				Sample_Time_tmp = walkinggait_parameter.Sample_Time;
-				OSC_LockRange_tmp = walkinggait_parameter.OSC_LockRange;
-				// Balance_tmp = walkinggait_parameter.Stand_Balance;
-				T_DSP_tmp = walkinggait_parameter.OSC_LockRange;
-				BASE_Default_Z_tmp = walkinggait_parameter.BASE_Default_Z;
-				Y_Swing_Shift_tmp = walkinggait_parameter.Y_Swing_Shift;
-				X_Swing_COM_tmp = walkinggait_parameter.X_Swing_COM;
-				BASE_LIFT_Z_tmp = walkinggait_parameter.BASE_LIFT_Z;
-				Kick_Point_X_temp = walkinggait_parameter.B_SplineParam.Kick_Point_X;
-				Kick_Point_Y_temp = walkinggait_parameter.B_SplineParam.Kick_Point_Y;
-				Kick_Point_Z_temp = walkinggait_parameter.B_SplineParam.Kick_Point_Z;
-				Back_Point_X_temp = walkinggait_parameter.B_SplineParam.Back_Point_X;
-				Back_Point_Z_temp = walkinggait_parameter.B_SplineParam.Back_Point_Z;
-				Support_Foot_Hip_Upper_Pitch_temp = walkinggait_parameter.B_SplineParam.Support_Foot_Hip_Upper_Pitch;
-				Kick_Foot_Ankle_Upper_Pitch_temp = walkinggait_parameter.B_SplineParam.Kick_Foot_Ankle_Upper_Pitch;
-				Support_Foot_Ankle_Upper_Pitch_temp = walkinggait_parameter.B_SplineParam.Support_Foot_Ankle_Upper_Pitch;
-				switch (statetype) {
-					case 1:
-						document.getElementById("cX_Swing").value = X_Swing_Range_tmp;
-						document.getElementById("cPeriod_T").value = Period_T_tmp;
-						document.getElementById("cY_Swing").value = Y_Swing_Range_tmp;
-						document.getElementById("cT_DSP").value = T_DSP_tmp;
-						document.getElementById("cBASE_Default_Z").value = BASE_Default_Z_tmp;
-						document.getElementById("cZ_Swing").value = Z_Swing_Range_tmp;
-						document.getElementById("cY_Swing_Shift").value = Y_Swing_Shift_tmp;
-						// document.getElementById("balance_").checked = Balance_tmp
-						break;
-					case 2:
-						document.getElementById("luX_Swing").value = X_Swing_Range_tmp;
-						document.getElementById("luY_Swing").value = Y_Swing_Range_tmp;
-						document.getElementById("luZ_Swing").value = Z_Swing_Range_tmp;
-						document.getElementById("luPeriod_T").value = Period_T_tmp;
-						//document.getElementById("luPeriod_T2").value = Period_T2_tmp;
-						//document.getElementById("luSample_Time").value = Sample_Time_tmp;
-						document.getElementById("luOSC_LockRange").value = OSC_LockRange_tmp;
-						document.getElementById("luBASE_Default_Z").value = BASE_Default_Z_tmp;
-						document.getElementById("luX_Swing_COM").value = X_Swing_COM_tmp;
-						document.getElementById("luY_Swing_Shift").value = Y_Swing_Shift_tmp;
-						document.getElementById("luBASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
-						// document.getElementById("balance_").checked = Balance_tmp
-						break;
-					case 3:
-						document.getElementById("ldX_Swing").value = X_Swing_Range_tmp;
-						document.getElementById("ldY_Swing").value = Y_Swing_Range_tmp;
-						document.getElementById("ldZ_Swing").value = Z_Swing_Range_tmp;
-						document.getElementById("ldPeriod_T").value = Period_T_tmp;
-						// document.getElementById("ldPeriod_T2").value = Period_T2_tmp;
-						// document.getElementById("ldSample_Time").value = Sample_Time_tmp;
-						document.getElementById("ldOSC_LockRange").value = OSC_LockRange_tmp;
-						document.getElementById("ldBASE_Default_Z").value = BASE_Default_Z_tmp;
-						document.getElementById("ldX_Swing_COM").value = X_Swing_COM_tmp;
-						document.getElementById("ldY_Swing_Shift").value = Y_Swing_Shift_tmp;
-						document.getElementById("ldBASE_LIFT_Z").value = BASE_LIFT_Z_tmp;
-						// document.getElementById("balance_").checked = Balance_tmp
-						break;
-				}
-			});
+
+			if (statetype === 1) {
+				WalkingGaitParameter_request.mode = 0;
+				LoadWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (res) {
+					document.getElementById("com_y_swing").value = res.com_y_swing;
+					document.getElementById("WidthSize").value = res.width_size;
+					document.getElementById("period_t").value = res.period_t;
+					document.getElementById("T_DSP").value = res.t_dsp;
+					document.getElementById("lift_height").value = res.lift_height;
+					document.getElementById("stand_height").value = res.stand_height;
+					document.getElementById("com_height").value = res.com_height;
+				}, function(err) { console.error("Load Continuous failed:", err); });
+			} else if (statetype === 2 || statetype === 3) {
+				WalkingGaitParameter_request.mode = (statetype === 2) ? 1 : 2;
+				LoadLCWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (res) {
+					var p = (statetype === 2) ? "lu" : "ld";
+					document.getElementById(p + "period_t").value = res.period_t;
+					document.getElementById(p + "com_y_swing").value = res.com_y_swing;
+					document.getElementById(p + "width_size").value = res.width_size;
+					document.getElementById(p + "osc_lockrange").value = res.t_dsp;
+					document.getElementById(p + "now_stand_height").value = res.stand_height;
+					document.getElementById(p + "now_com_height").value = res.com_height;
+					document.getElementById(p + "base_lift_z").value = res.board_high;
+					document.getElementById(p + "Clearance").value = res.clearance;
+					// document.getElementById(p + "Hip_roll").value = res.hip_roll;
+					// document.getElementById(p + "Ankle_roll").value = res.ankle_roll;
+				}, function(err) { console.error("Load LC failed:", err); });
+			}
 		}
 
 		function enterAddress() {
-			if(connectFlag)
-			{
+			if (connectFlag) {
 				ros.close();
 				connectFlag = false;
 			}
 			myAddress = document.getElementById("addressSelect").value;
-			console.log("Connecting address is", myAddress)
-			ros.connect("ws://" + myAddress + ":9090");
-			document.getElementById("orign_image").src = "http://" + myAddress + ":8080/stream?topic=/orign_image";
+			console.log("Connecting address is", myAddress);
+			document.getElementById("orign_image").src = "http://" + myAddress + ":8080/stream?topic=/zoom_in";
 			// document.getElementById("color_image").src = "http://" + myAddress + ":8080/stream?topic=/colormodel_image";
+			const state = ros.socket ? ros.socket.readyState : WebSocket.CLOSED;
+			if (state === WebSocket.OPEN || state === WebSocket.CONNECTING || state === WebSocket.CLOSING) {
+				ros.close();
+				ros.once('close', () => ros.connect("ws://" + myAddress + ":9090"));
+			} else {
+				ros.connect("ws://" + myAddress + ":9090");
+			}
+			strategylocation();
 		}
+		var location_strategy = new ROSLIB.Topic({
+			ros: ros,
+			name: '/location',
+			messageType: 'tku_msgs/location'
+		});
+		var location_msg = new ROSLIB.Message({ data: "" });
+
+		function strategylocation() {
+			var current_display = document.getElementById('current-strategy-name').innerText;
+			var target_strategy = (current_display === "---" || current_display === "WAITING...") ? "ar" : current_display;
+			location_msg.data = "/home/iclab/ros2_kid/src/strategy/strategy/" + target_strategy + "/Parameter";
+			console.log("連線後保持策略: " + target_strategy + ", 路徑: " + location_msg.data);
+			location_strategy.publish(location_msg);
+		}
+
 		function changeX_Swing_value(value) {
 			X_Swing_Range_tmp = value;
 			switch (statetype) {
@@ -844,6 +895,11 @@
 			Continuousback_Topic.publish(Continuousback_msg);
 		}
         document.onkeydown = getKeyboard;
+		const presetValues = {
+			1: { x: 0, y: 0, theta: 0 },         // Continuous
+			2: { x: 20000, y: 0, theta: 0 },     // LC_up
+			3: { x: 19000, y: 0, theta: 0 }      // LC_down
+		};
         function getKeyboard(e) {
 			// console.log(window.event.keyCode)
 			switch(window.event.keyCode)
@@ -866,79 +922,76 @@
 				case 69:	//E, Right Turn
 					RightTurnFun();
 					break;
-                case 73:	//I
-                    Turnuphead();
-                    break;
-                case 74:    //J
-					Turnrighthead();
-                    break;
-                case 75:	//K
-                    Turndownhead();
-                    break;
-                case 76:	//L
-					Turnlefthead();   
-                    break;
-				case 80:	//P  歸零
-					horizontaltmp = 2048;
-					document.getElementById("HorizontalPositionValue").value = horizontaltmp;
-					rangeHorizontalPosition(horizontaltmp);
-                    break;
-				case 79:	//O	 歸零
-					verticaltmp = 2048;
-					document.getElementById("VerticalPositionValue").value = verticaltmp;
-					rangeVerticalPosition(verticaltmp);
-                    break;
-				case 190:	//方向右  
-					horizontaltmp = 1700;
-					document.getElementById("HorizontalPositionValue").value = horizontaltmp;
-					rangeHorizontalPosition(horizontaltmp);
-                    break;
-				case 188:	//方向左
-					horizontaltmp = 2500;
-					document.getElementById("HorizontalPositionValue").value = horizontaltmp;
-					rangeHorizontalPosition(horizontaltmp);
-					break;
-				case 78:	//方向上
-					verticaltmp = 2500;
-					document.getElementById("VerticalPositionValue").value = verticaltmp;
-					rangeVerticalPosition(verticaltmp);
-                    break;
-				case 77:	//方向下
-					verticaltmp = 1500;
-					document.getElementById("VerticalPositionValue").value = verticaltmp;
-					rangeVerticalPosition(verticaltmp);
-                    break;
+                //case 73:	//I
+                //    Turnuphead();
+                //    break;
+                //case 74:    //J
+				//	Turnrighthead();
+                //    break;
+                //case 75:	//K
+                //    Turndownhead();
+                //    break;
+                //case 76:	//L
+				//	Turnlefthead();   
+                //    break;
+				//case 80:	//P  歸零
+				//	horizontaltmp = 2048;
+				//	document.getElementById("HorizontalPositionValue").value = horizontaltmp;
+				//	rangeHorizontalPosition(horizontaltmp);
+                //    break;
+				//case 79:	//O	 歸零
+				//	verticaltmp = 2048;
+				//	document.getElementById("VerticalPositionValue").value = verticaltmp;
+				//	rangeVerticalPosition(verticaltmp);
+                //    break;
+				//case 190:	//方向右  
+				//	horizontaltmp = 1700;
+				//	document.getElementById("HorizontalPositionValue").value = horizontaltmp;
+				//	rangeHorizontalPosition(horizontaltmp);
+                //    break;
+				//case 188:	//方向左
+				//	horizontaltmp = 2500;
+				//	document.getElementById("HorizontalPositionValue").value = horizontaltmp;
+				//	rangeHorizontalPosition(horizontaltmp);
+				//	break;
+				//case 78:	//方向上
+				//	verticaltmp = 2500;
+				//	document.getElementById("VerticalPositionValue").value = verticaltmp;
+				//	rangeVerticalPosition(verticaltmp);
+                //    break;
+				//case 77:	//方向下
+				//	verticaltmp = 1500;
+				//	document.getElementById("VerticalPositionValue").value = verticaltmp;
+				//	rangeVerticalPosition(verticaltmp);
+                //    break;
 				case 82:	//R
-					Xvaluetmp = document.getElementById("Xvalueini").value;
-					document.getElementById("Xvalue").value = Xvaluetmp;
-					if (statetype == 1 ||statetype == 7 || statetype == 8) {
-						ChangeContinuousValueFun();
-					}
+					if (presetValues[statetype]) {
+						const preset = presetValues[statetype];
+						Xvaluetmp = preset.x;
+						Yvaluetmp = preset.y;
+						Thetavaluetmp = preset.theta;
 
-					Yvaluetmp = document.getElementById("Yvalueini").value;
-					document.getElementById("Yvalue").value = Yvaluetmp;
-					if (statetype == 1 ||statetype == 7 || statetype == 8) {
-						ChangeContinuousValueFun();
-					}
+						document.getElementById("Xvalue").value = Xvaluetmp;
+						document.getElementById("Yvalue").value = Yvaluetmp;
+						document.getElementById("Thetavalue").value = Thetavaluetmp;
 
-					Thetavaluetmp = document.getElementById("thetavalueini").value;
-					document.getElementById("Thetavalue").value = Thetavaluetmp;
-					if (statetype == 1 ||statetype == 7 || statetype == 8) {
-						ChangeContinuousValueFun();
+						if (statetype == 1 || statetype == 7 || statetype == 8) {
+							ChangeContinuousValueFun();
+						}
 					}
                     break;
-				case 49:
-                    executeDRC("motion1");
-                    break;
-				case 50:
-					executeDRC("motion2");
-                    break;
-				case 51:
-					executeDRC("motion3");
-                    break;
-				case 32:	//Space, Generate
-					Generate();
-					break;
+				// case 49:
+                //     executeDRC("motion1");
+                //     break;
+				// case 50:
+				// 	executeDRC("motion2");
+                //     break;
+				// case 51:
+				// 	executeDRC("motion3");
+                //     break;
+				// case 32:	//Space, Generate
+				// 	Generate();
+				// 	break;
 			}
 		}
 
@@ -1046,20 +1099,26 @@
 		}
 
 		function ChangeContinuousValueFun() {
-			Walkinggait_topic.x = Number(Xvaluetmp);
-			Walkinggait_topic.y = Number(Yvaluetmp);
+			var xoff = statetype == 1 ? Number(document.getElementById("Xvalueini").value) : 0;
+			var yoff = statetype == 1 ? Number(document.getElementById("Yvalueini").value) : 0;
+			var toff = statetype == 1 ? Number(document.getElementById("thetavalueini").value) : 0;
+			Walkinggait_topic.x = Number(Xvaluetmp) + xoff;
+			Walkinggait_topic.y = Number(Yvaluetmp) + yoff;
 			Walkinggait_topic.z = 0;
-			Walkinggait_topic.theta = Number(Thetavaluetmp);
+			Walkinggait_topic.theta = Number(Thetavaluetmp) + toff;
 			Walkinggait_topic.walking_mode = Number(statetype);
 			Walkinggait_topic.sensor_mode = Number(0);
 			console.log(Walkinggait_topic.sensor_mode);
 			ChangeContinuousValue_Topic.publish(Walkinggait_topic);
 		}
 		function SendBodyAutoFun() {
-			Walkinggait_topic.x = Number(Xvaluetmp);
-			Walkinggait_topic.y = Number(Yvaluetmp);
+			var xoff = statetype == 1 ? Number(document.getElementById("Xvalueini").value) : 0;
+			var yoff = statetype == 1 ? Number(document.getElementById("Yvalueini").value) : 0;
+			var toff = statetype == 1 ? Number(document.getElementById("thetavalueini").value) : 0;
+			Walkinggait_topic.x = Number(Xvaluetmp) + xoff;
+			Walkinggait_topic.y = Number(Yvaluetmp) + yoff;
 			Walkinggait_topic.z = 0;
-			Walkinggait_topic.theta = Number(Thetavaluetmp);
+			Walkinggait_topic.theta = Number(Thetavaluetmp) + toff;
 			Walkinggait_topic.walking_mode = Number(statetype);
 			Walkinggait_topic.sensor_mode = Number(0);
 			console.log(Walkinggait_topic.sensor_mode);
@@ -1179,8 +1238,92 @@
 				ColorModelForm_Topic.publish(ColorFormcmd);
 			}
 		}
+		function WalkingSetUp() {
+			if (B_Walking_Flag) {
+				document.getElementById("Camera").style.display = "none";
+				B_SetupCamera_Flag = true;
+				document.getElementById("Walking").style.display = "inline";
+				document.getElementById("CameraPresetButtons").style.display = "none";
+				document.getElementById("B_Walking").value = "Walking Setup";
+				B_Walking_Flag = false;
+				Load();
+			} else {
+				document.getElementById("Walking").style.display = "none";
+				document.getElementById("CameraPresetButtons").style.display = "inline";
+				document.getElementById("B_Walking").value = "Walking Setup";
+				B_Walking_Flag = true;
+			}
+		}
+		function SendWalkingParam(mode) {
+			function getVal(id) {
+				var el = document.getElementById(id);
+				return el ? (Number(el.value) || 0) : 0;
+			}
+			var params, rosMsg;
+			if (mode === 1) {
+				rosMsg = new ROSLIB.Message({
+					mode: 0,
+					com_y_swing: getVal("com_y_swing"),
+					width_size:  getVal("WidthSize"),
+					period_t:    getVal("period_t"),
+					t_dsp:       getVal("T_DSP"),
+					lift_height: getVal("lift_height"),
+					stand_height:getVal("stand_height"),
+					com_height:  getVal("com_height"),
+					sample_time: 20
+				});
+				web_parameter_Topic.publish(rosMsg);
+				params = {
+					"com_y_swing":  getVal("com_y_swing"),
+					"width_size":   getVal("WidthSize"),
+					"period_t":     getVal("period_t"),
+					"Tdsp":         getVal("T_DSP"),
+					"lift_height":  getVal("lift_height"),
+					"STAND_HEIGHT": getVal("stand_height"),
+					"COM_HEIGHT":   getVal("com_height"),
+					"COM_Y_shift":  0
+				};
+			} else {
+				var p = (mode === 2) ? "lu" : "ld";
+				var lcMode = (mode === 2) ? 1 : 2;
+				rosMsg = new ROSLIB.Message({
+					mode:         lcMode,
+					period_t:     getVal(p + "period_t"),
+					com_y_swing:  getVal(p + "com_y_swing"),
+					width_size:   getVal(p + "width_size"),
+					t_dsp:        getVal(p + "osc_lockrange"),
+					lift_height:  0,
+					stand_height: getVal(p + "now_stand_height"),
+					com_height:   getVal(p + "now_com_height"),
+					board_high:   getVal(p + "base_lift_z"),
+					clearance:    getVal(p + "Clearance"),
+					// hip_roll:     getVal(p + "Hip_roll"),
+					// ankle_roll:   getVal(p + "Ankle_roll")
+				});
+				web_lc_parameter_Topic.publish(rosMsg);
+				params = {
+					"com_y_swing":  getVal(p + "com_y_swing"),
+					"width_size":   getVal(p + "width_size"),
+					"period_t":     getVal(p + "period_t"),
+					"Tdsp":         getVal(p + "osc_lockrange"),
+					"Board_High":   getVal(p + "base_lift_z"),
+					"STAND_HEIGHT": getVal(p + "now_stand_height"),
+					"COM_HEIGHT":   getVal(p + "now_com_height"),
+					"Clearance":    getVal(p + "Clearance"),
+					// "Hip_roll":     getVal(p + "Hip_roll"),
+					// "Ankle_roll":   getVal(p + "Ankle_roll")
+				};
+			}
+			Send_parameter_msg.data = true;
+			Send_parameter.publish(Send_parameter_msg);
+			walkingParamsUpdateTopic.publish(new ROSLIB.Message({ data: JSON.stringify(params) }));
+			console.log("SendWalkingParam mode=" + mode, params);
+		}
 		function CameraSetUp() {
 			if (B_SetupCamera_Flag) {
+				document.getElementById("Walking").style.display = "none";
+				document.getElementById("B_Walking").value = "Walking Setup";
+				B_Walking_Flag = true;
 				CameraInfoClient.callService(LoadCamerareqrest, function (LoadCameraresult) {
 					CamBrightnessValue = LoadCameraresult.brightness;
 					CamContrastValue = LoadCameraresult.contrast;
@@ -1188,6 +1331,8 @@
 					CamWhiteBalanceValue = LoadCameraresult.white_balance;
 					CamAuto_WhiteBalanceValue = LoadCameraresult.auto_white_balance;
 					CamAuto_ExposureValue = LoadCameraresult.auto_exposure;
+					CamZoomInValue = parseFloat(parseFloat(LoadCameraresult.zoomin || 1).toFixed(1));
+					ZoomIn = CamZoomInValue;
 
 					document.getElementById("CamBrightness").value = CamBrightnessValue;
 					document.getElementById("CamBrightnessValue").value = CamBrightnessValue;
@@ -1199,6 +1344,8 @@
 					document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
 					document.getElementById("AutoWhitBlance").checked = CamAuto_WhiteBalanceValue;
 					document.getElementById("AutoExposure").checked = CamAuto_ExposureValue;
+					document.getElementById("ZoomIn").value = CamZoomInValue;
+					document.getElementById("ZoomInValue").value = CamZoomInValue;
 
 					CameraMsg.brightness = Number(CamBrightnessValue);
 					CameraMsg.contrast = Number(CamContrastValue);
@@ -1209,11 +1356,13 @@
 					Camera.publish(CameraMsg);
 				});
 				document.getElementById("Camera").style.display = "inline";
-				document.getElementById("container").style.height = "900px";
+				document.getElementById("container").style.height = "1000px";
 				document.getElementById("select").style.height = "400px";
+				document.getElementById("CameraPresetButtons").style.display = "none";
 				B_SetupCamera_Flag = false;
 			} else {
 				document.getElementById("Camera").style.display = "none";
+				document.getElementById("CameraPresetButtons").style.display = "inline";
 				if (B_ColorModelForm_Flag == false) {
 					document.getElementById("container").style.height = "900px";
 					document.getElementById("select").style.height = "400px";
@@ -1226,7 +1375,7 @@
 		}
 		function changeColorLabel(newValue) {
 			console.log(newValue);
-			HSVreqrest.ColorLabel = String(newValue);
+			HSVreqrest.ColorLabel = Number(newValue);
 			HSVClient.callService(HSVreqrest, function (HSVresult) {
 				document.getElementById("HminRange").value = HSVresult.Hmin;
 				document.getElementById("SminRange").value = HSVresult.Smin;
@@ -1507,6 +1656,20 @@
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 		}
+		function showZoomIn(newValue) {
+			CamZoomInValue = parseFloat(parseFloat(newValue).toFixed(1));
+			ZoomIn = CamZoomInValue;
+			document.getElementById("ZoomInValue").value = CamZoomInValue;
+			ZoomInMsg.zoomin = CamZoomInValue;
+			ZoomInTopic.publish(ZoomInMsg);
+		}
+		function rangeZoomIn(newValue) {
+			CamZoomInValue = parseFloat(parseFloat(newValue).toFixed(1));
+			ZoomIn = CamZoomInValue;
+			document.getElementById("ZoomIn").value = CamZoomInValue;
+			ZoomInMsg.zoomin = CamZoomInValue;
+			ZoomInTopic.publish(ZoomInMsg);
+		}
 		function WebStart() {
 			if (B_Start_Flag) {
 				document.getElementById("B_Start").value = "Finsh";
@@ -1550,7 +1713,7 @@
 			document.getElementById("HorizontalSpeedRange").value = newValue;
 			HeadPackagecmd.ID = Number(1);
 			HeadPackagecmd.Position = Number(document.getElementById("HorizontalPositionValue").value);
-			HeadPackagecmd.Speed = Number(document.getElementById("HorizontalSpeedValue").valutde);
+			HeadPackagecmd.Speed = Number(document.getElementById("HorizontalSpeedValue").value);
 			Head_Topic.publish(HeadPackagecmd);
 		}
 		function showVerticalPosition(newValue) {
@@ -1589,7 +1752,33 @@
 			CameraId_Topic.publish(CameraId_msg);
 		}
 
+		function setHeadPreset(horizontal, vertical,horizontalSpeed,verticalSpeed) {
+			horizontaltmp = horizontal;
+			verticaltmp = vertical;
+
+			document.getElementById("HorizontalPositionValue").value = horizontal;
+			document.getElementById("HorizontalSpeedValue").value = horizontalSpeed;
+			document.getElementById("VerticalPositionValue").value = vertical;
+			document.getElementById("VerticalSpeedValue").value = verticalSpeed;
+			rangeHorizontalPosition(horizontal);
+			rangeHorizontalSpeed(horizontalSpeed);
+			rangeVerticalPosition(vertical);
+			rangeVerticalSpeed(verticalSpeed);
+		}
+
+
+		window.addEventListener('DOMContentLoaded', function () {
+			var loc = window.currentStrategy || "";
+			if (typeof loc === 'string') {
+				loc = loc.replace(/^\/+/, '');
+				loc = loc.split('/')[0].trim();
+			}
+			if (loc) {
+				document.getElementById('current-strategy-name').innerText = loc;
+			}
+		});
 	</script>
+	<script src="../src/strategy/strategy/strategy.js"></script>
 	<style type="text/css">
 		body {
 			width: 1800px;
@@ -1605,7 +1794,7 @@
 			background-color: #333;
 			border: 2px black solid;
 			width: 1600px;
-			height: 900px;
+			height: 950px;
 			margin: 20px auto;
 			overflow: visible;
 			color: white;
@@ -1681,7 +1870,7 @@
 			width: 50px;
 		}
 	</style>
-	<title>HumanoidInterface</title>
+	<title>MiniDRC</title>
 </head>
 
 <body>
@@ -1690,15 +1879,22 @@
 		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
         <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
         <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
         <li><a target="_blank" class="navbarright" href="PIDcontroll.html">PIDcontroll</a></li>
 		<li class="logo">
 			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
 		</li>
 	</ul>
 	<br />
-	<p id="connected" style="color:#00D600; display:none; font-size: 20px;">
-		Connected
-	</p>
+	<div style="padding-left: 20px; height: 80px;">
+		<div style="height: 30px;">
+			<p id="connected" style="color:#00D600; display:none; font-size: 20px; margin: 0;">Connected</p>
+		</div>
+		<div style="display:inline-block; background-color:#222; border:1px solid #444; border-radius:5px; padding:8px 20px; box-shadow:inset 0 0 10px #000; text-align:center; min-width:120px; margin-top:6px;">
+			<span style="color:#888; font-size:12px; text-transform:uppercase; display:block; margin-bottom:3px;">Strategy</span>
+			<span id="current-strategy-name" style="color:#00D600; font-family:'Consolas','Monaco',monospace; font-size:22px; font-weight:bold; text-shadow:0 0 8px rgba(0,214,0,0.5);">---</span>
+		</div>
+	</div>
 	<form>
 
 		<div id="head" align="center">
@@ -1720,7 +1916,7 @@
 		<div id="container" align="center">
 			<!-- 攝影機畫面 -->
             <div id="div_orign_image">
-				<img id="orign_image" style="-webkit-user-select: none; display:inline; transform: scale(3.5);margin-top: 300px;" src="http://172.17.121.10:8080/stream?topic=/usb_cam/image_raw">
+				<img id="orign_image" style="-webkit-user-select: none; display:inline; transform: scale(3.5);margin-top: 300px;" src="http://172.17.121.10:8080/stream?topic=/zoom_in">
 			</div>
             <!-- 攝影機參數方向 -->
             <div id="select">
@@ -1728,7 +1924,7 @@
 					<table width="320">
 						<tr>
 							<td>
-								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_Start" value="Start" onClick="WebStart()"></input>
+								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_Walking" value="Walking Setup" onClick="WalkingSetUp()">
 							</td>
 							<!-- <td>
 								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_ColorModelForm" value="Show Model Form"
@@ -1827,11 +2023,138 @@
 								 oninput="showCamWhiteBalance(this.value)" /></td>
 							<td><input type="text" class="ValueText" id="CamWhiteBalanceValue" size="12" value="4000" onchange="rangeCamWhiteBalanceValue(this.value)" /></td>
 						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text">Zoom In:</p>
+							</td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="ZoomIn" name="ZoomIn" type="range" min="1" max="5" step="0.1" value="1"
+								 oninput="showZoomIn(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="ZoomInValue" size="12" value="1" onchange="rangeZoomIn(this.value)" /></td>
+						</tr>
 					</table>
 				</div>
+				<div id="CameraPresetButtons" style="display: inline; margin-top: 10px;">
+					<!-- 第一行：沒有標題 -->
+					<div style="margin-bottom: 8px;">
+						<button type="button" onclick="setHeadPreset(2048, 2048, 100, 100)" style="margin-top: 10px;">回正</button>
+					</div>
+
+					<!-- 第二行：SR -->
+					<div style="margin-bottom: 8px;">
+						<div><strong>SR</strong></div>
+						<button type="button" onclick="setHeadPreset(2048, 1350, 100, 100)" style="margin-top: 10px;">SR 上板1350</button>
+						<button type="button" onclick="setHeadPreset(2048, 1330, 100, 100)" style="margin-top: 10px;">SR 下板1330</button>
+						<button type="button" onclick="setHeadPreset(2048, 2450, 100, 100)" style="margin-top: 10px;">SR 攀岩2450</button>
+					</div>
+
+					<!-- 第三行：OBS -->
+					<div>
+						<div><strong>OBS</strong></div>
+						<button type="button" onclick="setHeadPreset(2579, 1700, 100, 100)" style="margin-top: 10px;">左轉頭2579</button>
+						<button type="button" onclick="setHeadPreset(2048, 1550, 100, 100)" style="margin-top: 10px;">OBS 正常1550</button>
+						<button type="button" onclick="setHeadPreset(1517, 1700, 100, 100)" style="margin-top: 10px;">右轉頭1517</button>
+						<button type="button" onclick="setHeadPreset(2048, 1700, 100, 100)" style="margin-top: 10px;">OBS 紅門前1700</button>
+						<button type="button" onclick="setHeadPreset(2048, 2400, 100, 100)" style="margin-top: 10px;">OBS 紅門下2400</button>
+					</div>
+				</div>
+
+				<div id="Walking" style="display:none; overflow-y:auto; max-height:600px; padding:0 4px; font-size:11px; color:white;">
+					<!-- <div style="margin:4px 0 4px 0; text-align:right;">
+						<input type="checkbox" id="Continuousback" onclick="changeContinuousback()"> Continuous Back
+					</div> -->
+
+					<div id="walking-section-c">
+						<div style="color:#aaa; font-weight:bold; margin:4px 0 2px 0; border-bottom:1px solid #555; padding-bottom:2px;">Continuous Step</div>
+						<table style="width:100%; border-spacing:2px 3px; font-size:11px;">
+							<tr>
+								<td style="width:68px;">com_y_swing</td><td><input type="text" id="com_y_swing" style="width:52px;" value="0"></td>
+								<td style="width:68px;">width_size</td><td><input type="text" id="WidthSize" style="width:52px;" value="0"></td>
+							</tr>
+							<tr>
+								<td>period_t</td><td><input type="text" id="period_t" style="width:52px;" value="360"></td>
+								<td>T_DSP</td><td><input type="text" id="T_DSP" style="width:52px;" value="0"></td>
+							</tr>
+							<tr>
+								<td>lift_height</td><td><input type="text" id="lift_height" style="width:52px;" value="2.5"></td>
+								<td>STAND_HEIGHT</td><td><input type="text" id="stand_height" style="width:52px;" value="23.5"></td>
+							</tr>
+							<tr>
+								<td>COM_HEIGHT</td><td><input type="text" id="com_height" style="width:52px;" value="29.5"></td>
+							</tr>
+						</table>
+						<div style="margin:3px 0;">
+							<input type="button" value="Load" onclick="ContinuousFun()" style="width:60px; margin-right:4px;">
+							<input type="button" value="Send" onclick="SendWalkingParam(1)" style="width:60px;">
+						</div>
+					</div>
+
+					<div id="walking-section-lu" style="display:none;">
+						<div style="color:#aaa; font-weight:bold; margin:4px 0 2px 0; border-bottom:1px solid #555; padding-bottom:2px;">LC_up Step</div>
+						<table style="width:100%; border-spacing:2px 3px; font-size:11px;">
+							<tr>
+								<td style="width:68px;">com_y_swing</td><td><input type="text" id="lucom_y_swing" style="width:52px;" value="0"></td>
+								<td style="width:68px;">width_size</td><td><input type="text" id="luwidth_size" style="width:52px;" value="0"></td>
+							</tr>
+							<tr>
+								<td>period_t</td><td><input type="text" id="luperiod_t" style="width:52px;" value="360"></td>
+								<td>T_DSP</td><td><input type="text" id="luosc_lockrange" style="width:52px;" value="0"></td>
+							</tr>
+							<tr>
+								<td>Clearance</td><td><input type="text" id="luClearance" style="width:52px;" value="0"></td>
+								<td>Board_High</td><td><input type="text" id="lubase_lift_z" style="width:52px;" value="0"></td>
+							</tr>
+							<tr>
+								<td>STAND_HEIGHT</td><td><input type="text" id="lunow_stand_height" style="width:52px;" value="0"></td>
+								<td>COM_HEIGHT</td><td><input type="text" id="lunow_com_height" style="width:52px;" value="0"></td>
+							</tr>
+							<!-- <tr>
+								<td>Hip_roll</td><td><input type="text" id="luHip_roll" style="width:52px;" value="0"></td>
+								<td>Ankle_roll</td><td><input type="text" id="luAnkle_roll" style="width:52px;" value="0"></td>
+							</tr> -->
+						</table>
+						<div style="margin:3px 0;">
+							<input type="button" value="Load" onclick="LC_upFun()" style="width:60px; margin-right:4px;">
+							<input type="button" value="Send" onclick="SendWalkingParam(2)" style="width:60px;">
+						</div>
+					</div>
+
+					<div id="walking-section-ld" style="display:none;">
+						<div style="color:#aaa; font-weight:bold; margin:4px 0 2px 0; border-bottom:1px solid #555; padding-bottom:2px;">LC_down Step</div>
+						<table style="width:100%; border-spacing:2px 3px; font-size:11px;">
+							<tr>
+								<td style="width:68px;">com_y_swing</td><td><input type="text" id="ldcom_y_swing" style="width:52px;" value="0"></td>
+								<td style="width:68px;">width_size</td><td><input type="text" id="ldwidth_size" style="width:52px;" value="0"></td>
+							</tr>
+							<tr>
+								<td>period_t</td><td><input type="text" id="ldperiod_t" style="width:52px;" value="360"></td>
+								<td>T_DSP</td><td><input type="text" id="ldosc_lockrange" style="width:52px;" value="0"></td>
+							</tr>
+							<tr>
+								<td>Clearance</td><td><input type="text" id="ldClearance" style="width:52px;" value="0"></td>
+								<td>Board_High</td><td><input type="text" id="ldbase_lift_z" style="width:52px;" value="0"></td>
+							</tr>
+							<tr>
+								<td>STAND_HEIGHT</td><td><input type="text" id="ldnow_stand_height" style="width:52px;" value="0"></td>
+								<td>COM_HEIGHT</td><td><input type="text" id="ldnow_com_height" style="width:52px;" value="0"></td>
+							</tr>
+							<!-- <tr>
+								<td>Hip_roll</td><td><input type="text" id="ldHip_roll" style="width:52px;" value="0"></td>
+								<td>Ankle_roll</td><td><input type="text" id="ldAnkle_roll" style="width:52px;" value="0"></td>
+							</tr> -->
+						</table>
+						<div style="margin:3px 0;">
+							<input type="button" value="Load" onclick="LC_downFun()" style="width:60px; margin-right:4px;">
+							<input type="button" value="Send" onclick="SendWalkingParam(3)" style="width:60px;">
+						</div>
+					</div>
+				</div>
+
 			</div>
             <!-- 控制方向 -->
-            <div style="margin-right: 50px;" id="walking"align="left">
+            <div style="margin-right: 50px;margin-top: 450px;" id="walking"align="left">
 				<p></p>
 				<input type="radio" name="gender" value="Continuous" onclick="ContinuousFun()" checked="checked"> Continuous
 				<input type="radio" name="gender" value="LC_up" onclick="LC_upFun()"> LC_up
@@ -1858,7 +2181,7 @@
 				<br>
 				<input type="button" id="Generate_Button" style="width: 100px;height: 40px; margin-top: 10px; margin-left: 120px; display: inline-block;" onclick="Generate()" value="Generate"></input>
             </div>
-            <div style="margin-right: 200px;margin-top: 20px;"align="right">
+            <div style="margin-right: 200px;margin-top: 0px;"align="right">
                 <tr>
                     <td style="color:#888;font-size: 18px">IMU</td>
                 </tr>
@@ -1881,21 +2204,53 @@
                 <button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 10px;display: inline-block;" onclick="SendSensorSet()">IMU reset</button>
             </div>
             <!-- 磁區動作 -->
-            <br>
-            <div style="margin-left: 0px;margin-top: 30px;"id="motion"align="left">
-                <input type="button" id="executeButton" value="motion1" onclick="executeDRC(this.value);" style="width:70px; margin-left:69px;">
-				motion1: <input type="text" id="Sector1" value=-1 style="width:40px;">
+            <!-- <br> -->
+            <div style="margin-left: 0px;margin-top: 10px;"id="motion"align="left">
+                <input type="button" id="executeButton" value="motion1" onclick="executeDRC(this.value);" style="width:70px; margin-left:0px;">
+				motion1: <input type="text" id="Sector1" value=209 style="width:40px;">
+				<!-- <br> -->
+				<input type="button" id="executeButton" value="motion2" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				motion2: <input type="text" id="Sector2" value=208 style="width:40px;">
 				<br>
-				<input type="button" id="executeButton" value="motion2" onclick="executeDRC(this.value);" style="width:70px; margin-left:69px;">
-				motion2: <input type="text" id="Sector2" value=-1 style="width:40px;">
+				<input type="button" id="executeButton" value="motion3" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				motion3: <input type="text" id="Sector3" value=111 style="width:40px;">
+				<!-- <br> -->
+				<input type="button" id="executeButton" value="motion4" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				motion4: <input type="text" id="Sector4" value=333 style="width:40px;">
 				<br>
-				<input type="button" id="executeButton" value="motion3" onclick="executeDRC(this.value);" style="width:70px; margin-left:69px;">
-				motion3: <input type="text" id="Sector3" value=-1 style="width:40px;">
-				<br>
-				<input type="button" id="executeButton" value="stand" onclick="standDRC();" style="width:50px; margin-left:69px;">
-                <br>
 
+				<input type="button" id="executeButton" value="motion5" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				motion5: <input type="text" id="Sector5" value=1111 style="width:40px;">
+				<!-- <br> -->
+				<input type="button" id="executeButton" value="motion6" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				motion6: <input type="text" id="Sector6" value=2222 style="width:40px;">
+				<br>
+				<input type="button" id="executeButton" value="motion7" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				motion7: <input type="text" id="Sector7" value=3333 style="width:40px;">
+				<!-- <br> -->
+				<input type="button" id="executeButton" value="motion8" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				motion8: <input type="text" id="Sector8" value=103 style="width:40px;">
+				<br>
+				<input type="button" id="executeButton" value="motion9" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				motion9: <input type="text" id="Sector9" value=871 style="width:40px;">
+				<!-- <br> -->
+				<input type="button" id="executeButton" value="motion10" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				motion10: <input type="text" id="Sector10" value=102 style="width:40px;">
+				<br>
+				<input type="button" id="executeButton" value="motion11" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				motion11: <input type="text" id="Sector11" value=872 style="width:40px;">
+				<br>
+				<!-- <input type="button" id="executeButton" value="stand" onclick="standDRC();" style="width:50px; margin-left:0;">
+				<input type="button" id="executeButton" value="notice" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
+				notice: <input type="text" id="notice" value=701 style="width:40px;">
+				<br> -->
+
+				<div style="margin-top: 10px;margin-left: 1185px;">
+					<input type="button" id="executeButton" value="stand" onclick="standDRC();" style="width:60px; margin-right: 20px;">
+					<input type="button" id="executeButton" value="notice" onclick="executeDRC(this.value);" style="width:70px;">
+					notice: <input type="text" id="notice" value=701 style="width:40px;">
 				</div>
+			</div>
             
 		</div>
 

@@ -341,6 +341,8 @@ class API(Node):
             "wl": ("strategy", "wl"),
             "mar": ("strategy", "mar"),
             "pk": ("strategy", "pk"),
+            "pk_atk": ("strategy", "pk_atk"),
+            "pk_def": ("strategy", "pk_def"),
         }
 
         self._publish_strategy_status("idle")
@@ -354,8 +356,9 @@ class API(Node):
         執行迴圈的入口條件。
 
         Args:
-            msg (Dio): 來自硬體底層的數位訊號包。 
+            msg (Dio): 來自硬體底層的數位訊號包。
                        其中 `msg.strategy` 欄位對應機器人背部的物理撥桿開關。
+                       其中 `msg.data` 欄位為完整的 8-bit DIO 數值，供策略方向選擇使用。
 
         Note:
             * **邊緣觸發 (Edge Detection)**：僅在狀態與上次不同時才執行記錄與邏輯更新，避免重複處理。
@@ -363,13 +366,15 @@ class API(Node):
             * 目前版本為了安全性，註解掉了自動觸發進程管理器的功能。
         同步狀態 (把硬體的 True/False 給 API)
         """
+        self.dio_data = int(msg.data)
+
         if msg.strategy != self.is_start:
             self.is_start = msg.strategy
-            
+
             if self.is_start:
                 self.get_logger().info("\033[92m[DIO] 物理開關開啟：START\033[0m")
                 # 如果你需要它同時觸發進程管理器的話才保留下面這行
-                # self._start_selected_strategy() 
+                # self._start_selected_strategy()
             else:
                 self.get_logger().info("\033[91m[DIO] 物理開關關閉：STOP\033[0m")
                 # self._stop_strategy()
