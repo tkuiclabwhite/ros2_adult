@@ -729,6 +729,8 @@ class MotionNode(Node):
 
             # adult: 大刻度馬達數值可到 3 萬多，閾值設高避免誤判為負數
             if raw_val > 1000000: raw_val -= 65536
+            if mode == "ABSOLUTE" and raw_val == -1:
+                continue
             mid = i + 1
 
             if mode == "RELATIVE":

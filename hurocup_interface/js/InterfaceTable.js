@@ -212,24 +212,24 @@ function NewAbsolutePosition()
   div1.appendChild(input);
 
   //loop to create the rest of the 41 columns starting with 'Name'
-  for (var i = 1; i <= 41 ; i++) 
-  {  
+  for (var i = 1; i <= 41 ; i++)
+  {
     //odd number columns
-    if (i%2==1 && i!=1) 
+    if (i%2==1 && i!=1)
     {
       var input=document.createElement('input');
       input.type='text';
       input.className='textbox';
-      input.value=2048;
+      input.value=-1;
       div2.appendChild(input);
-    }  
+    }
     //even number columns
-    if (i%2==0) 
+    if (i%2==0)
     {
       var input=document.createElement('input');
       input.type='text';
       input.className='textbox';
-      input.value=2048;
+      input.value=-1;
       div2.appendChild(input);
     }
     //second column
@@ -722,6 +722,95 @@ function toggleTorqueAtPosition(id) {
 
     document.getElementById("single_motor_id").value = id;
     SetSingleTorque(newState);
+}
+
+function ShowCopySelectedPanel() {
+  var panel = document.getElementById('copy_selected_panel');
+  panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+}
+
+function toggleAllCopyCheckboxes(state) {
+  var cbs = document.getElementsByClassName('copy_motor_cb');
+  for (var i = 0; i < cbs.length; i++) { cbs[i].checked = state; }
+}
+
+function toggleGroupCopy(group) {
+  var cbs = document.querySelectorAll('.copy_motor_cb[data-group="' + group + '"]');
+  var allChecked = Array.from(cbs).every(function(cb) { return cb.checked; });
+  cbs.forEach(function(cb) { cb.checked = !allChecked; });
+}
+
+function CopySelectedToRow() {
+  var targetID = Number(document.getElementById('copy_target_id').value);
+  if (isNaN(targetID) || targetID < 1) {
+    document.getElementById('label').innerHTML = "Copy Selected: please enter a valid Target Row ID !";
+    return;
+  }
+  var absDivs = document.getElementById('AbsolutePositionTable').getElementsByTagName('div');
+  var targetRowData = null;
+  for (var i = 0; i < absDivs.length; i += 2) {
+    var idBox = absDivs[i].getElementsByClassName('textbox')[0];
+    if (idBox && Number(idBox.value) === targetID) { targetRowData = absDivs[i + 1]; break; }
+  }
+  if (!targetRowData) {
+    document.getElementById('label').innerHTML = "Copy Selected: Row ID " + targetID + " not found !";
+    return;
+  }
+  var cbs = document.getElementsByClassName('copy_motor_cb');
+  var copied = [];
+  for (var i = 0; i < cbs.length; i++) {
+    if (cbs[i].checked) {
+      var motorNum = Number(cbs[i].value);
+      targetRowData.getElementsByClassName('textbox')[motorNum].value = document.getElementById('motor_val_' + motorNum).value;
+      copied.push('M' + motorNum);
+    }
+  }
+  document.getElementById('label').innerHTML = copied.length ? "Copied " + copied.join(', ') + " → Row " + targetID + " !!" : "Copy Selected: no motors selected !";
+}
+
+function swapTableRows(table, idxA, idxB) {
+  var upper = Math.min(idxA, idxB);
+  var lower = Math.max(idxA, idxB);
+  var divs = table.getElementsByTagName('div');
+  var upperIdDiv   = divs[upper * 2];
+  var upperDataDiv = divs[upper * 2 + 1];
+  var lowerIdDiv   = divs[lower * 2];
+  var lowerDataDiv = divs[lower * 2 + 1];
+  table.insertBefore(lowerIdDiv,   upperIdDiv);
+  table.insertBefore(lowerDataDiv, upperIdDiv);
+}
+
+function MoveRow(direction) {
+  var id = Number(document.getElementById('chose_move').value);
+  var posTable = null, spdTable = null;
+  if (document.getElementById('MotionList').style.display === 'initial') {
+    posTable = document.getElementById('MotionTable');
+  } else if (document.getElementById('RelativePosition').style.display === 'initial' ||
+             document.getElementById('RelativeSpeed').style.display === 'initial') {
+    posTable = document.getElementById('RelativePositionTable');
+    spdTable = document.getElementById('RelativeSpeedTable');
+  } else if (document.getElementById('AbsolutePosition').style.display === 'initial' ||
+             document.getElementById('AbsoluteSpeed').style.display === 'initial') {
+    posTable = document.getElementById('AbsolutePositionTable');
+    spdTable = document.getElementById('AbsoluteSpeedTable');
+  }
+  if (!posTable) { document.getElementById('label').innerHTML = 'Move: no active table.'; return; }
+  var divs = posTable.getElementsByTagName('div');
+  var rowCount = Math.floor(divs.length / 2);
+  var targetIdx = -1;
+  for (var i = 0; i < rowCount; i++) {
+    var idBox = divs[i * 2].getElementsByClassName('textbox')[0];
+    if (idBox && Number(idBox.value) === id) { targetIdx = i; break; }
+  }
+  if (targetIdx === -1) { document.getElementById('label').innerHTML = 'Move: ID ' + id + ' not found.'; return; }
+  var swapIdx = targetIdx + direction;
+  if (swapIdx < 0 || swapIdx >= rowCount) {
+    document.getElementById('label').innerHTML = 'Move: ID ' + id + ' is already at the ' + (direction === -1 ? 'top' : 'bottom') + '.';
+    return;
+  }
+  swapTableRows(posTable, targetIdx, swapIdx);
+  if (spdTable) swapTableRows(spdTable, targetIdx, swapIdx);
+  document.getElementById('label').innerHTML = 'Moved ID ' + id + ' ' + (direction === -1 ? 'up' : 'down') + ' !!';
 }
 
 function MotionList(mode)

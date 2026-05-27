@@ -21,7 +21,7 @@ ros.on('error', function (error) {
   document.getElementById('SendButton').disabled = true;
   document.getElementById('executeButton').disabled = true;
   document.getElementById('standButton').disabled = true;
-  
+
   document.getElementById('MultipleButton').disabled = true;
   document.getElementById('MergeButton').disabled = true;
   document.getElementById('AddButton').disabled = true;
@@ -29,6 +29,8 @@ ros.on('error', function (error) {
   document.getElementById('ReverseButton').disabled = true;
   document.getElementById('CopyButton').disabled = true;
   document.getElementById('CheckSumButton').disabled = true;
+  document.getElementById('MoveUpButton').disabled = true;
+  document.getElementById('MoveDownButton').disabled = true;
   document.getElementById('resetButton').disabled = true;
   document.getElementById('connected').style.display = 'none';
   document.getElementById('TorqueButton').disabled = true;
@@ -42,7 +44,7 @@ ros.on('close', function () {
   document.getElementById('SendButton').disabled = true;
   document.getElementById('executeButton').disabled = true;
   document.getElementById('standButton').disabled = true;
-  
+
   document.getElementById('MultipleButton').disabled = true;
   document.getElementById('MergeButton').disabled = true;
   document.getElementById('AddButton').disabled = true;
@@ -50,6 +52,8 @@ ros.on('close', function () {
   document.getElementById('ReverseButton').disabled = true;
   document.getElementById('CopyButton').disabled = true;
   document.getElementById('CheckSumButton').disabled = true;
+  document.getElementById('MoveUpButton').disabled = true;
+  document.getElementById('MoveDownButton').disabled = true;
   document.getElementById('resetButton').disabled = true;
   document.getElementById('connected').style.display = 'none';
   document.getElementById('TorqueButton').disabled = true;
@@ -210,6 +214,8 @@ function createTopics()
         document.getElementById('ReverseButton').disabled = false;
         document.getElementById('CopyButton').disabled = false;
         document.getElementById('CheckSumButton').disabled = false;
+        document.getElementById('MoveUpButton').disabled = false;
+        document.getElementById('MoveDownButton').disabled = false;
         executeSubscribeFlag = false;
       }
       else if(standSubscribeFlag == true)
@@ -450,60 +456,7 @@ function executeDRC(motion)
     console.log("3")
     sleep(100)
   }
-  else if(motion == "motion4")
-  {
-    CheckSectorDRC(Number(document.getElementById('Sector4').value));
-    console.log("4")
-    sleep(100)
-  }
-  else if(motion == "motion5")
-  {
-    CheckSectorDRC(Number(document.getElementById('Sector5').value));
-    console.log("5")
-    sleep(100)
-  }
-  else if(motion == "motion6")
-  {
-    CheckSectorDRC(Number(document.getElementById('Sector6').value));
-    console.log("6")
-    sleep(100)
-  }  
-  else if(motion == "motion7")
-  {
-    CheckSectorDRC(Number(document.getElementById('Sector7').value));
-    console.log("7")
-    sleep(100)
-  }  
-  else if(motion == "motion8")
-  {
-    CheckSectorDRC(Number(document.getElementById('Sector8').value));
-    console.log("8")
-    sleep(100)
-  }  
-  else if(motion == "motion9")
-  {
-    CheckSectorDRC(Number(document.getElementById('Sector9').value));
-    console.log("9")
-    sleep(100)
-  }
-  else if(motion == "motion10")
-  {
-    CheckSectorDRC(Number(document.getElementById('Sector10').value));
-    console.log("10")
-    sleep(100)
-  }
-  else if(motion == "motion11")
-  {
-    CheckSectorDRC(Number(document.getElementById('Sector11').value));
-    console.log("11")
-    sleep(100)
-  }
-  else if(motion == "notice")
-  {
-    CheckSectorDRC(Number(document.getElementById('notice').value));
-    console.log("notice")
-    sleep(100)
-  }  
+  
 }
 
 function CheckSector(sectordata)
@@ -549,6 +502,8 @@ function CheckSector(sectordata)
         document.getElementById('ReverseButton').disabled = false;
         document.getElementById('CopyButton').disabled = false;
         document.getElementById('CheckSumButton').disabled = false;
+        document.getElementById('MoveUpButton').disabled = false;
+        document.getElementById('MoveDownButton').disabled = false;
         doSendFlag = false;
       }
       else if(doExecuteFlag == true)
@@ -595,6 +550,8 @@ function CheckSector(sectordata)
         document.getElementById('ReverseButton').disabled = false;
         document.getElementById('CopyButton').disabled = false;
         document.getElementById('CheckSumButton').disabled = false;
+        document.getElementById('MoveUpButton').disabled = false;
+        document.getElementById('MoveDownButton').disabled = false;
         doExecuteFlag = false;
       }
       else if(doStandFlag == true)
@@ -1062,6 +1019,8 @@ function Send() {
     document.getElementById('ReverseButton').disabled = true;
     document.getElementById('CopyButton').disabled = true;
     document.getElementById('CheckSumButton').disabled = true;
+    document.getElementById('MoveUpButton').disabled = true;
+    document.getElementById('MoveDownButton').disabled = true;
 
     var MotionList = [];
     var ID = Number(document.getElementById('SendID').value);
@@ -1367,6 +1326,8 @@ function execute()
   document.getElementById('ReverseButton').disabled = true;
   document.getElementById('CopyButton').disabled = true;
   document.getElementById('CheckSumButton').disabled = true;
+  document.getElementById('MoveUpButton').disabled = true;
+  document.getElementById('MoveDownButton').disabled = true;
   console.log("23232323232323")
   CheckSector(Number(document.getElementById('Sector').value));
 }
@@ -1390,7 +1351,7 @@ function resetfunction()
   document.getElementById('SendButton').disabled = false;
   document.getElementById('executeButton').disabled = false;
   document.getElementById('standButton').disabled = false;
-  
+
   document.getElementById('MultipleButton').disabled = false;
   document.getElementById('MergeButton').disabled = false;
   document.getElementById('AddButton').disabled = false;
@@ -1398,6 +1359,8 @@ function resetfunction()
   document.getElementById('ReverseButton').disabled = false;
   document.getElementById('CopyButton').disabled = false;
   document.getElementById('CheckSumButton').disabled = false;
+  document.getElementById('MoveUpButton').disabled = false;
+  document.getElementById('MoveDownButton').disabled = false;
 }
 
 function addreduce(value)
@@ -1703,10 +1666,22 @@ function Position(){
   document.getElementById("Pro_series_position").value = prop;
 }
 
+function PositionReverse(){
+  var prop = document.getElementById("Pro_series_position").value;
+  var xp = Math.round(prop / 74.175824175824);
+  document.getElementById("X_series_position").value = xp;
+}
+
 function Speed(){
   var xs = document.getElementById("X_series_speed").value;
   var pros = Math.round(xs * 69.558772606601);
   document.getElementById("Pro_series_speed").value = pros;
+}
+
+function SpeedReverse(){
+  var pros = document.getElementById("Pro_series_speed").value;
+  var xs = Math.round(pros / 69.558772606601);
+  document.getElementById("X_series_speed").value = xs;
 }
 
 // 全域變數記住狀態

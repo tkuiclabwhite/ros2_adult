@@ -496,6 +496,10 @@
                         <div id="AbsolutePositionTable" style="width: 1450px;"></div>
                     </div>
                 </div>
+                <div style="margin-left: 180px; margin-top: 405px; margin-bottom: 4px;">
+                    <input type="button" id="MoveUpButton" value="Move Up" onclick="MoveRow(-1);" style="width:80px" disabled="disabled">
+                    <input type="button" id="MoveDownButton" value="Move Down" onclick="MoveRow(1);" style="width:90px" disabled="disabled"> : <input type="text" id="chose_move" value="-1" style="width:50px;">
+                </div>
                 <div class="box" id="AbsoluteSpeed" style="display: none; overflow-x: scroll; overflow-y: hidden">
                     <div class="smallbox" style=" width: 1450px; position: relative;">
                         <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
@@ -576,10 +580,23 @@
                         <div id="pos-btn-28" class="pos-motor-btn" style="top:9%; left:47%;" onclick="toggleTorqueAtPosition(28)">28</div>
                         <div id="pos-btn-29" class="pos-motor-btn" style="top:3%; left:47%;" onclick="toggleTorqueAtPosition(29)">29</div>
                     </div>
+                                    <div id="robotpic" style="margin-left: 0px; background-color: rgba(46, 58, 61, 0.637); padding: 8px; border-radius: 5px; overflow: hidden;">
+                <div style="float: left; margin-left: 70px;">
+                    X_Series&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Pro_Series
+                </div>
+                <div style="float: left;margin-top: 10px;">
+                    Position: &nbsp;<input type="text" id="X_series_position" value=10 style="width:50px;margin-left: 5px;" onclick="Position();" onkeydown="if (event.key === 'Enter') Position(this.value)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    <input type="text" id="Pro_series_position" value=742 style="width:50px;margin-left: 12px;" onclick="PositionReverse();" onkeydown="if (event.key === 'Enter') PositionReverse();">
+                </div>
+                <div style="float: left;">
+                    Speed &nbsp;&nbsp;&nbsp;: &nbsp;<input type="text" id="X_series_speed" value=10 style="width:50px;margin-left: 4px;" onclick="Speed();" onkeydown="if (event.key === 'Enter') Speed(this.value)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    <input type="text" id="Pro_series_speed" value=696 style="width:50px;margin-left: 12px" onclick="SpeedReverse();" onkeydown="if (event.key === 'Enter') SpeedReverse();">
+                </div>
+                </div>
                 </div>
             </div>
         </div>
-        <div id="motor_area" style="width: 450px;">
+        <div id="motor_area" style="width: 460px;">
             <div>
                 <input type="button" id="btn_left_hand" class="button_choose" onclick="Torque_Choose('left_hand', 'btn_left_hand');" value="left_hand" style="width: 80px;">
                 <input type="button" id="btn_right_hand" class="button_choose" onclick="Torque_Choose('right_hand', 'btn_right_hand');" value="right_hand" style="width: 80px;">
@@ -672,21 +689,62 @@
                     </div>
                     <div style="display: flex; justify-content: center; width: 100%; margin-top: 15px; margin-bottom: 10px;">
                     <input type="button" id="btn_copy_to_abs" value="Copy To Absolute" onclick="CopyToAbsolute();" style="width: 140px; font-weight:bold; background-color:#03e9f4; color:#050505; border-radius:5px; cursor:pointer; padding: 5px;">
+                    <input type="button" id="btn_copy_selected" value="Copy Selected →" onclick="ShowCopySelectedPanel();" style="width: 140px; font-weight:bold; background-color:#ff8c00; color:#fff; border-radius:5px; cursor:pointer; padding: 5px; margin-left: 8px;">
+                </div>
+                <div id="copy_selected_panel" style="display:none; background:rgba(30,40,44,0.97); border:1px solid #ff8c00; border-radius:7px; padding:10px; margin: 4px 0 8px 0; width:100%; box-sizing:border-box;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                        <span style="color:#ff8c00; font-weight:bold;">Target Row ID:</span>
+                        <input type="text" id="copy_target_id" value="1" style="width:50px; text-align:center; font-weight:bold;">
+                        <input type="button" value="全選" onclick="toggleAllCopyCheckboxes(true);" style="width:50px; background:#555; color:#fff; border-radius:3px; cursor:pointer;">
+                        <input type="button" value="全不選" onclick="toggleAllCopyCheckboxes(false);" style="width:55px; background:#555; color:#fff; border-radius:3px; cursor:pointer;">
+                        <input type="button" value="Execute" onclick="CopySelectedToRow();" style="width:65px; font-weight:bold; background:#ff8c00; color:#fff; border-radius:3px; cursor:pointer;">
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:12px;">
+                        <div>
+                            <span style="color:#7ecfff; font-weight:bold; cursor:pointer;" onclick="toggleGroupCopy('left_hand')">LEFT HAND</span><br>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="1"> M1</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="2"> M2</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="3"> M3</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="4"> M4</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="5"> M5</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="6"> M6</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="7"> M7</label>
+                        </div>
+                        <div>
+                            <span style="color:#7ecfff; font-weight:bold; cursor:pointer;" onclick="toggleGroupCopy('right_hand')">RIGHT HAND</span><br>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="8"> M8</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="9"> M9</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="10"> M10</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="11"> M11</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="12"> M12</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="13"> M13</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="14"> M14</label>
+                        </div>
+                        <div>
+                            <span style="color:#7ecfff; font-weight:bold; cursor:pointer;" onclick="toggleGroupCopy('waist')">WAIST</span><br>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="waist" value="15"> M15</label>
+                        </div><br>
+                        <div>
+                            <span style="color:#7ecfff; font-weight:bold; cursor:pointer;" onclick="toggleGroupCopy('left_leg')">LEFT LEG</span><br>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="16"> M16</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="17"> M17</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="18"> M18</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="19"> M19</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="20"> M20</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="21"> M21</label>
+                        </div>
+                        <div>
+                            <span style="color:#7ecfff; font-weight:bold; cursor:pointer;" onclick="toggleGroupCopy('right_leg')">RIGHT LEG</span><br>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="22"> M22</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="23"> M23</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="24"> M24</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="25"> M25</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="26"> M26</label>
+                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="27"> M27</label>
+                        </div>
+                    </div>
+                </div>
 
-                </div>
-                                            <div id="robotpic">
-                <div style="float: left; margin-left: 70px;"> 
-                    X_Series&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Pro_Series
-                </div> 
-                <div style="float: left;margin-top: 10px;"> 
-                    Position: &nbsp;<input type="text" id="X_series_position" value=10 style="width:50px;margin-left: 5px;" onclick="Position();" onkeydown="if (event.key === 'Enter') Position(this.value)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                    <input type="text" id="Pro_series_position" value=742 style="width:50px;margin-left: 12px;" >
-                </div> 
-                <div style="float: left;"> 
-                    Speed &nbsp;&nbsp;&nbsp;: &nbsp;<input type="text" id="X_series_speed" value=10 style="width:50px;margin-left: 4px;" onclick="Speed();" onkeydown="if (event.key === 'Enter') Speed(this.value)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                    <input type="text" id="Pro_series_speed" value=696 style="width:50px;margin-left: 12px">
-                </div>
-            </div>
                 </div>
 
             </div>

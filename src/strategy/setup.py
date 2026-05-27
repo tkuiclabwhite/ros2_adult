@@ -51,6 +51,7 @@ setup(
             'pk     = strategy.pk.pk:main',
             'pk_atk = strategy.pk.pk_atk:main',
             'pk_def = strategy.pk.pk_def:main',
+            'rc     = strategy.rc.rc:main',
             ],
     },
 )
