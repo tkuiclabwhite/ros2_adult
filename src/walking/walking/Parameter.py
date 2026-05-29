@@ -59,3 +59,8 @@ com_y_swing  = 0      # 質心側擺幅度 (cm)
 hip_roll     = 0
 ankle_roll   = 0
 SPEED_SCALE  = 1
+
+# ---- 新增：樓梯與姿態補償參數 ----
+walking_mode = 0     # 0:平地, 1:上樓, 2:下樓
+Board_High   = 0.0   # 階梯高度 (cm)
+Clearance    = 3.0   # 越障安全餘裕 (cm)

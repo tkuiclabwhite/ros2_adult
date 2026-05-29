@@ -36,7 +36,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Parameter.msg"
   "msg/Interface.msg"
   "msg/Parametermessage.msg"
-
+  "msg/LCParameter.msg"
   ##########  motionpackage/msg  ################
   "msg/Callback.msg"
   "msg/HeadPackage.msg"
@@ -65,6 +65,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SendHandSpeed.srv"
   ##########  walkingparameter/srv  ################
   "srv/WalkingGaitParameter.srv"
+  "srv/LCWalkingGaitParameter.srv"
 
   DEPENDENCIES std_msgs
   # DEPENDENCIES geometry_msgs # Add packages that above messages depend on, in this case geometry_msgs for Sphere.msg

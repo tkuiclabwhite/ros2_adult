@@ -2,6 +2,7 @@
 """
 Python port of WalkingGaitByLIPM::process() + math helpers implemented
 (安全修正版：偶數離散 + ε 緩衝 + 開區間，避免 Tdsp=0 邊界抖動)
+包含完整 LC_up / LC_down 上下樓梯獨立引擎整合版
 """
 
 import math
@@ -126,8 +127,13 @@ class WalkingGaitByLIPM:
         # 內部離散設定（在 process() 動態更新）
         self._N = 0
         self._eps = 1e-6
+        
+        # LC 專屬初始化
+        self.Clearance = 3.0
+        self.Ankle_roll = 0.0
+        self.Hip_roll = 0.0
 
-    # ====== 主流程（同前一版）======
+    # ====== 主流程（平地連續步態）======
     def process(self):
         # 把外部可調參數讀進來
         self.readWalkParameter()
@@ -260,23 +266,18 @@ class WalkingGaitByLIPM:
         # === 狀態分派 ===
         t, T, Tc, Tdsp = self.t_, self.TT_, self.Tc_, self.T_DSP_
         if self.walking_state == StartStep:
-            # === StartStep ===
             self.vx0_ = self.wComVelocityInit(0.0, 0.0, self.zmp_x, T, Tc)
             self.px_  = self.wComPosition(0.0, self.vx0_, self.zmp_x, t, Tc)
             self.vy0_ = self.wComVelocityInit(0.0, 0.0, self.zmp_y, T, Tc)
-
-            # 奇偶步鏡像的 COM-y 擺動（幅值相同、符號相反）
             self.py_ = self.wComPosition(0.0, self.vy0_, self.zmp_y, t, Tc)
 
             if (self.now_step_ % 2) == 1:
-                # 奇數步：右腳擺
                 self.lpx_, self.lpy_, self.lpz_ = self.zmp_x, self.zmp_y, 0.0
                 self.rpx_ = self.wFootPositionRepeat(self.now_right_x_, 0.0, t, T, Tdsp)
                 self.rpy_ = self.wFootPositionRepeat(self.now_right_y_, 0.0, t, T, Tdsp)
                 self.rpz_ = self.wFootPositionZ(self.lift_height_ * (2/3), t, T, Tdsp)
                 self.lpt_, self.rpt_ = 0.0, 0.0
             else:
-                # 偶數步：左腳擺
                 self.rpx_, self.rpy_, self.rpz_ = self.zmp_x, self.zmp_y, 0.0
                 self.lpx_ = self.wFootPositionRepeat(self.now_left_x_, 0.0, t, T, Tdsp)
                 self.lpy_ = self.wFootPositionRepeat(self.now_left_y_, 0.0, t, T, Tdsp)
@@ -362,22 +363,27 @@ class WalkingGaitByLIPM:
 
     # ====== 參數同步 ======
     def readWalkParameter(self):
-        self.period_t           = parameter.period_t
-        self.sample_time_       = parameter.sample_time
-        self.T_DSP_             = parameter.Tdsp
-        self.lift_height_       = parameter.lift_height
-        self.width_size_        = parameter.width_size
-        self.step_length_       = parameter.step_length
-        self.shift_length_      = parameter.shift_length
-        self.com_y_swing        = getattr(parameter, "com_y_swing", self.com_y_swing)
-        self.g_                 = parameter.G
-        self.com_z_height       = parameter.COM_HEIGHT
-        self.stand_height       = parameter.STAND_HEIGHT
-        self.length_pelvis      = parameter.LENGTH_PELVIS
-        self.STARTSTEPCOUNTER   = getattr(parameter, "STARTSTEPCOUNTER", self.STARTSTEPCOUNTER)
-        self.step_length_       = float(getattr(parameter, "step_length", 0.0))
-        self.shift_length_      = float(getattr(parameter, "shift_length", 0.0))
-        self.var_theta_         = float(getattr(parameter, "theta", 0.0))
+        self.period_t      = parameter.period_t
+        self.sample_time_  = parameter.sample_time
+        self.T_DSP_        = parameter.Tdsp
+        self.lift_height_  = parameter.lift_height
+        self.width_size_   = parameter.width_size
+        self.step_length_  = parameter.step_length
+        self.shift_length_ = parameter.shift_length
+        self.com_y_swing   = getattr(parameter, "com_y_swing", self.com_y_swing)
+        self.g_            = parameter.G
+        self.com_z_height  = parameter.COM_HEIGHT
+        self.stand_height  = parameter.STAND_HEIGHT
+        self.length_pelvis = parameter.LENGTH_PELVIS
+        self.STARTSTEPCOUNTER = getattr(parameter, "STARTSTEPCOUNTER", self.STARTSTEPCOUNTER)
+        self.step_length_  = float(getattr(parameter, "step_length", 0.0))
+        self.shift_length_ = float(getattr(parameter, "shift_length", 0.0))
+        self.var_theta_    = float(getattr(parameter, "theta", 0.0))
+        
+        # === 確保 LC 所需參數正確同步 ===
+        self.Clearance  = float(getattr(parameter, "Clearance", 3.0))
+        self.Ankle_roll = float(getattr(parameter, "ankle_roll", 0.0))
+        self.Hip_roll   = float(getattr(parameter, "hip_roll", 0.0))
         
     def readWalkData(self):
         def _set_param(name, value):
@@ -483,43 +489,6 @@ class WalkingGaitByLIPM:
         # 此公式確保 s=0 時速度為 0，s=0.5 時達到最高點 H，s=1 時速度回到 0
         return H * 0.5 * (1.0 - math.cos(2.0 * math.pi * s))
     
-    # def wFootPositionZ(self, lift_height, t, T, Tdsp):
-    #     """
-    #     五階多項式軌跡 (Quintic Polynomial Trajectory)
-    #     實現起點與終點的速度、加速度皆為 0，達到軟著陸效果。
-    #     """
-    #     if T <= 0:
-    #         return 0.0
-    #     Tdsp = max(0.0, min(float(Tdsp), 1.0))
-
-    #     t = float(t)
-    #     T = float(T)
-
-    #     # DSP 雙支撐期間：腳掌貼地
-    #     dsp_end = Tdsp * T
-    #     if t <= dsp_end:
-    #         return 0.0
-
-    #     # SSP 單支撐期間長度
-    #     ssp_T = (1.0 - Tdsp) * T
-    #     if ssp_T <= 0.0:
-    #         return 0.0
-
-    #     # 歸一化相位 s ∈ [0, 1]
-    #     s = (t - dsp_end) / ssp_T
-    #     if s <= 0.0 or s >= 1.0:
-    #         return 0.0
-        
-    #     H = float(lift_height)
-    #     if s <= 0.5:
-    #         # 前半段：從 0 升到 H (將 s 映射到 0~1 區間使用五階公式)
-    #         s_half = s * 2.0
-    #         return H * (10 * pow(s_half, 3) - 15 * pow(s_half, 4) + 6 * pow(s_half, 5))
-    #     else:
-    #         # 後半段：從 H 降到 0
-    #         s_half = (1.0 - s) * 2.0
-    #         return H * (10 * pow(s_half, 3) - 15 * pow(s_half, 4) + 6 * pow(s_half, 5))
-
     def wFootTheta(self, theta, reverse, t, T, T_DSP):
         new_T = T * (1.0 - T_DSP)
         new_t = t - T * T_DSP / 2.0
@@ -622,3 +591,173 @@ class WalkingGaitByLIPM:
         self.now_left_y_ = half_w
         self.theta_ = self.var_theta_ = self.last_theta_ = 0.0
         self.if_finish_ = False
+
+
+    # =========================================================
+    # 上下樓梯 (LC) 專用演算法區塊 (從小人型移植)
+    # =========================================================
+    def get_bezier_foot_trajectory(self, start_x, start_z, target_x, target_z, s, mode):
+        """ 三次貝茲曲線 (上/下樓梯完美分流版) """
+        if s <= 0.0: return start_x, start_z
+        if s >= 1.0: return target_x, target_z
+        
+        # 讀取網頁設定的跨越高度 (Clearance)
+        clearance = float(getattr(parameter, "Clearance", 3.0))
+        
+        P0_x, P0_z = start_x, start_z
+        P3_x, P3_z = target_x, target_z
+
+        if mode == 1:
+            # ==========================================
+            # 【上樓梯 (LC_up)】：對稱拋物線
+            # ==========================================
+            highest_z = max(start_z, target_z) + clearance
+            P1_x, P1_z = start_x + (target_x - start_x) * 0.1, highest_z
+            P2_x, P2_z = target_x - (target_x - start_x) * 0.1, highest_z
+
+        elif mode == 2:
+            # ==========================================
+            # 【下樓梯 (LC_down)】：防刮邊緣的 L 型軌跡
+            # ==========================================
+            highest_z = start_z + clearance
+            
+            # 控制點 1 (防刮邊緣)：強迫腳先「往前平移」至少 80% 的距離，並保持抬起的高度
+            P1_x, P1_z = start_x + (target_x - start_x) * 0.8, highest_z
+            
+            # 控制點 2 (防重踏)：腳抵達目標正上方後，再讓它「垂直緩慢降落」
+            # 將 Z 軸設為 target_z + clearance，可以強制減緩落地的 Z 軸速度
+            P2_x, P2_z = target_x, target_z + clearance
+
+        else:
+            highest_z = max(start_z, target_z) + clearance
+            P1_x, P1_z = start_x + (target_x - start_x) * 0.1, highest_z
+            P2_x, P2_z = target_x - (target_x - start_x) * 0.1, highest_z
+
+        # 貝茲公式展開
+        u = 1.0 - s
+        tt = s * s
+        uu = u * u
+        uuu = uu * u
+        ttt = tt * s
+
+        x = uuu * P0_x + 3 * uu * s * P1_x + 3 * u * tt * P2_x + ttt * P3_x
+        z = uuu * P0_z + 3 * uu * s * P1_z + 3 * u * tt * P2_z + ttt * P3_z
+        return x, z
+    
+    def smooth_step(self, t):
+        """ 平滑插值函數 (S-curve)，讓馬達硬偏移時不會瞬間爆衝抖動 """
+        return t * t * (3.0 - 2.0 * t)
+
+    def process_lc_step(self):
+        """ 完全獨立的上下樓梯引擎 """
+        self.sample_point_ += 1
+        self.time_point_ = self.sample_point_ * self.sample_time_
+        
+        mode = int(getattr(parameter, "walking_mode", 1))
+        T = self.period_t / 1000.0        
+        total_t = self.time_point_ / 1000.0
+        
+        board_high = float(getattr(parameter, "Board_High", 0.0))
+        target_z = board_high if mode == 1 else -board_high
+        
+        # 精準抓取網頁的 com_y_swing 作為硬偏移
+        y_shift = float(getattr(parameter, "com_y_swing", 0.0)) 
+        if y_shift == 0.0: y_shift = float(getattr(parameter, "COM_Y_shift", 0.0))
+        
+        target_x = float(getattr(parameter, "step_length", 0.0))
+        
+        # 配置時間軸
+        if total_t <= T:
+            self.now_step_ = 1
+            t = total_t
+        elif total_t <= 2 * T:
+            self.now_step_ = 2
+            t = total_t - T
+        elif total_t <= 2.5 * T:
+            self.now_step_ = 3
+            t = total_t - 2 * T
+        else:
+            self.now_step_ = 3
+            t = 0.5 * T
+            self.ready_to_stop_ = True
+            
+        if self.pre_step_ != self.now_step_:
+            mode_name = "LC_up" if mode == 1 else "LC_down"
+            state_str = ["", "Step 1: 跨第一腳", "Step 2: 收第二腳", "Step 3: 雙腳踩穩，重心回正"]
+            print(f"--- {mode_name} Step: {self.now_step_} ---", flush=True)
+            print(f"系統狀態: {state_str[self.now_step_]} (com_y_swing = {y_shift}, board_high = {board_high})", flush=True)
+            self.pre_step_ = self.now_step_
+            
+        s = max(0.0, min(t / T, 1.0))
+        if self.now_step_ == 3: s = max(0.0, min(t / (0.5 * T), 1.0))
+
+        # =========================================================
+        # --- 1. 質心 (COM) Y 軸硬偏移 (絕對防左倒) ---
+        # =========================================================
+        if self.now_step_ == 1:
+            self.py_ = y_shift * self.smooth_step(s)
+        elif self.now_step_ == 2:
+            self.py_ = y_shift - (2 * y_shift) * self.smooth_step(s)
+        elif self.now_step_ == 3:
+            self.py_ = -y_shift * (1.0 - self.smooth_step(s))
+
+        # =========================================================
+        # --- 2. 質心 (COM) X, Z 軸前進與爬升 ---
+        # =========================================================
+        # X 軸前進：Step 1 走一半，Step 2 走完
+        if self.now_step_ == 1:
+            x_ratio = 0.5 * self.smooth_step(s)
+        elif self.now_step_ == 2:
+            x_ratio = 0.5 + 0.5 * self.smooth_step(s)
+        else:
+            x_ratio = 1.0
+
+        # Z 軸爬升：上樓時 Step 2 才爬升；下樓時 Step 1 就下降
+        if target_z >= 0: # 上樓梯
+            if self.now_step_ == 1: lift_ratio = 0.0
+            elif self.now_step_ == 2: lift_ratio = self.smooth_step(s)
+            else: lift_ratio = 1.0
+        else:             # 下樓梯
+            if self.now_step_ == 1: lift_ratio = self.smooth_step(s)
+            elif self.now_step_ == 2: lift_ratio = 1.0
+            else: lift_ratio = 1.0
+
+        self.pz_ = self.com_z_height + (target_z * lift_ratio)
+        self.px_ = target_x * x_ratio  
+            
+        # =========================================================
+        # --- 3. 雙腳貝茲軌跡計算 ---
+        # =========================================================
+        # 延遲起飛：讓重心移動一定比例後，腳才允許離地 (配合網頁的 T_DSP)
+        delay_ratio = max(0.1, min(float(getattr(parameter, "Tdsp", 0.0)), 0.4))
+        s_swing = max(0.0, (s - delay_ratio) / (1.0 - delay_ratio)) if s < 1.0 else 1.0
+
+        if self.now_step_ == 1:
+            self.lpx_, self.lpz_ = self.get_bezier_foot_trajectory(0.0, 0.0, target_x, target_z, s_swing, mode)
+            self.rpx_, self.rpz_ = 0.0, 0.0
+        elif self.now_step_ == 2:
+            self.lpx_, self.lpz_ = target_x, target_z
+            self.rpx_, self.rpz_ = self.get_bezier_foot_trajectory(0.0, 0.0, target_x, target_z, s_swing, mode)
+        else:
+            self.lpx_, self.lpz_ = target_x, target_z
+            self.rpx_, self.rpz_ = target_x, target_z
+            
+        self.lpy_ = self.width_size_ / 2.0
+        self.rpy_ = -self.width_size_ / 2.0
+        
+        # --- 4. 座標轉換寫入 (World to Body) ---
+        self.step_point_lx_ = self.lpx_ - self.px_
+        self.step_point_ly_ = self.lpy_ - self.py_
+        self.step_point_lz_ = self.pz_ - self.lpz_
+        self.step_point_rx_ = self.rpx_ - self.px_
+        self.step_point_ry_ = self.rpy_ - self.py_
+        self.step_point_rz_ = self.pz_ - self.rpz_
+        self.step_point_lthta_ = 0.0
+        self.step_point_rthta_ = 0.0
+        
+        # 同步 u 變數，修復 Terminal 監控顯示
+        self.px_u = self.px_
+        self.py_u = self.py_
+
+        self.coordinate_offset()
+        self.push_data_ = True

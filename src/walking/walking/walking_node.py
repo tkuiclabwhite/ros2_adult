@@ -10,6 +10,7 @@ WalkingNode.py — [Snapshot Baseline + Landing Fix + Dynamic Stand Update]
 """
 
 import sys
+import os
 import time
 import threading
 import math
@@ -33,7 +34,7 @@ except ImportError as e:
     sys.exit(1)
 
 # ============================================================
-# 馬達 ID 設定
+# 馬達 ID 設定 (大人型 Adult 專屬 ID)
 # ============================================================
 IDS_ARM  = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 IDS_HEAD = [28,29]
@@ -98,7 +99,8 @@ def calc_rel_gp_from_ang(ang_now: List[float], baseline_ang: List[float]) -> Dic
 # ============================================================
 PARAM_KEYS = ["period_t","Tdsp","COM_HEIGHT","STAND_HEIGHT","lift_height",
               "com_y_swing","COM_Y_shift","width_size","step_length","shift_length",
-              "theta","THTA","compensation_swing_ankle"]
+              "theta","THTA","compensation_swing_ankle",
+              "Board_High", "Clearance", "Hip_roll", "Ankle_roll"]
 
 def get_param_dict():
     out = {}
@@ -109,9 +111,16 @@ def get_param_dict():
 def apply_param_dict(d):
     # 1. 先嘗試套用所有傳進來的參數
     for k, v in d.items():
-        if hasattr(parameter, k):
+        if hasattr(parameter, k) or k in PARAM_KEYS:
             try: setattr(parameter, k, float(v))
             except Exception: pass
+            
+    # === 新增：擷取上下樓梯的特殊參數 ===
+    if "mode" in d: parameter.walking_mode = int(d["mode"])
+    if "board_high" in d: parameter.Board_High = float(d["board_high"])
+    if "Board_High" in d: parameter.Board_High = float(d["Board_High"])
+    if "clearance" in d: parameter.Clearance = float(d["clearance"])
+    if "Clearance" in d: parameter.Clearance = float(d["Clearance"])
     
     # 2. 處理特殊計算 (Tc_)
     if hasattr(parameter, "COM_HEIGHT") and hasattr(parameter, "G"):
@@ -133,21 +142,15 @@ def apply_param_dict(d):
     if hasattr(walking, "shift_length_"): walking.shift_length_ = float(getattr(parameter, "shift_length", 0.0))
     
     # =========================================================================
-    # ★ 關鍵修改：強制鎖定 sample_time 為 30
+    # ★ 關鍵修改：強制鎖定 sample_time 為 20
     # =========================================================================
-    # 不管上面讀到了什麼 (0 或亂碼)，這裡直接覆寫回 30
-    # FIXED_SAMPLE_TIME = 30.0
     FIXED_SAMPLE_TIME = 20.0
     
-    # 更新 Parameter 物件
     if hasattr(parameter, "sample_time"):
         parameter.sample_time = FIXED_SAMPLE_TIME
         
-    # 更新 WalkingGait 物件 (這是防止 ZeroDivisionError 的關鍵)
     if hasattr(walking, "sample_time_"):
         walking.sample_time_ = FIXED_SAMPLE_TIME
-        # print(f"[DEBUG] sample_time enforced to {FIXED_SAMPLE_TIME}") # 需要除錯時可打開
-    # =========================================================================
 
     if hasattr(walking, "var_theta_"):
         theta_val = None
@@ -215,11 +218,9 @@ class WalkingNode(Node):
         self.walk_active = (msg.data == 1)
         self.get_logger().info(f'recv /ContinousMode_Topic={msg.data} -> walk_active={self.walk_active}')
 
-    # Callback 函式
     def _reset_anchor_cb(self, msg: Bool):
         if msg.data:
             self.req_reset_anchor = True
-            self.get_logger().warn("[Request] Received Anchor Reset Flag! Next 'Generate' will update baseline.")
 
     def _cmd_cb(self, msg: Interface):
         scale = 0.001; theta_scale = 0.01
@@ -230,6 +231,9 @@ class WalkingNode(Node):
         walking.step_length_  = float(msg.x) * scale
         walking.shift_length_ = float(msg.y) * scale
         walking.var_theta_    = float(math.radians(msg.theta)) * theta_scale
+        
+        # === 接收網頁端 LC Mode 切換指令 ===
+        parameter.walking_mode = msg.walking_mode
 
     def publish_params(self):
         d = get_param_dict()
@@ -268,10 +272,8 @@ def main():
     spin_thread.start()
 
     # 變數宣告
-    baseline_ticks: Dict[int, int] = {} # 這是目前的基準 (走路用的)
-    baseline_ang: List[float] = []      # 這是目前的角度 (走路用的)
-    
-    # ★ 新增：永遠不變的初始錨點 (用來計算 Idle 站姿變化)
+    baseline_ticks: Dict[int, int] = {}
+    baseline_ang: List[float] = []
     initial_ticks: Dict[int, int] = {}  
     initial_ang: List[float] = []       
     
@@ -283,8 +285,6 @@ def main():
     landing_counter = 0        
     LANDING_LIMIT = 20         
 
-    # 參數追蹤
-    # ★ 設定初始預設值 (請確保這裡跟 Parameter.py 預設一樣)
     start_w = 4.5 
     start_h = 23.5
     last_applied_width = start_w
@@ -293,7 +293,6 @@ def main():
     WIDTH_EPS = 1e-6
 
     t_next = time.perf_counter() + DT
-    last_dbg_t = 0.0
 
     try:
         print("[setup] Waiting for motor data...")
@@ -304,10 +303,6 @@ def main():
                     break
             time.sleep(0.1)
         
-        # ---------------------------------------------------------
-        # ★ 修改：這裡不再抓取 initial_ticks 了！
-        # 我們留到按下 Generate 之後才抓，這樣你才有機會手動扶正機器人
-        # ---------------------------------------------------------
         print(f"[setup] Ready. Please enable 'Generate' to set the Anchor Pose.")
 
         while rclpy.ok():
@@ -315,26 +310,13 @@ def main():
             now = time.perf_counter()
             ws = getattr(walking, "walking_state", None)
 
-            # Debug Log
-            # if now - last_dbg_t > 1.0:
-            #     last_dbg_t = now
-            #     mode_str = "LANDING_Override" if landing_mode else ("WALKING" if (is_walking or stopping_active) else "IDLE")
-            #     state_name = STATE_NAME.get(ws, str(ws))
-            #     current_w = float(getattr(walking, "width_size_", 0.0))
-            #     # 顯示目前是否已經定錨
-            #     anchor_status = "SET" if initial_ticks else "NOT_SET"
-            #     # print(f"[Loop] Mode={mode_str} | Anchor={anchor_status} | Width={current_w:.2f}", flush=True)
-
             # ==========================================================
-            # 1. Generate ON (走路開始) --> ★ 在這裡定錨！
+            # 1. Generate ON (走路開始) --> 在這裡定錨！
             # ==========================================================
             if is_walking and not was_walking:
                 print("\n[Generate ON] STARTING...")
-                
-                # 判斷是否需要重抓錨點
                 if (not initial_ticks) or node.req_reset_anchor:
                     if node.req_reset_anchor:
-                        print("[Reset] Forced Anchor Reset triggered by Motion!")
                         node.req_reset_anchor = False
 
                     with motor_state_lock:
@@ -352,16 +334,9 @@ def main():
                     )
                     start_ik_ang = apply_ankle_compensation(start_ik_ang)
                     initial_ang = list(start_ik_ang)
-                    
-                    print(f"[Generate ON] Anchor Updated. W={cur_w_start}, H={cur_h_start}")
                 else:
                     print("Resuming: Using existing Baseline (Fixes Drift Issue).")
-                    pass  # else 結束在這裡
 
-                # =========================================================
-                # ★ 修正重點：這一段必須「跳出」else，向左縮排！
-                # 確保無論是 Reset 還是 Resume，這裡都會被執行到
-                # =========================================================
                 walking.final_step()
                 b_ang = compute_ik_auto(
                     walking.end_point_lx_, walking.end_point_ly_, walking.end_point_lz_, walking.end_point_lthta_,
@@ -382,7 +357,6 @@ def main():
             # 2. Generate OFF (走路停止)
             # ==========================================================
             if not is_walking and was_walking:
-                # ... (維持原樣) ...
                 print("[Generate OFF] Stopping requested...")
                 stopping_active = True
                 landing_mode = False
@@ -394,10 +368,13 @@ def main():
 
             was_walking = is_walking
 
-            # 3. Landing Logic ... (維持原樣) ...
+            # ==========================================================
+            # 3. Landing Logic (強制落地緩衝，支援 LC 判斷)
+            # ==========================================================
             if stopping_active and not landing_mode:
                 rts = bool(getattr(walking, "ready_to_stop_", False))
-                if (ws == StartStep) and (not rts):
+                current_mode = getattr(parameter, "walking_mode", 0)
+                if current_mode in [1, 2] or ((ws == StartStep) and (not rts)):
                     landing_mode = True
                     landing_counter = 0
 
@@ -408,8 +385,28 @@ def main():
                 if stopping_active and saved_lift_height is None:
                      saved_lift_height = float(getattr(walking, "lift_height_", 0.0))
 
-                walking.process()
+                # === 關鍵分流：根據 walking_mode 切換演算法 ===
+                current_mode = getattr(parameter, "walking_mode", 0)
+                if current_mode in [1, 2]:
+                    # 如果 Walkinggait 裡有寫 process_lc_step 就呼叫
+                    if hasattr(walking, "process_lc_step"):
+                        walking.process_lc_step()
+                    else:
+                        walking.process()
 
+                    # 寫入軌跡紀錄 CSV (偵錯用)
+                    if not hasattr(node, "trajectory_log"): node.trajectory_log = []
+                    t_sec = walking.time_point_ / 1000.0
+                    node.trajectory_log.append(f"{t_sec:.3f},{walking.now_step_},{walking.lpx_:.3f},{walking.lpz_:.3f},{walking.rpx_:.3f},{walking.rpz_:.3f},{walking.pz_:.3f}")
+                    
+                    # 上下樓梯是「單步模式」，走完一步後自動停止
+                    if getattr(walking, "ready_to_stop_", False) or getattr(walking, "if_finish_", False): 
+                        node.walk_active = False
+                else:
+                    # 一般平地連續走路
+                    walking.process()
+
+                # 計算 IK
                 ang_now = compute_ik_auto(
                     walking.end_point_lx_, walking.end_point_ly_, walking.end_point_lz_, walking.end_point_lthta_,
                     walking.end_point_rx_, walking.end_point_ry_, walking.end_point_rz_, walking.end_point_rthta_,
@@ -417,7 +414,7 @@ def main():
                 )
                 ang_now = apply_ankle_compensation(ang_now)
                 
-                # 走路時使用動態更新的 baseline
+                # 下發目標角度
                 if baseline_ang:
                     rel_cmd = calc_rel_gp_from_ang(ang_now, baseline_ang)
                     gp_abs = {}
@@ -442,11 +439,35 @@ def main():
                     print(f"[state] Landing finished. Restored Baseline.")
                     stopping_active = False
                     landing_mode = False
+
+                    # ★ 先把剛剛走完的是上樓(1)還是下樓(2)記下來
+                    finished_mode = getattr(parameter, "walking_mode", 0)
+
+                    # 自動將狀態洗回 0 (平地)，防止暴衝
+                    if finished_mode in [1, 2]:
+                        parameter.walking_mode = 0
+                        print("[state] LC Step Completed. Auto-reset to Mode 0.")
+                    
+                    # ★ 儲存軌跡檔案 (自動根據上/下板分開檔名，就不會互蓋了！)
+                    if hasattr(node, "trajectory_log") and len(node.trajectory_log) > 0:
+                        import os
+                        # 檔名自動切換
+                        file_name = "trajectory_LCup.csv" if finished_mode == 1 else "trajectory_LCdown.csv"
+                        save_path = os.path.expanduser(f"~/{file_name}")
+                        
+                        try:
+                            with open(save_path, "w", encoding="utf-8") as f:
+                                f.write("time,step,lpx,lpz,rpx,rpz,com_z\n")
+                                f.write("\n".join(node.trajectory_log))
+                            print(f"\033[92m[Debug] CSV saved to {save_path}\033[0m")
+                        except Exception as e: pass
+                        node.trajectory_log.clear()
+
                     if saved_lift_height is not None:
                         try: walking.lift_height_ = float(saved_lift_height)
                         except: pass
                         saved_lift_height = None
-
+                        
             # ==========================================================
             # 分支 C: Idle 站姿調整
             # ==========================================================
@@ -461,16 +482,12 @@ def main():
                 com_changed = abs(cur_com - last_applied_com) > WIDTH_EPS
 
                 if width_changed or height_changed or com_changed or is_dirty:
-                    # ★ 防呆：如果還沒按過 Generate，initial_ticks 會是空的，這時不准調整
                     if not initial_ticks:
-                        # print(f"[Idle] Ignored adjustment. Please toggle 'Generate' at least once to set Anchor.")
-                        # 這裡要更新 last_applied 以免迴圈一直印 Log
                         last_applied_width = cur_w
                         last_applied_height = cur_h
                         last_applied_com = cur_com
                         continue
 
-                    print(f"[Idle] Recomputing Stand... Target: W={cur_w}, H={cur_h}")
                     node.width_dirty = False
                     
                     # 1. 更新參數
@@ -494,20 +511,13 @@ def main():
                             base = initial_ticks.get(mid, DEFAULT_TICKS)
                             delta = rel_cmd.get(mid, 0)
                             
-                            # if abs(delta) > 800:
-                            #     print(f"[WARNING] Motor {mid} delta {delta} too large! Ignored.")
-                            #     delta = 0
-                            
                             new_val = int((base + delta) % 4096)
                             new_ticks[mid] = new_val
                         
-                        # 發送指令
                         node.publish_command(new_ticks)
                         
-                        # 更新 Baseline (為了讓下次走路是從這個新姿勢開始)
                         baseline_ticks = dict(new_ticks)
                         baseline_ang = list(stand_ang)
-                        print(f"[Idle] Done. Baseline moved to W={cur_w}")
                     
                     last_applied_width = cur_w
                     last_applied_height = cur_h

@@ -16,6 +16,10 @@ from tku_msgs.msg import Parameter as ParameterMsg
 from tku_msgs.srv import WalkingGaitParameter
 from tku_msgs.msg import Location as LocationMsg
 
+# === 新增 LC (上下樓梯) 的通訊格式 ===
+from tku_msgs.msg import LCParameter as LCParameterMsg
+from tku_msgs.srv import LCWalkingGaitParameter
+
 from . import Parameter as parameter
 
 # 骨盆寬度（全寬, cm）
@@ -51,7 +55,7 @@ class WalkingWebBridge(Node):
             self.current_save_path = DEFAULT_SAVE_PATH
             self.get_logger().info(f"DEBUG: [Init] Using default path: {self.current_save_path}")
 
-        # 2. 參數初始化
+        # 2. 參數初始化 (補上 board_high 與 clearance 等)
         self.current_params = {
             "com_y_swing":   float(getattr(parameter, "com_y_swing"     , 0.0)),
             "width_size":    float(getattr(parameter, "width_size"      , 4.5)),
@@ -62,6 +66,8 @@ class WalkingWebBridge(Node):
             "com_height":    float(getattr(parameter, "com_height"      , 29.5)),
             "hip_roll":      float(getattr(parameter, "hip_roll"        , 0.0)),
             "ankle_roll":    float(getattr(parameter, "ankle_roll"      , 0.0)),
+            "board_high":    float(getattr(parameter, "Board_High"      , 0.0)),
+            "clearance":     float(getattr(parameter, "Clearance"       , 3.0)),
 
             "step_length":   float(getattr(parameter, "step_length"     , 0.0)),
             "shift_length":  float(getattr(parameter, "shift_length"    , 0.0)),
@@ -75,9 +81,14 @@ class WalkingWebBridge(Node):
         # 訂閱網頁訊號
         self.location_sub = self.create_subscription(LocationMsg, '/location', self.location_callback, 10)
         self.location_pub = self.create_publisher(LocationMsg, '/locationBack', 10)
-        self.param_save_sub = self.create_subscription(ParameterMsg, '/web/parameter_Topic', self.param_save_callback, 10)
         
+        # === 平地參數 Service & Topic ===
+        self.param_save_sub = self.create_subscription(ParameterMsg, '/web/parameter_Topic', self.param_save_callback, 10)
         self.srv = self.create_service(WalkingGaitParameter, '/web/LoadWalkingGaitParameter', self.handle_load_walking_param)
+
+        # === 新增：上下樓梯 LC 參數 Service & Topic ===
+        self.lc_param_save_sub = self.create_subscription(LCParameterMsg, '/web/lc_parameter_Topic', self.lc_param_save_callback, 10)
+        self.lc_srv = self.create_service(LCWalkingGaitParameter, '/web/LoadLCWalkingGaitParameter', self.handle_load_lc_walking_param)
 
         self.get_logger().info('WalkingWebBridge Ready & Waiting for messages...')
 
@@ -100,6 +111,18 @@ class WalkingWebBridge(Node):
         if p.with_suffix(".ini").exists(): return p.with_suffix(".ini")
         if p.with_suffix(".yaml").exists(): return p.with_suffix(".yaml")
         return p.with_suffix(".ini")
+    
+    # === 新增：針對不同 mode 取不同的檔案 (UpStair / DownStair) ===
+    def _get_save_path(self, mode=0) -> Path:
+        base_dir = Path(self.location) if self.location else Path(DEFAULT_SAVE_PATH).parent
+        if mode == 1: 
+            return base_dir / "UpStair.ini"
+        elif mode == 2: 
+            return base_dir / "DownStair.ini"
+        else:
+            if base_dir.is_dir(): return base_dir / "WalkingParameter.ini"
+            if base_dir.suffix: return base_dir
+            return base_dir.with_suffix(".ini")
 
     def _resolve_strategy_root(self) -> Path:
         for up in Path(__file__).resolve().parents:
@@ -244,6 +267,24 @@ class WalkingWebBridge(Node):
         except Exception as e:
             self.get_logger().error(f"ERROR: [Save] Failed: {e}")
 
+    # === 新增：上下樓梯 (LC) 參數的儲存 Callback ===
+    def lc_param_save_callback(self, msg: LCParameterMsg):
+        target_path = self._get_save_path(msg.mode)
+        data = {
+            "period_t": msg.period_t, "com_y_swing": msg.com_y_swing, "width_size": msg.width_size,
+            "t_dsp": msg.t_dsp, "lift_height": msg.lift_height, "stand_height": msg.stand_height,
+            "com_height": msg.com_height, "board_high": msg.board_high, "clearance": msg.clearance,
+            "hip_roll": msg.hip_roll, "ankle_roll": msg.ankle_roll
+        }
+        try:
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            with open(target_path, "w", encoding="utf-8") as f:
+                for k, v in data.items(): f.write(f"{k}={v}\n")
+            print(f"\033[96m✅ [Save LC] Success: {target_path}\033[0m", flush=True)
+            self.current_params.update(data)
+        except Exception as e:
+            self.get_logger().error(f"ERROR: [Save LC] Failed: {e}")
+
     def walking_params_callback(self, msg: String):
         try:
             data = json.loads(msg.data)
@@ -259,7 +300,7 @@ class WalkingWebBridge(Node):
         # =========================================================================
         response.com_y_swing        = float (p.get("com_y_swing", 0.0))
         response.width_size         = float (p.get("width_size", 0.0))
-        response.period_t           = int   (p.get("period_t"))
+        response.period_t           = int   (p.get("period_t", 360))
         response.t_dsp              = float (p.get("t_dsp", 0.0))
         response.lift_height        = float (p.get("lift_height", 2.5))
         response.stand_height       = float (p.get("stand_height", 23.5))
@@ -277,6 +318,38 @@ class WalkingWebBridge(Node):
         print(f"DEBUG: [Check] com_height 最終回傳值:   {response.com_height}"  , flush=True)
         print(f"DEBUG: [Check] hip_roll 最終回傳值:     {response.hip_roll}"    , flush=True)
         print(f"DEBUG: [Check] ankle_roll 最終回傳值:   {response.ankle_roll}"  , flush=True)
+
+        return response
+
+    # === 新增：上下樓梯 (LC) 參數的讀取 Service ===
+    def handle_load_lc_walking_param(self, request, response):        
+        target_path = self._get_save_path(request.mode)
+        self.get_logger().info(f"DEBUG: [Service] Load LC params called. Source: {target_path}")
+        loaded_data = {}
+        if os.path.exists(target_path):
+            with open(target_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if '=' in line and not line.startswith(('#', ';', '[')):
+                        parts = line.split('=', 1)
+                        try: loaded_data[parts[0].strip()] = float(parts[1].strip())
+                        except ValueError: pass
+
+        response.period_t     = int(loaded_data.get("period_t", 360))
+        response.com_y_swing  = float(loaded_data.get("com_y_swing", 0.0))
+        response.width_size   = float(loaded_data.get("width_size", 0.0))
+        response.t_dsp        = float(loaded_data.get("osc_lockrange", loaded_data.get("t_dsp", 0.0)))
+        response.lift_height  = float(loaded_data.get("base_default_z", loaded_data.get("lift_height", 0.0)))
+        response.stand_height = float(loaded_data.get("now_stand_height", loaded_data.get("stand_height", 23.5)))
+        response.com_height   = float(loaded_data.get("now_com_height", loaded_data.get("com_height", 29.5)))
+        response.board_high   = float(loaded_data.get("base_lift_z", loaded_data.get("board_high", 0.0)))
+        response.clearance    = float(loaded_data.get("Clearance", loaded_data.get("clearance", 3.0)))
+        response.hip_roll     = float(loaded_data.get("Hip_roll", loaded_data.get("hip_roll", 0.0)))
+        response.ankle_roll   = float(loaded_data.get("Ankle_roll", loaded_data.get("ankle_roll", 0.0)))
+
+        print(f"DEBUG: [Check LC] period_t 最終回傳值: {response.period_t}", flush=True)
+        print(f"DEBUG: [Check LC] t_dsp 最終回傳值: {response.t_dsp}", flush=True)
+        print(f"DEBUG: [Check LC] board_high 最終回傳值: {response.board_high}",flush=True)
+        print(f"DEBUG: [Check LC] clearance 最終回傳值: {response.clearance}",flush=True)
 
         return response
 

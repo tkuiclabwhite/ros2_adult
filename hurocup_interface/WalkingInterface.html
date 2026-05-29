@@ -137,7 +137,6 @@
 		});
 		locationBack_Subscriber.subscribe(function (msg) {
 			console.log("locationBack:", msg.data);
-
 			let loc = msg.data;
 
 			if (typeof loc === 'string') {
@@ -147,7 +146,20 @@
 				}
 			}
 			document.getElementById('current-strategy-name').innerText = loc;
-			console.log(loc);
+			
+			// 如果策略切換到 lc，才顯示 LC_up 與 LC_down 的按鈕
+			let targetDisplay = (loc === 'sr') ? 'block' : 'none';
+			if (lastDisplayState !== targetDisplay) {
+				document.getElementById('extra-options').style.display = targetDisplay;
+				lastDisplayState = targetDisplay;
+				if (targetDisplay === 'none') {
+					const continuousRadio = document.querySelector('input[name="gender"][value="Continuous"]');
+					if (continuousRadio) {
+						continuousRadio.checked = true;
+						ContinuousFun();
+					}
+				}
+			}
 		});
 
 		var SendBodyAuto_Topic = new ROSLIB.Topic({
@@ -204,6 +216,17 @@
 			ros: ros,
 			name: '/web/parameter_Topic',
 			messageType: 'tku_msgs/Parameter'
+		});
+		var web_lc_parameter_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/web/lc_parameter_Topic',
+			messageType: 'tku_msgs/LCParameter'
+		});
+
+		var LoadLCWalkingGaitParameterClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/web/LoadLCWalkingGaitParameter',
+			serviceType: 'tku_msgs/LCWalkingGaitParameter'
 		});
 
 		var parameter_msg = new ROSLIB.Message({
@@ -398,41 +421,19 @@
 
 		
 		function Generate() {
-			if (statetype == 0 && ContinousModetmp == 0) {
+			if (statetype == 1 || statetype == 2) {
 				ContinousMode_msg.data = 1;
-				ContinousModetmp = 1;
-				ContinousMode_Topic.publish(ContinousMode_msg);
-			} 
-			else if (statetype == 0 && ContinousModetmp == 1) 
-			{
-				ContinousMode_msg.data = 0;
 				ContinousModetmp = 0;
-				ContinousMode_Topic.publish(ContinousMode_msg);
-			} 
-			else if (statetype == 7 && ContinousModetmp == 0) 
-			{
-				ContinousMode_msg.data = 1;
-				ContinousModetmp = 1;
-				ContinousMode_Topic.publish(ContinousMode_msg);
-			} 
-			else if (statetype == 7 && ContinousModetmp == 1) 
-			{
-				ContinousMode_msg.data = 0;
-				ContinousModetmp = 0;
-				ContinousMode_Topic.publish(ContinousMode_msg);
-			} 
-			else if (statetype == 8 && ContinousModetmp == 0) 
-			{
-				ContinousMode_msg.data = 1;
-				ContinousModetmp = 1;
-				ContinousMode_Topic.publish(ContinousMode_msg);
-			} 
-			else if (statetype == 8 && ContinousModetmp == 1) 
-			{
-				ContinousMode_msg.data = 0;
-				ContinousModetmp = 0;
-				ContinousMode_Topic.publish(ContinousMode_msg);
+			} else if (statetype == 0 || statetype == 7 || statetype == 8) {
+				if (ContinousModetmp == 0) {
+					ContinousMode_msg.data = 1;
+					ContinousModetmp = 1;
+				} else {
+					ContinousMode_msg.data = 0;
+					ContinousModetmp = 0;
+				}
 			}
+			ContinousMode_Topic.publish(ContinousMode_msg);
 			SendBodyAutoFun();
 		}
 
@@ -477,224 +478,233 @@
 			statetype = 0;
 			Load();
 			document.getElementById("continuousstep").style.display = "inline";
+			document.getElementById("lcupstep").style.display = "none";
+			document.getElementById("lcdownstep").style.display = "none";
+		}
+
+		function LC_upFun() {
+			statetype = 1;
+			Load();
+			document.getElementById("continuousstep").style.display = "none";
+			document.getElementById("lcupstep").style.display = "inline";
+			document.getElementById("lcdownstep").style.display = "none";
+		}
+
+		function LC_downFun() {
+			statetype = 2;
+			Load();
+			document.getElementById("continuousstep").style.display = "none";
+			document.getElementById("lcupstep").style.display = "none";
+			document.getElementById("lcdownstep").style.display = "inline";
 		}
 
 		function Load() {
 			if (document.getElementById("Continuousback").checked) {
 				Continuousback_msg.data = true;
-				console.log("checked");
-			}
-			else {
+			} else {
 				Continuousback_msg.data = false;
-				console.log("unchecked");
 			}
 			Continuousback_Topic.publish(Continuousback_msg);
-			console.log('statetype = ', statetype);
+			
 			WalkingGaitParameter_request.mode = Number(statetype);
-			LoadWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (walkinggait_parameter) {
-				com_y_swing_tmp 	= walkinggait_parameter.com_y_swing;
-				width_size_tmp		= walkinggait_parameter.width_size;
-				period_t_tmp 	  	= walkinggait_parameter.period_t;
-				T_DSP_tmp			= walkinggait_parameter.t_dsp;
-				lift_height_tmp 	= walkinggait_parameter.lift_height;
-				stand_height_tmp 	= walkinggait_parameter.stand_height;
-				com_height_tmp 		= walkinggait_parameter.com_height;
-				hip_roll_tmp 		= walkinggait_parameter.hip_roll;
-				ankle_roll_tmp 		= walkinggait_parameter.ankle_roll;
-
-				switch (statetype) {
-					case 0:
-						document.getElementById("com_y_swing").value 	= com_y_swing_tmp;
-						document.getElementById("WidthSize").value 		= width_size_tmp;
-						document.getElementById("period_t").value 		= period_t_tmp;
-						document.getElementById("T_DSP").value 			= T_DSP_tmp;
-						document.getElementById("lift_height").value 	= lift_height_tmp;
-						document.getElementById("stand_height").value 	= stand_height_tmp;
-						document.getElementById("com_height").value 	= com_height_tmp;
-						document.getElementById("hip_roll").value 		= hip_roll_tmp;
-						document.getElementById("ankle_roll").value 	= ankle_roll_tmp;
-						break;
-				}
-			});
+			
+			if (statetype === 0) {
+				LoadWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (res) {
+					document.getElementById("com_y_swing").value = res.com_y_swing;
+					document.getElementById("WidthSize").value = res.width_size;
+					document.getElementById("period_t").value = res.period_t;
+					document.getElementById("T_DSP").value = res.t_dsp;
+					document.getElementById("lift_height").value = res.lift_height;
+					document.getElementById("stand_height").value = res.stand_height;
+					document.getElementById("com_height").value = res.com_height;
+					if(document.getElementById("hip_roll")) document.getElementById("hip_roll").value = res.hip_roll;
+					if(document.getElementById("ankle_roll")) document.getElementById("ankle_roll").value = res.ankle_roll;
+				});
+			} else if (statetype === 1 || statetype === 2) {
+				LoadLCWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (res) {
+					var prefix = (statetype === 1) ? "lu" : "ld";
+					document.getElementById(prefix + "period_t").value = res.period_t;
+					document.getElementById(prefix + "com_y_swing").value = res.com_y_swing;
+					document.getElementById(prefix + "width_size").value = res.width_size;
+					document.getElementById(prefix + "osc_lockrange").value = res.t_dsp;
+					document.getElementById(prefix + "now_stand_height").value = res.stand_height;
+					document.getElementById(prefix + "now_com_height").value = res.com_height;
+					document.getElementById(prefix + "base_lift_z").value = res.board_high;
+					document.getElementById(prefix + "Clearance").value = res.clearance;
+				});
+			}
 		}
 
 		function Save() {
 			var s_type = Number(statetype);
 			function getVal(id, defaultVal) {
 				var el = document.getElementById(id);
-				// 如果元素存在且有值，就回傳數值；否則回傳預設值
-				if (el && el.value !== "") {
-					return Number(el.value);
-				}
+				if (el && el.value !== "") return Number(el.value);
 				return defaultVal;
 			}
 
-			function getChecked(id) {
-				var el = document.getElementById(id);
-				if (el) return el.checked;
-				return false;
+			if (s_type === 0) {
+				var msg_to_send = new ROSLIB.Message({
+					mode: s_type,
+					com_y_swing: getVal("com_y_swing", 0),
+					width_size: getVal("WidthSize", 4.5),
+					period_t: getVal("period_t", 360),
+					t_dsp: getVal("T_DSP", 0),
+					lift_height: getVal("lift_height", 2.5),
+					stand_height: getVal("stand_height", 50),
+					com_height: getVal("com_height", 40),
+					hip_roll: getVal("hip_roll", 0),
+					ankle_roll: getVal("ankle_roll", 0)
+				});
+				web_parameter_Topic.publish(msg_to_send);
+			} else if (s_type === 1 || s_type === 2) {
+				var prefix = (s_type === 1) ? "lu" : "ld"; 
+				var lc_msg_to_send = new ROSLIB.Message({
+					mode: s_type,
+					period_t: getVal(prefix + "period_t", 360),
+					com_y_swing: getVal(prefix + "com_y_swing", 0),
+					width_size: getVal(prefix + "width_size", 0),
+					t_dsp: getVal(prefix + "osc_lockrange", 0),
+					lift_height: getVal(prefix + "base_default_z", 0),
+					stand_height: getVal(prefix + "now_stand_height", 0),
+					com_height: getVal(prefix + "now_com_height", 0),
+					board_high: getVal(prefix + "base_lift_z", 0),
+					clearance: getVal(prefix + "Clearance", 3.0),
+					hip_roll: getVal(prefix + "Hip_roll", 0),
+					ankle_roll: getVal(prefix + "Ankle_roll", 0)
+				});
+				web_lc_parameter_Topic.publish(lc_msg_to_send);
 			}
-
-			var map = {
-				com_y_swing		: "com_y_swing",
-				width			: "width_size",
-				period			: "period_t",
-				T_DSP			: "T_DSP",
-				lift_height		: "lift_height",
-				stand_height	: "stand_height",
-				com_height		: "com_height",
-				hip_roll		: "hip_roll",
-				ankle_roll		: "ankle_roll",
-			};
-
-			// 根據模式覆寫 ID (Override)
-			switch (s_type) {
-				case 0: // Continuous
-					map.com_y_swing 	= "com_y_swing";
-					map.width 			= "WidthSize";
-					map.period 			= "period_t";
-					map.T_DSP 			= "T_DSP";
-					map.lift_height 	= "lift_height";
-					map.stand_height 	= "stand_height";
-					map.com_height 		= "com_height";
-					map.hip_roll 		= "hip_roll";
-					map.ankle_roll 		= "ankle_roll";
-					break;
-			}
-
-			// =========================================================
-			// 3. 從網頁讀取數值 (不再依賴 _tmp 全域變數)
-			// =========================================================
-			// 建立訊息封包
-			var msg_to_send = new ROSLIB.Message({
-				mode: s_type,
-				
-				// 核心參數
-				com_y_swing		: getVal(map.com_y_swing, 0),
-				width_size		: getVal(map.width, 4.5),
-				period_t		: getVal(map.period, 360),
-				t_dsp			: getVal(map.T_DSP, 0),
-				lift_height		: getVal(map.lift_height, 2.5),
-				stand_height	: getVal(map.stand_height, 50),
-				com_height		: getVal(map.com_height, 40),
-				hip_roll		: getVal(map.hip_roll, 0),
-				ankle_roll		: getVal(map.ankle_roll, 0),
-			});
-
-			console.log("Saving Parameter (From UI Input):", msg_to_send);
-			web_parameter_Topic.publish(msg_to_send);
 		}
 
 		function SendParam2FPGA() {
 			Send_parameter_msg.data = true;
 			Send_parameter.publish(Send_parameter_msg);
 
-			// 取得 HTML 上的數值
-			const COM_Y_swing  	= Number(document.getElementById("com_y_swing").value || 0);
-			const width_size   	= Number(document.getElementById("WidthSize").value || 0);
-			const period_t     	= Number(document.getElementById("period_t").value || 0);
-			const Tdsp         	= Number(document.getElementById("T_DSP").value || 0);
-			const lift_height  	= Number(document.getElementById("lift_height").value || 0);
-			const stand_height 	= Number(document.getElementById("stand_height").value || 0);
-			const COM_HEIGHT   	= Number(document.getElementById("com_height").value || 0);
-			const hip_roll   	= Number(document.getElementById("hip_roll").value || 0);
-			const ankle_roll   	= Number(document.getElementById("ankle_roll").value || 0);
+			function getVal(id) {
+				var el = document.getElementById(id);
+				return el ? (Number(el.value) || 0) : 0;
+			}
+			var params = {};
 
-			const params = {
-				"period_t":    period_t,
-				"Tdsp":        Tdsp,
-				"COM_HEIGHT":  COM_HEIGHT,
-				"STAND_HEIGHT": stand_height, // ★ 修正：使用小寫的變數 stand_height
-				"lift_height": lift_height,
-				"width_size":  width_size,
-				"com_y_swing": COM_Y_swing,
-				"hip_roll": hip_roll,
-				"ankle_roll": ankle_roll,
-			};
+			if (statetype === 0) {
+				params = {
+					"period_t":    getVal("period_t"),
+					"Tdsp":        getVal("T_DSP"),
+					"COM_HEIGHT":  getVal("com_height"),
+					"STAND_HEIGHT": getVal("stand_height"),
+					"lift_height": getVal("lift_height"),
+					"width_size":  getVal("WidthSize"),
+					"com_y_swing": getVal("com_y_swing"),
+					"hip_roll":    getVal("hip_roll"),
+					"ankle_roll":  getVal("ankle_roll")
+				};
+			} else {
+				var prefix = (statetype === 1) ? "lu" : "ld";
+				params = {
+					"com_y_swing": getVal(prefix + "com_y_swing"), 
+					"width_size":  getVal(prefix + "width_size"),
+					"period_t":    getVal(prefix + "period_t"),
+					"Tdsp":        getVal(prefix + "osc_lockrange"),
+					"lift_height": getVal(prefix + "base_default_z"),
+					"Board_High":  getVal(prefix + "base_lift_z"),
+					"STAND_HEIGHT": getVal(prefix + "now_stand_height"),
+					"COM_HEIGHT":  getVal(prefix + "now_com_height"),
+					"Hip_roll":    getVal(prefix + "Hip_roll"),
+					"Ankle_roll":  getVal(prefix + "Ankle_roll"),
+					"Clearance":   getVal(prefix + "Clearance")
+				};
+			}
 
-		    const msg = new ROSLIB.Message({
-		        data: JSON.stringify(params)
-		    });
-
-		    console.log("publish /walking_params_update:", params);
-		    walkingParamsUpdateTopic.publish(msg);
+			const msg = new ROSLIB.Message({ data: JSON.stringify(params) });
+			walkingParamsUpdateTopic.publish(msg);
 		}
-		
 		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 		// 網頁端參數
+		
 		function changecom_y_swing_value(value) {
 			com_y_swing_tmp = value;
 			switch (statetype) {
-				case 0:
-					document.getElementById("com_y_swing").value = com_y_swing_tmp;
-					break;
+				case 0: document.getElementById("com_y_swing").value = com_y_swing_tmp; break;
+				case 1: document.getElementById("lucom_y_swing").value = com_y_swing_tmp; break;
+				case 2: document.getElementById("ldcom_y_swing").value = com_y_swing_tmp; break;
 			}
 		}
-
 		function changeWidthSize_value(value){
 			width_size_tmp = Number(value) || 0;
-			document.getElementById("WidthSize").value = width_size_tmp;
+			switch (statetype) {
+				case 0: document.getElementById("WidthSize").value = width_size_tmp; break;
+				case 1: document.getElementById("luwidth_size").value = width_size_tmp; break;
+				case 2: document.getElementById("ldwidth_size").value = width_size_tmp; break;
+			}
 		}
-
 		function changeperiod_t_value(value) {
 			period_t_tmp = value;
 			switch (statetype) {
-				case 0:
-					document.getElementById("period_t").value = period_t_tmp;
-					break;
+				case 0: document.getElementById("period_t").value = period_t_tmp; break;
+				case 1: document.getElementById("luperiod_t").value = period_t_tmp; break;
+				case 2: document.getElementById("ldperiod_t").value = period_t_tmp; break;
 			}
 		}
-		
 		function changeT_DSP_value(value){
 			t_dsp_tmp = value;
 			switch (statetype) {
-				case 0:
-					document.getElementById("T_DSP").value = t_dsp_tmp;
-					break;
+				case 0: document.getElementById("T_DSP").value = t_dsp_tmp; break;
 			}
 		}
-
 		function changelift_height_value(value) {
 			lift_height_tmp = value;
 			switch (statetype) {
-				case 0:
-					document.getElementById("lift_height").value = lift_height_tmp;
-					break;
+				case 0: document.getElementById("lift_height").value = lift_height_tmp; break;
 			}
 		}
-
 		function change_stand_height_value(value) {
 			stand_height_tmp = value;
 			switch (statetype) {
-				case 0:
-					document.getElementById("stand_height").value = stand_height_tmp;
-					break;
+				case 0: document.getElementById("stand_height").value = stand_height_tmp; break;
 			}
 		}
 		function change_com_height_value(value) {
 			com_height_tmp = value;
 			switch (statetype) {
-				case 0:
-					document.getElementById("com_height").value = com_height_tmp;
-					break;
+				case 0: document.getElementById("com_height").value = com_height_tmp; break;
 			}
 		}
-
-		function change_hip_roll_value(value) {
-			hip_roll_tmp = value;
+	
+		//SR 專用參數
+		function changeosc_lockrange_value(value) {
+			osc_lockrange_tmp = value;
 			switch (statetype) {
-				case 0:
-					document.getElementById("hip_roll").value = hip_roll_tmp;
-					break;
+				case 1: document.getElementById("luosc_lockrange").value = osc_lockrange_tmp; break;
+				case 2: document.getElementById("ldosc_lockrange").value = osc_lockrange_tmp; break;
 			}
 		}
-
-		function change_ankle_roll_value(value) {
-			ankle_roll_tmp = value;
+		function changebase_lift_z_value(value) {
+			base_lift_z_tmp = value;
 			switch (statetype) {
-				case 0:
-					document.getElementById("ankle_roll").value = ankle_roll_tmp;
-					break;
+				case 1: document.getElementById("lubase_lift_z").value = base_lift_z_tmp; break;
+				case 2: document.getElementById("ldbase_lift_z").value = base_lift_z_tmp; break;
+			}
+		}
+		function changenow_stand_height_value(value) {
+			now_stand_height_tmp = value;
+			switch (statetype) {
+				case 1: document.getElementById("lunow_stand_height").value = now_stand_height_tmp; break;
+				case 2: document.getElementById("ldnow_stand_height").value = now_stand_height_tmp; break;
+			}
+		}
+		function changenow_com_height_value(value) {
+			now_com_height_tmp = value;
+			switch (statetype) {
+				case 1: document.getElementById("lunow_com_height").value = now_com_height_tmp; break;
+				case 2: document.getElementById("ldnow_com_height").value = now_com_height_tmp; break;
+			}
+		}
+		function changeClearance(value) {
+			clearance_tmp = value;
+			switch (statetype) {
+				case 1: document.getElementById("luClearance").value = clearance_tmp; break;
+				case 2: document.getElementById("ldClearance").value = clearance_tmp; break;
 			}
 		}
 		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
@@ -723,14 +733,26 @@
 		}
 		window.addEventListener('DOMContentLoaded', function () {
 			let loc = window.currentStrategy || "";
-
 			if (typeof loc === 'string') {
 				loc = loc.replace(/^\/+/, '');
 				loc = loc.split('/')[0].trim();
 			}
-
 			document.getElementById('current-strategy-name').innerText = loc || '---';
 			console.log('開機讀取到的 location:', loc);
+
+			let targetDisplay = (loc === 'sr') ? 'block' : 'none';
+			let extraOpts = document.getElementById('extra-options');
+			if(extraOpts) extraOpts.style.display = targetDisplay;
+			lastDisplayState = targetDisplay;
+
+			if (targetDisplay === 'none') {
+				const continuousRadio = document.querySelector('input[name="gender"][value="Continuous"]');
+				if (continuousRadio) continuousRadio.checked = true;
+				statetype = 0; 
+				if(document.getElementById("continuousstep")) document.getElementById("continuousstep").style.display = "inline";
+				if(document.getElementById("lcupstep")) document.getElementById("lcupstep").style.display = "none";
+				if(document.getElementById("lcdownstep")) document.getElementById("lcdownstep").style.display = "none";
+			}
 			Load();
 		});
 	</script>
@@ -817,8 +839,12 @@
 			</section>
 			<section id="walkinggaitcontrol" style="float: left; margin-left: 0%; min-width: 320px; max-width: 400px; width: 35%;">
 				<form action="">
-					<input type="radio" name="gender" value="Continuous" onclick="ContinuousFun()"checked="checked"> Continuous
-
+    				<input type="radio" name="gender" value="Continuous" onclick="ContinuousFun()"checked="checked"> Continuous<p></p>
+    				<div id="extra-options" style="display: none;">
+						<input type="radio" name="gender" value="SR_up" onclick="LC_upFun()"> SR_up
+						<input type="radio" name="gender" value="SR_down" onclick="LC_downFun()"> SR_down
+					</div>
+					<p></p>
 				</form>
 				<form>
 					<table>
@@ -905,6 +931,89 @@
 				</table>
 				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="Save()">Save</button>
 				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendParam2FPGA()">Send</button>
+			</section>
+			<section id="lcupstep" style="float: left; margin-left: 0%; display: none; min-width: 300px; max-width: 350px; width: 33%;">
+				<b style="font-size: 25px;">LCup Step</b>
+				<br /><br />
+				<table>
+					<tr>
+						<td>com_y_swing</td>
+						<td><input type="text" name="com_y_swing" id="lucom_y_swing" value="0" style="width: 140px" onchange="changecom_y_swing_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>width_size</td>
+						<td><input type="text" name="width_size" id="luwidth_size" value="0" style="width: 140px" onchange="changeWidthSize_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>period_t</td>
+						<td><input type="text" name="period_t" id="luperiod_t" value="0" style="width: 140px" onchange="changeperiod_t_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>T_DSP</td>
+						<td><input type="text" name="osc_lockrange" id="luosc_lockrange" value="0" style="width: 140px" onchange="changeosc_lockrange_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>Clearance</td>
+						<td><input type="text" name="Clearance" id="luClearance" value="0" style="width: 140px" onchange="changeClearance(this.value)"></td>
+					</tr>
+					<tr>
+						<td>Board_High</td>
+						<td><input type="text" name="base_lift_z" id="lubase_lift_z" value="0" style="width: 140px" onchange="changebase_lift_z_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>STAND_HEIGHT</td>
+						<td><input type="text" name="now_stand_height" id="lunow_stand_height" value="0" style="width: 140px" onchange="changenow_stand_height_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>COM_HEIGHT</td>
+						<td><input type="text" name="now_com_height" id="lunow_com_height" value="0" style="width: 140px" onchange="changenow_com_height_value(this.value)"></td>
+					</tr>
+				</table>
+				<br />
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" onclick="Save()">Save</button>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" onclick="SendParam2FPGA()">Send</button>
+			</section>
+
+			<section id="lcdownstep" style="float: left; margin-left: 0%; display: none; min-width: 300px; max-width: 350px; width: 33%;">
+				<b style="font-size: 25px;">LCdown Step</b>
+				<br /><br />
+				<table>
+					<tr>
+						<td>com_y_swing</td>
+						<td><input type="text" name="com_y_swing" id="ldcom_y_swing" value="0" style="width: 140px" onchange="changecom_y_swing_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>width_size</td>
+						<td><input type="text" name="width_size" id="ldwidth_size" value="0" style="width: 140px" onchange="changeWidthSize_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>period_t</td>
+						<td><input type="text" name="period_t" id="ldperiod_t" value="0" style="width: 140px" onchange="changeperiod_t_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>T_DSP</td>
+						<td><input type="text" name="osc_lockrange" id="ldosc_lockrange" value="0" style="width: 140px" onchange="changeosc_lockrange_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>Clearance</td>
+						<td><input type="text" name="Clearance" id="ldClearance" value="0" style="width: 140px" onchange="changeClearance(this.value)"></td>
+					</tr>	
+					<tr>
+						<td>Board_High</td>
+						<td><input type="text" name="base_lift_z" id="ldbase_lift_z" value="0" style="width: 140px" onchange="changebase_lift_z_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>STAND_HEIGHT</td>
+						<td><input type="text" name="now_stand_height" id="ldnow_stand_height" value="0" style="width: 140px" onchange="changenow_stand_height_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>COM_HEIGHT</td>
+						<td><input type="text" name="now_com_height" id="ldnow_com_height" value="0" style="width: 140px" onchange="changenow_com_height_value(this.value)"></td>
+					</tr>
+				</table>
+				<br />
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" onclick="Save()">Save</button>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" onclick="SendParam2FPGA()">Send</button>
 			</section>
 		</div>
 	</form>
