@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>ROS2 Hybrid Log Monitor</title>
+    <link rel="SHORTCUT ICON" href="../hurocup_interface/picture/icon.png">
+    <link rel="stylesheet" type="text/css" href="../hurocup_interface/css/style.css">
+
+    <script type="text/javascript" src="../hurocup_interface/js/roslib/eventemitter2.min.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib/roslib.min.js"></script>
+    <script>window._DEMO_MODE_FORCED = true;</script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib-demo.js"></script>
+
+    <style type="text/css">
+        /* 基礎設定：防止水平捲軸出現 */
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden; /* 核心修正：禁止水平溢出 */
+            background-image: url(../hurocup_interface/picture/Gray_Background.jpg);
+            background-size: cover;
+            background-attachment: fixed;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: white;
+        }
+
+        #head-control { 
+            text-align: center; 
+            padding: 15px; 
+            background: rgba(0, 0, 0, 0.7); 
+            border-bottom: 2px solid #00D600; 
+            /* 確保內容水平置中且不溢出 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .control-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+        }
+        
+        #selector-panel { 
+            background: rgba(40, 40, 40, 0.9); 
+            padding: 12px; 
+            margin: 10px auto; 
+            width: 95%; /* 稍微縮小寬度留點邊距 */
+            max-width: 1400px; /* 避免在大螢幕過寬 */
+            border-radius: 8px; 
+            display: flex; 
+            flex-wrap: wrap; /* 核心：當空間不足時自動換行 */
+            justify-content: center; 
+            align-items: center;
+            gap: 8px; 
+            border: 1px solid #555; 
+        }
+        #addressSelect, button {
+            max-width: 100%;
+            min-width: 120px;
+        }
+        .checkbox-item { 
+            display: flex; 
+            align-items: center; 
+            background: #222; 
+            padding: 4px 10px; 
+            border-radius: 4px; 
+            font-size: 13px; 
+            cursor: pointer; 
+            border: 1px solid #444; 
+        }
+        .checkbox-item:hover { border-color: #00D600; }
+
+        /* --- 響應式網格核心優化 --- */
+        #log-grid { 
+            display: grid; 
+            /* 預設：大螢幕 3 欄 (扣除 gap 後平分) */
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 15px; 
+            padding: 15px; 
+            width: 100%;
+            max-width: 100vw;
+        }
+
+        /* 中螢幕：自動變 2 欄 */
+        @media (max-width: 1200px) {
+            #log-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        /* 小螢幕：自動變 1 欄 */
+        @media (max-width: 768px) {
+            #log-grid { grid-template-columns: 1fr; }
+        }
+
+        .log-card { 
+            background: rgba(30, 30, 30, 0.95); 
+            border: 1px solid #444; 
+            border-radius: 5px; 
+            display: flex; 
+            flex-direction: column; 
+            height: 42vh; /* 根據視窗高度自動縮放 */
+            min-height: 320px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6); 
+            overflow: hidden;
+        }
+
+        .dynamic-card { border: 2px solid #00D600; }
+
+        .log-header { 
+            background: #222; 
+            padding: 10px 15px; 
+            border-bottom: 1px solid #444; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            flex-shrink: 0; /* 防止 Header 被壓縮 */
+        }
+
+        .node-name-label { color: #00D600; font-weight: bold; font-size: 14px; }
+        .user-select { background: #000; color: #00D600; border: 1px solid #00D600; border-radius: 3px; padding: 2px 5px; }
+        
+        .log-window { 
+            flex-grow: 1; 
+            padding: 10px; 
+            font-size: 11px; 
+            overflow-y: auto; 
+            white-space: pre-wrap; 
+            background: #000; 
+            color: #ddd; 
+        }
+
+        /* 自定義滾動條，避免佔據寬度造成跑版 */
+        .log-window::-webkit-scrollbar { width: 6px; }
+        .log-window::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+        .log-window::-webkit-scrollbar-thumb:hover { background: #00D600; }
+
+        .log-info { color: #ffffff; }
+        .log-warn { color: #ffeb3b; }
+        .log-error { color: #f44336; font-weight: bold; }
+    </style>
+
+    <script type="text/javascript">
+        var ros = new ROSLIB.Ros();
+        var currentDynamicUserKey = "ar"; 
+        var activeStaticNodes = new Set(); 
+
+        const userNodeMap = {
+            "ar": "ar",
+            "bb": "bb",
+            "mar": "yolo_strategy_api",
+            "obs": "deep_calculate",
+            "wl": "WeightLift_Node",
+            "sr": "WallClimbing",
+            "sp": "SP",
+            "bm": "balance_beam_node",
+            "lc": "lift_and_carry_node"
+        };
+
+        const staticNodeList = [
+            "API", "camera1", "dynamixel_driver", "image_node", "unified_sensor_node",
+            "motion_strategy", "rosbridge_websocket", "switch_node",
+            "walking_strategy", "walking_web_bridge", "web_video_server"
+        ];
+
+        ros.on('connection', function () {
+            document.body.style.backgroundImage = 'url(../hurocup_interface/picture/Background.jpg)';
+            document.getElementById('status-bar').innerText = "CONNECTED";
+            document.getElementById('status-bar').style.color = "#00D600";
+            initLogSubscription();
+        });
+
+        ros.on('close', () => {
+            document.body.style.backgroundImage = 'url(../hurocup_interface/picture/Gray_Background.jpg)';
+            document.getElementById('status-bar').innerText = "DISCONNECTED";
+        });
+
+        function enterAddress() {
+            if (ros.socket) ros.close();
+            let addr = document.getElementById("addressSelect").value;
+            ros.connect("ws://" + addr + ":9090");
+        }
+
+        function changeUser(val) {
+            currentDynamicUserKey = val;
+            let realName = userNodeMap[val] || val;
+            document.getElementById("log-win-dynamic").innerHTML = `<div style="color:#00D600;">[FILTER] Monitoring: /${realName}</div>`;
+        }
+
+        function toggleStaticNode(nodeName, isChecked) {
+            const grid = document.getElementById('log-grid');
+            const cardId = "card-" + nodeName;
+            if (isChecked) {
+                activeStaticNodes.add(nodeName);
+                let card = document.createElement('div');
+                card.className = 'log-card';
+                card.id = cardId;
+                card.innerHTML = `<div class="log-header">/${nodeName}</div><div class="log-window" id="log-win-${nodeName}"></div>`;
+                grid.appendChild(card);
+            } else {
+                activeStaticNodes.delete(nodeName);
+                let card = document.getElementById(cardId);
+                if (card) card.remove();
+            }
+        }
+// --- 新增的緩衝區與控制變數 ---
+        let logBuffer = {};
+        const RENDER_INTERVAL_MS = 100; // 每 100 毫秒更新一次畫面
+        let lastRenderTime = 0;
+
+        // --- 替換原本的 initLogSubscription ---
+        function initLogSubscription() {
+            var logListener = new ROSLIB.Topic({
+                ros: ros,
+                name: '/rosout',
+                messageType: 'rcl_interfaces/msg/Log',
+                throttle_rate: 0 // 讓 roslibjs 盡快把資料接進來
+            });
+
+            logListener.subscribe(function (message) {
+                let cleanName = message.name.startsWith('/') ? message.name.substring(1) : message.name;
+                
+                // 判斷是不是我們要看的 Node
+                let targetRealName = userNodeMap[currentDynamicUserKey] || currentDynamicUserKey;
+                let isDynamicTarget = (cleanName === targetRealName);
+                let isStaticTarget = activeStaticNodes.has(cleanName);
+
+                // 【極限防禦 1】如果不是我們要看的，立刻丟棄，這會救回大量效能！
+                if (!isDynamicTarget && !isStaticTarget) {
+                    return; 
+                }
+
+                // 決定要寫入哪一個視窗的 ID
+                let targetWinId = isDynamicTarget ? "log-win-dynamic" : "log-win-" + cleanName;
+                
+                if (!logBuffer[targetWinId]) logBuffer[targetWinId] = [];
+
+                // 組合字串
+                let date = new Date();
+                let timeStr = date.getHours().toString().padStart(2, '0') + ":" + 
+                              date.getMinutes().toString().padStart(2, '0') + ":" + 
+                              date.getSeconds().toString().padStart(2, '0');
+                              
+                let cssClass = "log-info";
+                if (message.level >= 40) cssClass = "log-error";
+                else if (message.level >= 30) cssClass = "log-warn";
+
+                // 【極限防禦 2】只存入記憶體緩衝區，絕對不直接動網頁畫面
+                logBuffer[targetWinId].push(`<div class="${cssClass}">[${timeStr}] ${message.msg}</div>`);
+
+                // 避免使用者切換分頁時，緩衝區無限長大
+                if (logBuffer[targetWinId].length > 200) {
+                    logBuffer[targetWinId].splice(0, logBuffer[targetWinId].length - 150);
+                }
+            });
+
+            // 啟動定時渲染迴圈
+            requestAnimationFrame(renderLoop);
+        }
+
+        // --- 全新的定時渲染函數 (取代原本的 appendLog) ---
+        function renderLoop(timestamp) {
+            // 【極限防禦 3】每隔 0.1 秒才把累積的字串「一次性」印到畫面上
+            if (timestamp - lastRenderTime >= RENDER_INTERVAL_MS) {
+                for (let winId in logBuffer) {
+                    if (logBuffer[winId].length > 0) {
+                        let win = document.getElementById(winId);
+                        if (win) {
+                            // 一次性把陣列裡的幾十條 Log 塞進畫面 (效能極高)
+                            win.insertAdjacentHTML('beforeend', logBuffer[winId].join(''));
+                            
+                            // 清理舊的節點，維持在 150 行以內避免跑版
+                            while (win.childElementCount > 150) {
+                                win.removeChild(win.firstElementChild);
+                            }
+                            // 捲動到底部
+                            win.scrollTop = win.scrollHeight;
+                        }
+                        // 清空已畫出的緩衝區
+                        logBuffer[winId] = []; 
+                    }
+                }
+                lastRenderTime = timestamp;
+            }
+            // 繼續下一幀的監控
+            requestAnimationFrame(renderLoop);
+        }
+        
+    </script>
+</head>
+
+<body>
+    <ul>
+		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="Walking_demo.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControl_demo.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcess_demo.html">ImageProcess</a></li>
+		<li><a target="_blank" class="navbarright" href="NodeMonitor_demo.html">NodeMonitor</a></li>
+        <li class="logo">
+            <a target="_blank" href="../hurocup_interface/index.html" class="logo"><img id="logoimg" src="../hurocup_interface/resources/TKU_ICLab/iclablogo-02.png"></a>
+        </li>
+    </ul>
+
+    <div id="head-control">
+        <h1>Node Monitor</h1>
+        <div id="status-bar">DISCONNECTED</div>
+        <div class="control-group">
+            <select id="addressSelect" style="height:25px;">
+                <option value="192.168.1.58">192.168.1.58</option>
+                <option value="localhost">localhost</option>
+            </select>
+            <button onclick="enterAddress()" style="height:25px;">Enter Address</button>
+        </div>
+    </div>
+
+    <div id="selector-panel">
+        <span style="font-size: 13px; color: #00D600; font-weight: bold; margin-right: 10px;">Display Static Nodes:</span>
+        <script>
+            const panel = document.getElementById('selector-panel');
+            staticNodeList.forEach(node => {
+                panel.innerHTML += `<label class="checkbox-item"><input type="checkbox" onchange="toggleStaticNode('${node}', this.checked)"> ${node}</label>`;
+            });
+        </script>
+    </div>
+
+    <div id="log-grid">
+        <div class="log-card dynamic-card">
+            <div class="log-header" style="background: #1a3a1a;">
+                <span class="node-name-label">DYNAMIC USER:</span>
+                <select class="user-select" onchange="changeUser(this.value)">
+                    <option value="ar">ar</option>
+                    <option value="bb">bb</option>
+                    <option value="mar">mar</option>
+                    <option value="obs">obs</option>
+                    <option value="wl">wl</option>
+                    <option value="sr">sr</option>
+                    <option value="sp">sp</option>
+                    <option value="bm">bm</option>
+                    <option value="lc">lc</option>
+                </select>
+            </div>
+            <div class="log-window" id="log-win-dynamic"></div>
+        </div>
+    </div>
+</body>
+</html>

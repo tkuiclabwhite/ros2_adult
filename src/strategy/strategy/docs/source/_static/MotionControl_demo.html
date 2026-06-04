@@ -3,18 +3,20 @@
 
 <head>
     <meta http-equiv="Content_Type" content="text/html" charset="UTF-8">
-    <link rel="SHORTCUT ICON" href="./picture/icon.png">
+    <link rel="SHORTCUT ICON" href="../hurocup_interface/picture/icon.png">
     <title>MotionControl</title>
 
-    <script src="./js/jquery.min.js"></script>
-    <script src="./js/jquery-ui.min.js"></script>
-    <script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
-    <script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
-    <script type="text/javascript" src="./js/Interface.js"></script>
-    <script type="text/javascript" src="./js/InterfaceTable.js"></script>
+    <script src="../hurocup_interface/js/jquery.min.js"></script>
+    <script src="../hurocup_interface/js/jquery-ui.min.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib/eventemitter2.min.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib/roslib.min.js"></script>
+    <script>window._DEMO_MODE_FORCED = true;</script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib-demo.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/Interface.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/InterfaceTable.js"></script>
     
-    <link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
-    <link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/InterfaceTable.css">
+    <link rel="stylesheet" type="text/css" rel="stylesheet" href="../hurocup_interface/css/style.css">
+    <link rel="stylesheet" type="text/css" rel="stylesheet" href="../hurocup_interface/css/InterfaceTable.css">
 
     <style>
         .button{
@@ -71,60 +73,63 @@
             /* 讓按鈕稍微亮一點，並保持這個狀態 */
             transform: scale(1.05);    /* 稍微放大，表示能量充滿 */
         }
-        /* 單顆控制按鈕基礎樣式 */
-.btn-single-torque {
-    width: 80px;
-    font-weight: bold;
-    color: white;
-    border: 2px solid transparent;
-    border-radius: 3px;
-    cursor: pointer;
-    padding: 3px;
-    margin-right: 10px;
-    transition: 0.3s;
-    opacity: 0.6; /* 未按下時稍微透明 */
-}
+                /* 單顆控制按鈕基礎樣式 */
+        .btn-single-torque {
+            width: 80px;
+            font-weight: bold;
+            color: white;
+            border: 2px solid transparent;
+            border-radius: 3px;
+            cursor: pointer;
+            padding: 3px;
+            margin-right: 10px;
+            transition: 0.3s;
+            opacity: 0.6; /* 未按下時稍微透明 */
+        }
 
-/* 開啟 (ON) 的顏色 */
-.btn-on {
-    background-color: #00D600;
-}
+        /* 開啟 (ON) 的顏色 */
+        .btn-on {
+            background-color: #00D600;
+        }
 
-/* 關閉 (OFF) 的顏色 */
-.btn-off {
-    background-color: #D60000;
-}
+        /* 關閉 (OFF) 的顏色 */
+        .btn-off {
+            background-color: #D60000;
+        }
 
-/* 亮起狀態 (最後按下) */
-.btn-single-torque.active {
-    opacity: 1;
-    border-color: white;
-    box-shadow: 0 0 15px currentColor; /* 根據背景色產生對應光暈 */
-    transform: scale(1.05);
-}
+        /* 亮起狀態 (最後按下) */
+        .btn-single-torque.active {
+            opacity: 1;
+            border-color: white;
+            box-shadow: 0 0 15px currentColor; /* 根據背景色產生對應光暈 */
+            transform: scale(1.05);
+        }
 
         .strategy-box {
             display: inline-block;
-            background-color: #222;
+            background-color: #222; 
             border: 1px solid #444;
             border-radius: 5px;
             padding: 8px 20px;
             box-shadow: inset 0 0 10px #000;
-            text-align: center;
+            
+            /* ★ 核心修改：讓框內所有元素水平置中 */
+            text-align: center; 
             min-width: 120px;
         }
 
         .strategy-label {
-            color: #888;
+            color: #888; 
             font-size: 12px;
             text-transform: uppercase;
-            display: block;
+            /* 設定為 block 才能受 text-align: center 影響 */
+            display: block; 
             margin-bottom: 3px;
         }
 
         #current-strategy-name {
-            color: #00D600;
-            font-family: 'Consolas', 'Monaco', monospace;
+            color: #00D600; 
+            font-family: 'Consolas', 'Monaco', monospace; 
             font-size: 22px;
             font-weight: bold;
             text-shadow: 0 0 8px rgba(0, 214, 0, 0.5);
@@ -135,16 +140,19 @@
             display: inline-block;
         }
 
+        /* 點擊點的基礎樣式：圓形、透明、有數字 */
         .pos-motor-btn {
             position: absolute;
             width: 28px;
             height: 28px;
-            background-color: rgba(255, 0, 0, 0.4);
+            background-color: rgba(255, 0, 0, 0.4); 
             border: 2px solid #ff4d4d;
             border-radius: 50%;
-            color: black;
-            font-weight: bold;
-            font-size: 12px;
+            
+            color: black;              /* ★ 改為黑色 */
+            font-weight: bold;         /* ★ 加粗讓數字更明顯 */
+            
+            font-size: 14px;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -154,16 +162,18 @@
             user-select: none;
         }
 
+        /* 2. 確保開啟狀態（綠色）時，文字依然是黑色 */
         .pos-motor-btn.torque-on {
             background-color: rgba(0, 255, 0, 0.6);
             border-color: #00ff00;
             box-shadow: 0 0 15px #00ff00;
-            color: black;
+            
+            color: black;              /* ★ 確保綠色背景下也是黑色字 */
         }
 
         .pos-motor-btn:hover {
             transform: scale(1.2);
-            background-color: rgba(3, 233, 244, 0.5);
+            background-color: rgba(3, 233, 244, 0.5); /* 滑鼠懸停提示 */
         }
 
         #history-panel {
@@ -189,7 +199,10 @@
             margin-bottom: 4px;
         }
 
-        #history-list { max-height: 80px; overflow-y: auto; }
+        #history-list {
+            max-height: 80px;
+            overflow-y: auto;
+        }
         #history-list .hp-item        { color: #555;    padding: 1px 4px; }
         #history-list .hp-item-undo   { color: #03e9f4; padding: 1px 4px; }
         #history-list .hp-now         { color: #00D600; text-align: center; border-top: 1px solid #00D600; border-bottom: 1px solid #00D600; margin: 3px 0; padding: 1px 0; font-size: 10px; letter-spacing: 2px; }
@@ -197,29 +210,32 @@
         #history-list .hp-item-future { color: #554400; padding: 1px 4px; }
         #history-list .hp-empty       { color: #444;    text-align: center; padding: 4px; }
     </style>
-    <script src="../src/strategy/strategy/strategy.js"></script>
+    <script src="../hurocup_interface/js/strategy.js"></script>
 </head>
 
 <body>
     <ul>
         <li class="logo" style="width: 226px;">
-            <a target="_blank" href="index.html" class="logo"><img id="logoimg"
-                    src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+            <a target="_blank" href="../hurocup_interface/index.html" class="logo"><img id="logoimg"
+                    src="../hurocup_interface/resources/TKU_ICLab/iclablogo-02.png"></a>
         </li>
-		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
-        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
-		<li><a target="_blank" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>
+		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="Walking_demo.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControl_demo.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcess_demo.html">ImageProcess</a></li>
+		<li><a target="_blank" class="navbarright" href="NodeMonitor_demo.html">NodeMonitor</a></li>
+        <li><a target="_blank" class="navbarright" href="../hurocup_interface/API.html">ROS2API</a></li>
     </ul>
-    <div style="padding-left: 30px; height: 100px; width: 1010px;">
+<!-- <br> -->
+    <!-- 1. 狀態容器：固定在左側，不加 margin-left 確保位置不變 -->
+    <div style="padding-left: 30px; height: 100px;width: 1010px;"> 
+        <!-- 固定高度容器，避免 Connected 顯示時下方框框往下跳 -->
         <div style="height: 30px;">
             <p id="connected" style="color:#00D600; display:none; font-size: 20px; margin: 0;">
                 Connected
             </p>
         </div>
+        
+        <!-- 狀態顯示窗：緊跟在 Connected 下方 -->
         <div class="strategy-box" style="margin-top: 10px;">
             <span class="strategy-label">Strategy</span>
             <span id="current-strategy-name">---</span>
@@ -227,8 +243,9 @@
     </div>
 
     <form id="childform" name="childform">
+        
         <div id="container">
-			<div style="margin-left: 180px;">
+			<div style="margin-left: 180px;"> 
 				<input type="text" id="filename" name="filename" value="Your_File_Name" style="width: 179px;">
 				<input type="button" id="SaveButton" value="Save" style="width:80px;" disabled="disabled">
 				<input type="button" id="ReadButton" value="Read" onclick="Read();" style="width:80px;" disabled="disabled">
@@ -276,7 +293,7 @@
                         <tr>
                             <td>
                                 <select style="height:25px; margin-right: 5px;" id="addressSelect">
-                                    <option value="172.17.121.10">172.17.121.10</option>
+                                    <option value="192.168.1.58">192.168.1.58</option>
                                     <option value="localhost">localhost</option>
                                 </select>
                             </td>
@@ -289,7 +306,7 @@
             </div>
 
 			<div id="label" style="width: 900px; margin-left:180px; margin-top:10px;"></div>
-			<div id="stand_label" style="width: 900px; margin-left:180px; margin-top:10px;"></div>
+			<div id="stand_label" style="width: 900px; margin-left:405px; margin-top:10px;"></div>
             
             <div style="float: left; width: 1010px;">
 				<div id="leftbox" style="margin-left: 30px; margin-top:50px;">
@@ -321,12 +338,6 @@
                         <div class="checksumsmallbox">M19:</div>
                         <div class="checksumsmallbox">M20:</div>
                         <div class="checksumsmallbox">M21:</div>
-                        <div class="checksumsmallbox">M22:</div>
-                        <div class="checksumsmallbox">M23:</div>
-                        <div class="checksumsmallbox">M24:</div>
-                        <div class="checksumsmallbox">M25:</div>
-                        <div class="checksumsmallbox">M26:</div>
-                        <div class="checksumsmallbox">M27:</div>
                     </div>
                 </div>
 
@@ -340,6 +351,7 @@
 
                 <div class="box" id="MotionList" style="display: initial; overflow-x : scroll; overflow-y : hidden">
                     <div class="smallbox" style=" width: 2300px; position: relative;">
+
                         <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">Name</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">A1</div>
@@ -392,7 +404,7 @@
                     </div>
                 </div>
                 <div class="box" id="RelativePosition" style="display: none; overflow-x: scroll; overflow-y: hidden">
-                    <div class="smallbox" style=" width: 1450px; position: relative;">
+                    <div class="smallbox" style=" width: 1150px; position: relative;">
                         <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">Name</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M1</div>
@@ -416,19 +428,14 @@
                         <div class="inthesmallbox" id="headercolumn" align="center">M19</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M20</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M21</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M22</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M23</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M24</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M25</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M26</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M27</div>
                     </div>
-                    <div class="smallbox" style="margin-top: 2px; width: 1450px;height: 305px; overflow-y: auto; overflow-x: hidden;">
-                        <div id="RelativePositionTable" style="width: 1450px;"></div>
+                    <div class="smallbox" style="margin-top: 2px; width: 1150px;height: 305px; overflow-y: auto; overflow-x: hidden;">
+                        <div id="RelativePositionTable" style="width: 1150px;"></div>
                     </div>
+
                 </div>
                 <div class="box" id="RelativeSpeed" style="display: none; overflow-x: scroll; overflow-y: hidden">
-                    <div class="smallbox" style=" width: 1450px; position: relative;">
+                    <div class="smallbox" style=" width: 1150px; position: relative;">
                         <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">Name</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M1</div>
@@ -452,19 +459,13 @@
                         <div class="inthesmallbox" id="headercolumn" align="center">M19</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M20</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M21</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M22</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M23</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M24</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M25</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M26</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M27</div>
                     </div>
-                    <div class="smallbox" style="margin-top: 2px; width: 1450px;height: 305px; overflow-y: auto; overflow-x: hidden;">
-                        <div id="RelativeSpeedTable" style=" width: 1450px;"></div>
+                    <div class="smallbox" style="margin-top: 2px; width: 1150px;height: 305px; overflow-y: auto; overflow-x: hidden;">
+                        <div id="RelativeSpeedTable" style=" width: 1150px;"></div>
                     </div>
                 </div>
                 <div class="box" id="AbsolutePosition" style="display: none; overflow-x: scroll; overflow-y: hidden">
-                    <div class="smallbox" style=" width: 1450px; position: relative;">
+                    <div class="smallbox" style=" width: 1150px; position: relative;">
                         <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">Name</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M1</div>
@@ -488,23 +489,13 @@
                         <div class="inthesmallbox" id="headercolumn" align="center">M19</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M20</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M21</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M22</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M23</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M24</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M25</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M26</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M27</div>
                     </div>
-                    <div class="smallbox" style="margin-top: 2px; width: 1450px;height: 305px; overflow-y: auto; overflow-x: hidden;">
-                        <div id="AbsolutePositionTable" style="width: 1450px;"></div>
+                    <div class="smallbox" style="margin-top: 2px; width: 1150px;height: 305px; overflow-y: auto; overflow-x: hidden;">
+                        <div id="AbsolutePositionTable" style="width: 1150px;"></div>
                     </div>
-                </div>
-                <div style="margin-left: 180px; margin-top: 405px; margin-bottom: 4px;">
-                    <input type="button" id="MoveUpButton" value="Move Up" onclick="MoveRow(-1);" style="width:80px" disabled="disabled">
-                    <input type="button" id="MoveDownButton" value="Move Down" onclick="MoveRow(1);" style="width:90px" disabled="disabled"> : <input type="text" id="chose_move" value="-1" style="width:50px;">
                 </div>
                 <div class="box" id="AbsoluteSpeed" style="display: none; overflow-x: scroll; overflow-y: hidden">
-                    <div class="smallbox" style=" width: 1450px; position: relative;">
+                    <div class="smallbox" style=" width: 1150px; position: relative;">
                         <div class="inthesmallbox2" id="headercolumn2" align="center">ID</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">Name</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M1</div>
@@ -528,78 +519,67 @@
                         <div class="inthesmallbox" id="headercolumn" align="center">M19</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M20</div>
                         <div class="inthesmallbox" id="headercolumn" align="center">M21</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M22</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M23</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M24</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M25</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M26</div>
-                        <div class="inthesmallbox" id="headercolumn" align="center">M27</div>
                     </div>
-                    <div class="smallbox" style="margin-top: 2px; width: 1450px;height: 305px; overflow-y: auto; overflow-x: hidden;">
-                        <div id="AbsoluteSpeedTable" style="width: 1450px;"></div>
+                    <div class="smallbox" style="margin-top: 2px; width: 1150px;height: 305px; overflow-y: auto; overflow-x: hidden;">
+                        <div id="AbsoluteSpeedTable" style="width: 1150px;"></div>
                     </div>
                 </div>
             </div>
-        </div> 
+            <div style="margin-left: 180px; margin-top: 405px; margin-bottom: 4px;">
+                <input type="button" id="MoveUpButton" value="Move Up" onclick="MoveRow(-1);" style="width:80px" disabled="disabled">
+                <input type="button" id="MoveDownButton" value="Move Down" onclick="MoveRow(1);" style="width:90px" disabled="disabled"> : <input type="text" id="chose_move" value="-1" style="width:50px;">
+            </div>
+        </div>
         <div id="rightarea">
             <div id="robotpic">
-                <div style="float: left; height: 470px; width: 300px;">
+                <div style="float: left; height: 470px ; width: 300px"> 
                     <button type="button" id="TorqueButton" onclick="TorqueSwitch();" class="neon-btn">扭力關閉</button>
-                    <div id="robot-container" class="robot-overlay-container">
-                        <img src="./picture/towen.webp" style="width: 300px; height: 470px; border: solid black 2px;">
-                        <!-- 左手 -->
-                        <div id="pos-btn-1"  class="pos-motor-btn" style="top:8%; left:67%;" onclick="toggleTorqueAtPosition(1)">1</div>
-                        <div id="pos-btn-2"  class="pos-motor-btn" style="top:16%; left:86%;" onclick="toggleTorqueAtPosition(2)">2</div>
-                        <div id="pos-btn-3"  class="pos-motor-btn" style="top:25%; left:86%;" onclick="toggleTorqueAtPosition(3)">3</div>
-                        <div id="pos-btn-4"  class="pos-motor-btn" style="top:33%; left:86%;" onclick="toggleTorqueAtPosition(4)">4</div>
-                        <div id="pos-btn-5"  class="pos-motor-btn" style="top:38%; left:86%;" onclick="toggleTorqueAtPosition(5)">5</div>
-                        <div id="pos-btn-6"  class="pos-motor-btn" style="top:43%; left:86%;" onclick="toggleTorqueAtPosition(6)">6</div>
-                        <div id="pos-btn-7"  class="pos-motor-btn" style="top:48%; left:86%;" onclick="toggleTorqueAtPosition(7)">7</div>
-                        <!-- 右手 -->
-                        <div id="pos-btn-8"  class="pos-motor-btn" style="top:8%; left:26%;" onclick="toggleTorqueAtPosition(8)">8</div>
-                        <div id="pos-btn-9"  class="pos-motor-btn" style="top:16%; left:7%;" onclick="toggleTorqueAtPosition(9)">9</div>
-                        <div id="pos-btn-10" class="pos-motor-btn" style="top:25%; left:7%;" onclick="toggleTorqueAtPosition(10)">10</div>
-                        <div id="pos-btn-11" class="pos-motor-btn" style="top:33%; left:7%;" onclick="toggleTorqueAtPosition(11)">11</div>
-                        <div id="pos-btn-12" class="pos-motor-btn" style="top:38%; left:7%;"  onclick="toggleTorqueAtPosition(12)">12</div>
-                        <div id="pos-btn-13" class="pos-motor-btn" style="top:43%; left:7%;"  onclick="toggleTorqueAtPosition(13)">13</div>
-                        <div id="pos-btn-14" class="pos-motor-btn" style="top:48%; left:7%;"  onclick="toggleTorqueAtPosition(14)">14</div>
-                        <!-- 腰 -->
-                        <div id="pos-btn-15" class="pos-motor-btn" style="top:27%; left:47%;" onclick="toggleTorqueAtPosition(15)">15</div>
-                        <!-- 左腿 -->
-                        <div id="pos-btn-16" class="pos-motor-btn" style="top:43%; left:53%;" onclick="toggleTorqueAtPosition(16)">16</div>
-                        <div id="pos-btn-17" class="pos-motor-btn" style="top:43%; left:64%;" onclick="toggleTorqueAtPosition(17)">17</div>
-                        <div id="pos-btn-18" class="pos-motor-btn" style="top:52%; left:64%;" onclick="toggleTorqueAtPosition(18)">18</div>
-                        <div id="pos-btn-19" class="pos-motor-btn" style="top:67%; left:64%;" onclick="toggleTorqueAtPosition(19)">19</div>
-                        <div id="pos-btn-20" class="pos-motor-btn" style="top:77%; left:64%;" onclick="toggleTorqueAtPosition(20)">20</div>
-                        <div id="pos-btn-21" class="pos-motor-btn" style="top:84%; left:64%;" onclick="toggleTorqueAtPosition(21)">21</div>
-                        <!-- 右腿 -->
-                        <div id="pos-btn-22" class="pos-motor-btn" style="top:43%; left:42%;" onclick="toggleTorqueAtPosition(22)">22</div>
-                        <div id="pos-btn-23" class="pos-motor-btn" style="top:43%; left:30%;" onclick="toggleTorqueAtPosition(23)">23</div>
-                        <div id="pos-btn-24" class="pos-motor-btn" style="top:52%; left:30%;" onclick="toggleTorqueAtPosition(24)">24</div>
-                        <div id="pos-btn-25" class="pos-motor-btn" style="top:67%; left:30%;" onclick="toggleTorqueAtPosition(25)">25</div>
-                        <div id="pos-btn-26" class="pos-motor-btn" style="top:77%; left:30%;" onclick="toggleTorqueAtPosition(26)">26</div>
-                        <div id="pos-btn-27" class="pos-motor-btn" style="top:84%; left:30%;" onclick="toggleTorqueAtPosition(27)">27</div>
-                        <!-- 頭部 -->
-                        <div id="pos-btn-28" class="pos-motor-btn" style="top:9%; left:47%;" onclick="toggleTorqueAtPosition(28)">28</div>
-                        <div id="pos-btn-29" class="pos-motor-btn" style="top:3%; left:47%;" onclick="toggleTorqueAtPosition(29)">29</div>
-                    </div>
-                                    <div id="robotpic" style="margin-left: 0px; background-color: rgba(46, 58, 61, 0.637); padding: 8px; border-radius: 5px; overflow: hidden;">
-                <div style="float: left; margin-left: 70px;">
-                    X_Series&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Pro_Series
-                </div>
-                <div style="float: left;margin-top: 10px;">
-                    Position: &nbsp;<input type="text" id="X_series_position" value=10 style="width:50px;margin-left: 5px;" onclick="Position();" onkeydown="if (event.key === 'Enter') Position(this.value)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                    <input type="text" id="Pro_series_position" value=742 style="width:50px;margin-left: 12px;" onclick="PositionReverse();" onkeydown="if (event.key === 'Enter') PositionReverse();">
-                </div>
-                <div style="float: left;">
-                    Speed &nbsp;&nbsp;&nbsp;: &nbsp;<input type="text" id="X_series_speed" value=10 style="width:50px;margin-left: 4px;" onclick="Speed();" onkeydown="if (event.key === 'Enter') Speed(this.value)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                    <input type="text" id="Pro_series_speed" value=696 style="width:50px;margin-left: 12px" onclick="SpeedReverse();" onkeydown="if (event.key === 'Enter') SpeedReverse();">
-                </div>
-                </div>
-                </div>
+                    <!-- <img src="../hurocup_interface/picture/new_robot.jpg" style="margin-top: 15px;width:100%; height: 100%; border: solid black 2px;"> -->
+                     <div id="robot-container" class="robot-overlay-container">
+    <!-- 原始機器人底圖[cite: 1] -->
+    <img src="../hurocup_interface/picture/new_robot.jpg" style="width: 300px; height: 470px; border: solid black 2px;">
+
+    <!-- 左手 -->
+    <div id="pos-btn-1" class="pos-motor-btn" style="top: 9%; left: 58%;" onclick="toggleTorqueAtPosition(1)">1</div>
+    <div id="pos-btn-2" class="pos-motor-btn" style="top: 18%; left: 79%;" onclick="toggleTorqueAtPosition(2)">2</div>
+    <div id="pos-btn-3" class="pos-motor-btn" style="top: 30%; left: 81%;" onclick="toggleTorqueAtPosition(3)">3</div>
+    <div id="pos-btn-4" class="pos-motor-btn" style="top: 44%; left: 82%;" onclick="toggleTorqueAtPosition(4)">4</div>
+
+    <!-- 右手 -->
+    <div id="pos-btn-5" class="pos-motor-btn" style="top: 9%; left: 32%;" onclick="toggleTorqueAtPosition(5)">5</div>
+    <div id="pos-btn-6" class="pos-motor-btn" style="top: 18%; left: 12%;" onclick="toggleTorqueAtPosition(6)">6</div>
+    <div id="pos-btn-7" class="pos-motor-btn" style="top: 30%; left: 11%;" onclick="toggleTorqueAtPosition(7)">7</div>
+    <div id="pos-btn-8" class="pos-motor-btn" style="top: 44%; left: 9%;" onclick="toggleTorqueAtPosition(8)">8</div>
+
+    <!-- 腰 -->
+    <div id="pos-btn-9" class="pos-motor-btn" style="top: 34%; left: 53%;" onclick="toggleTorqueAtPosition(9)">9</div>
+    
+    <!-- 左腿 -->
+    <div id="pos-btn-10" class="pos-motor-btn" style="top: 39%; left: 60%;" onclick="toggleTorqueAtPosition(10)">10</div>
+    <div id="pos-btn-11" class="pos-motor-btn" style="top: 53%; left: 90%;" onclick="toggleTorqueAtPosition(11)">11</div>
+    <div id="pos-btn-12" class="pos-motor-btn" style="top: 53%; left: 62%;" onclick="toggleTorqueAtPosition(12)">12</div>
+    <div id="pos-btn-13" class="pos-motor-btn" style="top: 69%; left: 69%;" onclick="toggleTorqueAtPosition(13)">13</div>
+    <div id="pos-btn-14" class="pos-motor-btn" style="top: 87%; left: 70%;" onclick="toggleTorqueAtPosition(14)">14</div>
+    <div id="pos-btn-15" class="pos-motor-btn" style="top: 90%; left: 88%;" onclick="toggleTorqueAtPosition(15)">15</div>
+        
+    <!-- 右腿 -->
+    <div id="pos-btn-16" class="pos-motor-btn" style="top: 39%; left: 28%;" onclick="toggleTorqueAtPosition(16)">16</div>
+    <div id="pos-btn-17" class="pos-motor-btn" style="top: 53%; left: 7%;" onclick="toggleTorqueAtPosition(17)">17</div>
+    <div id="pos-btn-18" class="pos-motor-btn" style="top: 53%; left: 31%;" onclick="toggleTorqueAtPosition(18)">18</div>
+    <div id="pos-btn-19" class="pos-motor-btn" style="top: 69%; left: 22%;" onclick="toggleTorqueAtPosition(19)">19</div>
+    <div id="pos-btn-20" class="pos-motor-btn" style="top: 87%; left: 20%;" onclick="toggleTorqueAtPosition(20)">20</div>
+    <div id="pos-btn-21" class="pos-motor-btn" style="top: 90%; left: 11%;" onclick="toggleTorqueAtPosition(21)">21</div>
+
+    <!-- 頭部 -->
+    <div id="pos-btn-22" class="pos-motor-btn" style="top: 14%; left: 46%;" onclick="toggleTorqueAtPosition(22)">22</div>
+    <div id="pos-btn-23" class="pos-motor-btn" style="top: 8%; left: 46%;" onclick="toggleTorqueAtPosition(23)">23</div>
+
+</div>
+                </div> 
             </div>
         </div>
         <div id="motor_area" style="width: 460px;">
+            
             <div>
                 <input type="button" id="btn_left_hand" class="button_choose" onclick="Torque_Choose('left_hand', 'btn_left_hand');" value="left_hand" style="width: 80px;">
                 <input type="button" id="btn_right_hand" class="button_choose" onclick="Torque_Choose('right_hand', 'btn_right_hand');" value="right_hand" style="width: 80px;">
@@ -625,9 +605,6 @@
                                 <tr><td>2</td><td><input type="text" id="motor_val_2" value="0" readonly></td></tr>
                                 <tr><td>3</td><td><input type="text" id="motor_val_3" value="0" readonly></td></tr>
                                 <tr><td>4</td><td><input type="text" id="motor_val_4" value="0" readonly></td></tr>
-                                <tr><td>5</td><td><input type="text" id="motor_val_5" value="0" readonly></td></tr>
-                                <tr><td>6</td><td><input type="text" id="motor_val_6" value="0" readonly></td></tr>
-                                <tr><td>7</td><td><input type="text" id="motor_val_7" value="0" readonly></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -637,13 +614,10 @@
                         <table>
                             <thead><tr><th>ID</th><th>Position</th></tr></thead>
                             <tbody>
+                                <tr><td>5</td><td><input type="text" id="motor_val_5" value="0" readonly></td></tr>
+                                <tr><td>6</td><td><input type="text" id="motor_val_6" value="0" readonly></td></tr>
+                                <tr><td>7</td><td><input type="text" id="motor_val_7" value="0" readonly></td></tr>
                                 <tr><td>8</td><td><input type="text" id="motor_val_8" value="0" readonly></td></tr>
-                                <tr><td>9</td><td><input type="text" id="motor_val_9" value="0" readonly></td></tr>
-                                <tr><td>10</td><td><input type="text" id="motor_val_10" value="0" readonly></td></tr>
-                                <tr><td>11</td><td><input type="text" id="motor_val_11" value="0" readonly></td></tr>
-                                <tr><td>12</td><td><input type="text" id="motor_val_12" value="0" readonly></td></tr>
-                                <tr><td>13</td><td><input type="text" id="motor_val_13" value="0" readonly></td></tr>
-                                <tr><td>14</td><td><input type="text" id="motor_val_14" value="0" readonly></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -653,7 +627,7 @@
                         <table>
                             <thead><tr><th>ID</th><th>Position</th></tr></thead>
                             <tbody>
-                                <tr><td>15</td><td><input type="text" id="motor_val_15" value="0" readonly></td></tr>
+                                <tr><td>9</td><td><input type="text" id="motor_val_9" value="0" readonly></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -666,12 +640,12 @@
                         <table>
                             <thead><tr><th>ID</th><th>Position</th></tr></thead>
                             <tbody>
-                                <tr><td>16</td><td><input type="text" id="motor_val_16" value="0" readonly></td></tr>
-                                <tr><td>17</td><td><input type="text" id="motor_val_17" value="0" readonly></td></tr>
-                                <tr><td>18</td><td><input type="text" id="motor_val_18" value="0" readonly></td></tr>
-                                <tr><td>19</td><td><input type="text" id="motor_val_19" value="0" readonly></td></tr>
-                                <tr><td>20</td><td><input type="text" id="motor_val_20" value="0" readonly></td></tr>
-                                <tr><td>21</td><td><input type="text" id="motor_val_21" value="0" readonly></td></tr>
+                                <tr><td>10</td><td><input type="text" id="motor_val_10" value="0" readonly></td></tr>
+                                <tr><td>11</td><td><input type="text" id="motor_val_11" value="0" readonly></td></tr>
+                                <tr><td>12</td><td><input type="text" id="motor_val_12" value="0" readonly></td></tr>
+                                <tr><td>13</td><td><input type="text" id="motor_val_13" value="0" readonly></td></tr>
+                                <tr><td>14</td><td><input type="text" id="motor_val_14" value="0" readonly></td></tr>
+                                <tr><td>15</td><td><input type="text" id="motor_val_15" value="0" readonly></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -681,79 +655,72 @@
                         <table>
                             <thead><tr><th>ID</th><th>Position</th></tr></thead>
                             <tbody>
-                                <tr><td>22</td><td><input type="text" id="motor_val_22" value="0" readonly></td></tr>
-                                <tr><td>23</td><td><input type="text" id="motor_val_23" value="0" readonly></td></tr>
-                                <tr><td>24</td><td><input type="text" id="motor_val_24" value="0" readonly></td></tr>
-                                <tr><td>25</td><td><input type="text" id="motor_val_25" value="0" readonly></td></tr>
-                                <tr><td>26</td><td><input type="text" id="motor_val_26" value="0" readonly></td></tr>
-                                <tr><td>27</td><td><input type="text" id="motor_val_27" value="0" readonly></td></tr>
+                                <tr><td>16</td><td><input type="text" id="motor_val_16" value="0" readonly></td></tr>
+                                <tr><td>17</td><td><input type="text" id="motor_val_17" value="0" readonly></td></tr>
+                                <tr><td>18</td><td><input type="text" id="motor_val_18" value="0" readonly></td></tr>
+                                <tr><td>19</td><td><input type="text" id="motor_val_19" value="0" readonly></td></tr>
+                                <tr><td>20</td><td><input type="text" id="motor_val_20" value="0" readonly></td></tr>
+                                <tr><td>21</td><td><input type="text" id="motor_val_21" value="0" readonly></td></tr>
                             </tbody>
                         </table>
                     </div>
-                    <div style="display: flex; justify-content: center; width: 100%; margin-top: 15px; margin-bottom: 10px;">
+                </div>
+                <div style="display: flex; justify-content: center; gap: 10px; width: 100%; margin-top: 15px; margin-bottom: 5px;">
                     <input type="button" id="btn_copy_to_abs" value="Copy To Absolute" onclick="CopyToAbsolute();" style="width: 140px; font-weight:bold; background-color:#03e9f4; color:#050505; border-radius:5px; cursor:pointer; padding: 5px;">
-                    <input type="button" id="btn_copy_selected" value="Copy Selected →" onclick="ShowCopySelectedPanel();" style="width: 140px; font-weight:bold; background-color:#ff8c00; color:#fff; border-radius:5px; cursor:pointer; padding: 5px; margin-left: 8px;">
+                    <input type="button" id="btn_copy_selected" value="Copy Selected →" onclick="ShowCopySelectedPanel();" style="width: 140px; font-weight:bold; background-color:#f4a003; color:#050505; border-radius:5px; cursor:pointer; padding: 5px;">
                 </div>
-                <div id="copy_selected_panel" style="display:none; background:rgba(30,40,44,0.97); border:1px solid #ff8c00; border-radius:7px; padding:10px; margin: 4px 0 8px 0; width:100%; box-sizing:border-box;">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                        <span style="color:#ff8c00; font-weight:bold;">Target Row ID:</span>
-                        <input type="text" id="copy_target_id" value="1" style="width:50px; text-align:center; font-weight:bold;">
-                        <input type="button" value="全選" onclick="toggleAllCopyCheckboxes(true);" style="width:50px; background:#555; color:#fff; border-radius:3px; cursor:pointer;">
-                        <input type="button" value="全不選" onclick="toggleAllCopyCheckboxes(false);" style="width:55px; background:#555; color:#fff; border-radius:3px; cursor:pointer;">
-                        <input type="button" value="Execute" onclick="CopySelectedToRow();" style="width:65px; font-weight:bold; background:#ff8c00; color:#fff; border-radius:3px; cursor:pointer;">
+
+                <!-- Copy Selected Panel (hidden by default) -->
+                <div id="copy_selected_panel" style="display:none; background-color:rgba(30,40,42,0.95); border:1px solid #f4a003; border-radius:8px; padding:10px; margin:5px 0 10px 0; color:white; width:440px; box-sizing:border-box;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+                        <span style="font-weight:bold; color:#f4a003;">Target Row ID:</span>
+                        <input type="text" id="copy_target_id" value="" style="width:50px; text-align:center; font-weight:bold;">
+                        <input type="button" value="全選" onclick="toggleAllCopyCheckboxes(true);" style="padding:2px 8px; cursor:pointer; border-radius:4px;">
+                        <input type="button" value="全不選" onclick="toggleAllCopyCheckboxes(false);" style="padding:2px 8px; cursor:pointer; border-radius:4px;">
+                        <input type="button" value="Execute" onclick="CopySelectedToRow();" style="padding:2px 12px; cursor:pointer; font-weight:bold; background-color:#03e9f4; border-radius:4px;">
                     </div>
-                    <div style="display:flex; flex-wrap:wrap; gap:12px;">
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
                         <div>
-                            <span style="color:#7ecfff; font-weight:bold; cursor:pointer;" onclick="toggleGroupCopy('left_hand')">LEFT HAND</span><br>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="1"> M1</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="2"> M2</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="3"> M3</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="4"> M4</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="5"> M5</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="6"> M6</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="7"> M7</label>
+                            <div style="color:#03e9f4; font-size:11px; margin-bottom:3px; cursor:pointer; user-select:none;" onclick="toggleGroupCopy('left_hand');">LEFT HAND ▾</div>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="1"> M1</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="2"> M2</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="3"> M3</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="4"> M4</label>
                         </div>
                         <div>
-                            <span style="color:#7ecfff; font-weight:bold; cursor:pointer;" onclick="toggleGroupCopy('right_hand')">RIGHT HAND</span><br>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="8"> M8</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="9"> M9</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="10"> M10</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="11"> M11</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="12"> M12</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="13"> M13</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="14"> M14</label>
+                            <div style="color:#03e9f4; font-size:11px; margin-bottom:3px; cursor:pointer; user-select:none;" onclick="toggleGroupCopy('right_hand');">RIGHT HAND ▾</div>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="5"> M5</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="6"> M6</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="7"> M7</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="8"> M8</label>
                         </div>
                         <div>
-                            <span style="color:#7ecfff; font-weight:bold; cursor:pointer;" onclick="toggleGroupCopy('waist')">WAIST</span><br>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="waist" value="15"> M15</label>
-                        </div><br>
-                        <div>
-                            <span style="color:#7ecfff; font-weight:bold; cursor:pointer;" onclick="toggleGroupCopy('left_leg')">LEFT LEG</span><br>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="16"> M16</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="17"> M17</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="18"> M18</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="19"> M19</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="20"> M20</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="21"> M21</label>
+                            <div style="color:#03e9f4; font-size:11px; margin-bottom:3px; cursor:pointer; user-select:none;" onclick="toggleGroupCopy('waist');">WAIST ▾</div>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="waist" value="9"> M9</label>
                         </div>
                         <div>
-                            <span style="color:#7ecfff; font-weight:bold; cursor:pointer;" onclick="toggleGroupCopy('right_leg')">RIGHT LEG</span><br>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="22"> M22</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="23"> M23</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="24"> M24</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="25"> M25</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="26"> M26</label>
-                            <label><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="27"> M27</label>
+                            <div style="color:#03e9f4; font-size:11px; margin-bottom:3px; cursor:pointer; user-select:none;" onclick="toggleGroupCopy('left_leg');">LEFT LEG ▾</div>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="10"> M10</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="11"> M11</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="12"> M12</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="13"> M13</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="14"> M14</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="15"> M15</label>
+                        </div>
+                        <div>
+                            <div style="color:#03e9f4; font-size:11px; margin-bottom:3px; cursor:pointer; user-select:none;" onclick="toggleGroupCopy('right_leg');">RIGHT LEG ▾</div>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="16"> M16</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="17"> M17</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="18"> M18</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="19"> M19</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="20"> M20</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="21"> M21</label>
                         </div>
                     </div>
                 </div>
-
-                </div>
-
             </div>
-            
+
         </div>
-            
 
     </form>
 
@@ -768,13 +735,16 @@
         <input type="button" id="nosavedata2" value="no" style="width:80px;">
     </dialog>
     
-    <script type="text/javascript" src="./js/Interface2.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/Interface2.js"></script>
 
     <script>
         const btn = document.getElementById('TorqueButton');
 
         btn.addEventListener('click', function() {
+            // 切換 active class
             btn.classList.toggle('active');
+
+            // 改變文字內容
             if (btn.classList.contains('active')) {
                 btn.innerText = "扭力已開啟";
             } else {
@@ -782,11 +752,13 @@
             }
         });
 
-        // --- Strategy Location ---
+                // --- 處理 Strategy Location 的 ROS Topic 通訊 ---
+
+        // 1. 宣告 Topic
         var locationBack_Subscriber = new ROSLIB.Topic({
             ros: ros,
             name: '/locationBack',
-            messageType: 'tku_msgs/msg/Location'
+            messageType: 'tku_msgs/msg/Location' // 參考 WalkingInterface 的格式[cite: 1]
         });
 
         var location_strategy = new ROSLIB.Topic({
@@ -795,35 +767,65 @@
             messageType: 'tku_msgs/location'
         });
 
-        var location_msg = new ROSLIB.Message({ data: "" });
+        var location_msg = new ROSLIB.Message({
+            data: ""
+        });
 
+        /**
+         * 核心解析函數：專門解決顯示出 "Parameter" 的問題
+         * 它會把路徑切開，找到 "Parameter" 這個字，然後取它前面的那個名稱（例如 ar 或 lc）
+         */
         function parseStrategyName(path) {
             if (typeof path !== 'string' || path === "") return "---";
+            
+            // 把路徑按斜線切開，並過濾掉空值
             const parts = path.split('/').filter(p => p.length > 0);
+            
+            // 尋找 "Parameter" 在陣列中的位置
             const paramIndex = parts.indexOf("Parameter");
-            if (paramIndex > 0) return parts[paramIndex - 1];
+            
+            // 如果找到 Parameter，就取它「前一個」元素；否則取最後一個元素作為保險
+            if (paramIndex > 0) {
+                return parts[paramIndex - 1];
+            }
             return parts[parts.length - 1];
         }
 
+        // 2. 接收後端傳回的目前策略
         locationBack_Subscriber.subscribe(function (msg) {
             console.log("收到完整路徑:", msg.data);
-            let strategyName = parseStrategyName(msg.data);
+            let strategyName = parseStrategyName(msg.data); // 使用解析工具抓出正確名稱
+
             const displayElement = document.getElementById('current-strategy-name');
-            if (displayElement) displayElement.innerText = strategyName;
+            if (displayElement) {
+                displayElement.innerText = strategyName; // 顯示正確名稱（不轉大寫）
+            }
+
+            // 策略切換時立即清空歷史
             clearHistoryAction();
         });
 
+        // 3. 手動發送讀取請求的函數
         function strategylocation() {
+            // 優先讀取目前畫面上顯示的策略名稱
             var current_display = document.getElementById('current-strategy-name').innerText;
+            
+            // 如果畫面上是 --- 或 WAITING，才使用預設值 ar
             var target_strategy = (current_display === "---" || current_display === "WAITING...") ? "ar" : current_display;
-            location_msg.data = "/home/iclab/ros2_adult/src/strategy/strategy/" + target_strategy + "/Parameter";
-            console.log("連線後保持策略: " + target_strategy + ", 路徑: " + location_msg.data);
+            
+            // 組合路徑
+            location_msg.data = "/home/iclab/ros2_kid/src/strategy/strategy/" + target_strategy + "/Parameter";
+            
+            console.log(`連線後保持策略: ${target_strategy}, 路徑: ${location_msg.data}`);
             location_strategy.publish(location_msg);
         }
 
+        // 4. 【開網頁就讀檔】讀取 strategy.js 中的全域變數[cite: 1]
         window.addEventListener('DOMContentLoaded', function () {
+            // 讀取 strategy.js 產生的 window.currentStrategy
             let initialPath = window.currentStrategy || "";
-            let strategyName = parseStrategyName(initialPath);
+            let strategyName = parseStrategyName(initialPath); // 同樣用解析工具處理
+
             if (strategyName !== "---") {
                 document.getElementById('current-strategy-name').innerText = strategyName;
             }
@@ -836,15 +838,15 @@
             messageType: 'std_msgs/Bool'
         });
 
-        var redoTopic = new ROSLIB.Topic({
-            ros: ros,
-            name: '/package/Redo',
-            messageType: 'std_msgs/Bool'
-        });
-
         var clearHistoryTopic = new ROSLIB.Topic({
             ros: ros,
             name: '/package/ClearHistory',
+            messageType: 'std_msgs/Bool'
+        });
+
+        var redoTopic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/package/Redo',
             messageType: 'std_msgs/Bool'
         });
 
@@ -885,6 +887,7 @@
 
         function renderHistoryPanel(history, future) {
             var html = '';
+
             if (history.length === 0 && future.length === 0) {
                 html = '<div class="hp-empty">empty</div>';
             } else {
@@ -900,6 +903,7 @@
                           + (isNextRedo ? '→ ' : '&nbsp;&nbsp;') + future[j] + '</div>';
                 }
             }
+
             document.getElementById('history-list').innerHTML = html;
         }
 

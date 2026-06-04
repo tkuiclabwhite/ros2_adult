@@ -15,15 +15,27 @@ from dynamixel_sdk import *
 ADDR_X_TORQUE_ENABLE          = 64
 ADDR_X_GOAL_POSITION          = 116
 ADDR_X_PROFILE_VELOCITY       = 112
-ADDR_X_PRESENT_POSITION       = 132
-ADDR_X_INDIRECT_WRITE_START   = 578 
+ADDR_X_PRESENT_CURRENT        = 126  # 2 bytes, signed, 1mA
+ADDR_X_PRESENT_VELOCITY       = 128  # 4 bytes, signed
+ADDR_X_PRESENT_POSITION       = 132  # 4 bytes, signed
+ADDR_X_INDIRECT_WRITE_START   = 578
 
-# P-Series / Pro-Series (H42-20)
+# P-Series / Pro-Series (H42-20-S300-R)
 ADDR_P_TORQUE_ENABLE          = 562
-ADDR_P_GOAL_POSITION          = 596  
-ADDR_P_PROFILE_VELOCITY       = 600  
-ADDR_P_PRESENT_POSITION       = 611  
-ADDR_P_INDIRECT_WRITE_START   = 49  
+ADDR_P_GOAL_POSITION          = 596
+ADDR_P_PROFILE_VELOCITY       = 600
+ADDR_P_PRESENT_POSITION       = 611  # 4 bytes, signed
+ADDR_P_PRESENT_VELOCITY       = 615  # 4 bytes, signed
+ADDR_P_PRESENT_CURRENT        = 619  # 2 bytes, signed, 1mA
+ADDR_P_INDIRECT_WRITE_START   = 49
+
+# GroupSyncRead 視窗（電流+速度+位置）
+# X: addr=126, len=10 → [Cur(2)][Vel(4)][Pos(4)]
+# P: addr=611, len=10 → [Pos(4)][Vel(4)][Cur(2)]
+ADDR_X_READ_START = ADDR_X_PRESENT_CURRENT   # 126
+LEN_X_READ        = 10
+ADDR_P_READ_START = ADDR_P_PRESENT_POSITION  # 611
+LEN_P_READ        = 10
 
 # 共通位址 (Indirect Data)
 ADDR_INDIRECT_DATA_WRITE      = 634 
@@ -42,7 +54,10 @@ class DynamixelDriver(Node):
         self.port_list = self.get_parameter('ports').value
 
         # 狀態儲存
-        self.joint_data = defaultdict(lambda: {'present': 2048, 'goal': 2048, 'velocity': 0})
+        self.joint_data = defaultdict(lambda: {
+            'present': 2048, 'goal': 2048, 'velocity': 0,
+            'present_velocity': 0, 'present_current': 0
+        })
         self.head_map = {1: 28, 2: 29}
         self.data_lock = threading.Lock()
         self.torque_requests = []
@@ -51,7 +66,9 @@ class DynamixelDriver(Node):
         self._init_hardware()
 
         # ROS 介面
-        self.joint_pub = self.create_publisher(JointState, '/joint_states', 10)
+        self.joint_pub       = self.create_publisher(JointState, '/joint_states', 10)
+        self.velocity_pub    = self.create_publisher(JointState, '/joint_velocities', 10)
+        self.current_pub     = self.create_publisher(JointState, '/joint_currents', 10)
         self.joint_sub = self.create_subscription(JointState, '/joint_commands', self._command_cb, 10)
         self.torque_sub = self.create_subscription(Int16MultiArray, '/set_torque', self._torque_cb, 10)
         self.head_sub = self.create_subscription(HeadPackage, 'Head_Topic', self._head_cb, 10)
@@ -76,8 +93,8 @@ class DynamixelDriver(Node):
         for ph in valid_ports:
             port_tools[ph] = {
                 'gw': GroupSyncWrite(ph, pk, ADDR_INDIRECT_DATA_WRITE, LEN_INDIRECT_DATA_WRITE),
-                'gr_x': GroupSyncRead(ph, pk, ADDR_X_PRESENT_POSITION, 4),
-                'gr_p': GroupSyncRead(ph, pk, ADDR_P_PRESENT_POSITION, 4)
+                'gr_x': GroupSyncRead(ph, pk, ADDR_X_READ_START, LEN_X_READ),
+                'gr_p': GroupSyncRead(ph, pk, ADDR_P_READ_START, LEN_P_READ)
             }
 
         for mid in ALL_TARGET_IDS:
@@ -200,27 +217,59 @@ class DynamixelDriver(Node):
                 updates = {}
                 for mid in mids_on_port:
                     is_p = self.id_port_map[mid][3]
-                    r_addr = ADDR_P_PRESENT_POSITION if is_p else ADDR_X_PRESENT_POSITION
-                    if gr.isAvailable(mid, r_addr, 4):
-                        val = gr.getData(mid, r_addr, 4)
+                    if is_p:
+                        pos_addr = ADDR_P_PRESENT_POSITION
+                        vel_addr = ADDR_P_PRESENT_VELOCITY
+                        cur_addr = ADDR_P_PRESENT_CURRENT
+                    else:
+                        pos_addr = ADDR_X_PRESENT_POSITION
+                        vel_addr = ADDR_X_PRESENT_VELOCITY
+                        cur_addr = ADDR_X_PRESENT_CURRENT
+
+                    entry = {}
+                    if gr.isAvailable(mid, pos_addr, 4):
+                        val = gr.getData(mid, pos_addr, 4)
                         if val > 0x7FFFFFFF: val -= 4294967296
-                        updates[mid] = val
+                        entry['present'] = val
+                    if gr.isAvailable(mid, vel_addr, 4):
+                        val = gr.getData(mid, vel_addr, 4)
+                        if val > 0x7FFFFFFF: val -= 4294967296
+                        entry['present_velocity'] = val
+                    if gr.isAvailable(mid, cur_addr, 2):
+                        val = gr.getData(mid, cur_addr, 2)
+                        if val > 0x7FFF: val -= 65536
+                        entry['present_current'] = val
+                    if entry:
+                        updates[mid] = entry
+
                 with self.data_lock:
-                    for mid, val in updates.items():
-                        self.joint_data[mid]['present'] = val
+                    for mid, entry in updates.items():
+                        self.joint_data[mid].update(entry)
 
         threads = [threading.Thread(target=read_task, args=(p,)) for p in active_ports]
         for t in threads: t.start()
         for t in threads: t.join()
 
         # --- 2. 發佈 ROS 狀態 ---
-        pub_msg = JointState()
-        pub_msg.header.stamp = self.get_clock().now().to_msg()
+        now = self.get_clock().now().to_msg()
         with self.data_lock:
-            sorted_ids = sorted(self.id_port_map.keys())
-            pub_msg.name = [str(i) for i in sorted_ids]
-            pub_msg.position = [float(self.joint_data[i]['present']) for i in sorted_ids]
-        self.joint_pub.publish(pub_msg)
+            sorted_ids   = sorted(self.id_port_map.keys())
+            names        = [str(i) for i in sorted_ids]
+            positions    = [float(self.joint_data[i]['present'])             for i in sorted_ids]
+            velocities   = [float(self.joint_data[i]['present_velocity'])    for i in sorted_ids]
+            currents     = [float(self.joint_data[i]['present_current'])     for i in sorted_ids]
+
+        pos_msg = JointState()
+        pos_msg.header.stamp = now; pos_msg.name = names; pos_msg.position = positions
+        self.joint_pub.publish(pos_msg)
+
+        vel_msg = JointState()
+        vel_msg.header.stamp = now; vel_msg.name = names; vel_msg.velocity = velocities
+        self.velocity_pub.publish(vel_msg)
+
+        cur_msg = JointState()
+        cur_msg.header.stamp = now; cur_msg.name = names; cur_msg.effort = currents
+        self.current_pub.publish(cur_msg)
 
         # --- 3. 並列寫入 (這部分加入了速度數值監控) ---
         def write_task(ph):

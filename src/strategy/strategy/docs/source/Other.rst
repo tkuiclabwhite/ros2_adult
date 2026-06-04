@@ -15,7 +15,7 @@
 
 .. automethod:: API.sendWalkParameter
 
-.. automethod:: set_head
+.. automethod:: API.set_head
 
 .. automethod:: API._clamp
 

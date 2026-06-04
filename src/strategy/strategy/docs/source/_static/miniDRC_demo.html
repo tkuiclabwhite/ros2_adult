@@ -3,38 +3,27 @@
 
 <head>
 	<meta charset="utf-8" />
-	<link rel="SHORTCUT ICON" href="./picture/icon.png">
+	<link rel="SHORTCUT ICON" href="../hurocup_interface/picture/icon.png">
 
 	<!-- CSS References -->
-	<link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
+	<link rel="stylesheet" type="text/css" rel="stylesheet" href="../hurocup_interface/css/style.css">
 
 	<!-- JavaScript References -->
-	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
-	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
-	<script type="text/javascript" src="./js/Interface.js"></script>
+	<script type="text/javascript" src="../hurocup_interface/js/roslib/eventemitter2.min.js"></script>
+	<script type="text/javascript" src="../hurocup_interface/js/roslib/roslib.min.js"></script>
+	<script>window._DEMO_MODE_FORCED = true;</script>
+	<script type="text/javascript" src="../hurocup_interface/js/roslib-demo.js"></script>
+	<script type="text/javascript" src="../hurocup_interface/js/Interface.js"></script>
 	<script type="text/javascript" type="text/javascript">
 
 		var wasOnline = true;
 		var ros = new ROSLIB.Ros({
-			url: "ws://172.17.121.10:9090"
-		});
-
-		// Override Interface.js topics so they use miniDRC's ros instance,
-		// not the static ros_1 that Interface.js created before enterAddress() can change the IP.
-		var SectorPackage = new ROSLIB.Topic({
-			ros: ros,
-			name: '/package/Sector',
-			messageType: 'std_msgs/Int16'
-		});
-		var StandExecuteTopic = new ROSLIB.Topic({
-			ros: ros,
-			name: '/package/StandExecute',
-			messageType: 'std_msgs/Bool'
+		url: "ws://192.168.1.58:9090"
 		});
 
 		function checkConnection() {
 			if (ros && window.navigator.onLine) {
-				document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+				document.body.style.backgroundImage = 'url(../hurocup_interface/picture/Background.jpg)';
 				console.log('Setting background to online image');
 				if(!wasOnline){
 					console.log("Network status changed to online. Triggering enterAddress().");
@@ -43,7 +32,7 @@
 				}
 
 			}else{
-				document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+				document.body.style.backgroundImage = 'url(../hurocup_interface/picture/red_filter_image.jpg)';
 				console.log('Setting background to offline image');
 				if(wasOnline){
 					console.log("Network status changed to offline. Triggering enterAddress().");
@@ -87,7 +76,7 @@
 			console.log('Error connecting to websocket server: ', error);
 			document.getElementById('connected').style.display = 'none';
 			
-			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+			document.body.style.backgroundImage = 'url(../hurocup_interface/picture/red_filter_image.jpg)';
 			clearInterval(checkConnectionInterval);
 		});
 		ros.on('close', function () {
@@ -97,7 +86,7 @@
 			document.getElementById("orign_image").style.display = 'none';
 			document.getElementById('connected').style.display = 'none';
 			
-			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+			document.body.style.backgroundImage = 'url(../hurocup_interface/picture/red_filter_image.jpg)';
 			clearInterval(checkConnectionInterval);
 		});
 		
@@ -206,7 +195,23 @@
 			messageType: 'tku_msgs/SensorSet'
 		});
 		var SensorSet_msg = new ROSLIB.Message({
-			reset: false
+			sensor_P: 0,
+			sensor_I: 0,
+			sensor_D: 0,
+			Roll: 0,
+			Pitch: 0,
+			Yaw: 0,
+			sup_f: 0,
+			nsup_f: 0,
+			sensor_modeset: 0,
+			// GainRoll: 0,
+			// GainPitch: 0,
+			// GainKP: 0,
+			// GainKD: 0,
+			// DesireSet: false,
+			// IMUReset: false,
+			// ForceState: true
+			// GainSet: false
 		});
 
 		var LoadWalkingGaitParameterClient = new ROSLIB.Service({
@@ -264,27 +269,28 @@
 
 		var Head_Topic = new ROSLIB.Topic({
 			ros: ros,
-			name: '/Head_Topic',
+			name: '/package/HeadMotor',
 			messageType: 'tku_msgs/HeadPackage'
 		});
 		var HeadPackagecmd = new ROSLIB.Message({
-			id: 0,
-			position: 511,
-			speed: 1
+			ID: 0,
+			Position: 511,
+			Speed: 1
 		});
 
 		var Camera = new ROSLIB.Topic({
 			ros: ros,
 			name: '/Camera_Topic',
-			messageType: 'tku_msgs/Camera'
+			messageType: 'tku_msgs/camera'
 		});
 		var CameraMsg = new ROSLIB.Message({
 			brightness: 0.5,
 			contrast: 0.5,
 			saturation: 0.5,
-			whitebalance: 0.5,
-			autowhitebalance: false,
-			auto_exposure: false
+			white_balance: 0.5,
+			auto_white_balance: false,
+			auto_exposure: false,
+			auto_Backlight_Compensation: false
 		});
 
 		var ZoomInTopic = new ROSLIB.Topic({
@@ -363,7 +369,7 @@
 
 		//-----
 		var connectFlag = false;
-		var myAddress = "172.17.121.10";
+		var myAddress = "192.168.1.58";
 
 		/* Kick Ball Variables Start */
 		var X_Swing_Range_tmp = 0;
@@ -447,9 +453,13 @@
 
 		function SendSensorSet()
 		{
-			SensorSet_msg.reset = true;
+			var sensor_modeset = 0;
+			sensor_modeset += 0x02;
+			SensorSet_msg.sensor_modeset = sensor_modeset;
+			SensorSet_msg.sensor_P = 1;
+			SensorSet_msg.sensor_I = 1;
+			SensorSet_msg.sensor_D = 1;
 			SensorSet_Publisher.publish(SensorSet_msg);
-			SensorSet_msg.reset = false;
 		}
 
 		function createTopics() {
@@ -464,9 +474,9 @@
 			});
 			SensorPackage_Subscriber.subscribe(function (msg)
 			{		
-				document.getElementById("Roll").value = msg.roll !== undefined ? msg.roll.toFixed(2) : '';
-				document.getElementById("Pitch").value = msg.pitch !== undefined ? msg.pitch.toFixed(2) : '';
-				document.getElementById("Yaw").value = msg.yaw !== undefined ? msg.yaw.toFixed(2) : '';
+				document.getElementById("Roll").value = msg.IMUData[0];
+				document.getElementById("Pitch").value = msg.IMUData[1];
+				document.getElementById("Yaw").value = msg.IMUData[2];
 				// document.getElementById("Left_1").value = msg.ForceSensorData[0];
 				// document.getElementById("Left_2").value = msg.ForceSensorData[1];
 				// document.getElementById("Left_3").value = msg.ForceSensorData[2];
@@ -1051,34 +1061,45 @@
 		}
 
 		function Generate() {
-			console.log("Generate statetype=", statetype);
-			if (statetype == 2 || statetype == 3) {
-				// LC mode: always send 1 (single-step trigger), no toggle
+            console.log("Generate")
+			if (statetype == 1 && ContinousModetmp == 0) {
 				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 1 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
 				ContinousModetmp = 0;
 				ContinousMode_Topic.publish(ContinousMode_msg);
-			} else if (statetype == 1 || statetype == 7 || statetype == 8) {
-				// Continuous modes: toggle on/off
-				if (ContinousModetmp == 0) {
-					ContinousMode_msg.data = 1;
-					ContinousModetmp = 1;
-				} else {
-					ContinousMode_msg.data = 0;
-					ContinousModetmp = 0;
-				}
+			} 
+			else if (statetype == 7 && ContinousModetmp == 0) 
+			{
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 7 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 8 && ContinousModetmp == 0) 
+			{
+				ContinousMode_msg.data = 1;
+				ContinousModetmp = 1;
+				ContinousMode_Topic.publish(ContinousMode_msg);
+			} 
+			else if (statetype == 8 && ContinousModetmp == 1) 
+			{
+				ContinousMode_msg.data = 0;
+				ContinousModetmp = 0;
 				ContinousMode_Topic.publish(ContinousMode_msg);
 			}
 			SendBodyAutoFun();
 		}
 
-		function _statetypeToWalkingMode(st) {
-			// miniDRC uses statetype 1/2/3 for Continuous/LC_up/LC_down
-			// but the robot protocol uses 0/1/2 (matching WalkingInterface)
-			if (st === 1) return 0;
-			if (st === 2) return 1;
-			if (st === 3) return 2;
-			return st;
-		}
 		function ChangeContinuousValueFun() {
 			var xoff = statetype == 1 ? Number(document.getElementById("Xvalueini").value) : 0;
 			var yoff = statetype == 1 ? Number(document.getElementById("Yvalueini").value) : 0;
@@ -1087,8 +1108,9 @@
 			Walkinggait_topic.y = Number(Yvaluetmp) + yoff;
 			Walkinggait_topic.z = 0;
 			Walkinggait_topic.theta = Number(Thetavaluetmp) + toff;
-			Walkinggait_topic.walking_mode = _statetypeToWalkingMode(statetype);
+			Walkinggait_topic.walking_mode = Number(statetype);
 			Walkinggait_topic.sensor_mode = Number(0);
+			console.log(Walkinggait_topic.sensor_mode);
 			ChangeContinuousValue_Topic.publish(Walkinggait_topic);
 		}
 		function SendBodyAutoFun() {
@@ -1099,8 +1121,9 @@
 			Walkinggait_topic.y = Number(Yvaluetmp) + yoff;
 			Walkinggait_topic.z = 0;
 			Walkinggait_topic.theta = Number(Thetavaluetmp) + toff;
-			Walkinggait_topic.walking_mode = _statetypeToWalkingMode(statetype);
+			Walkinggait_topic.walking_mode = Number(statetype);
 			Walkinggait_topic.sensor_mode = Number(0);
+			console.log(Walkinggait_topic.sensor_mode);
 			SendBodyAuto_Topic.publish(Walkinggait_topic);
 		}
 		function changeXvalue(value) {
@@ -1196,7 +1219,7 @@
 			if (B_ColorModelForm_Flag) {
 				document.getElementById("HSV_Range").style.display = "inline";
 				document.getElementById("B_ColorModelForm").value = "Close Model Form";
-				document.getElementById("container").style.height = "1000px";
+				document.getElementById("container").style.height = "900px";
 				document.getElementById("select").style.height = "400px";
 				changeColorLabel(document.getElementById("ColorLabel").value);
 				B_ColorModelForm_Flag = false;
@@ -1206,10 +1229,10 @@
 				document.getElementById("HSV_Range").style.display = "none";
 				document.getElementById("B_ColorModelForm").value = "Show Model Form";
 				if (B_SetupCamera_Flag == false) {
-					document.getElementById("container").style.height = "1000px";
+					document.getElementById("container").style.height = "900px";
 					document.getElementById("select").style.height = "400px";
 				} else {
-					document.getElementById("container").style.height = "1000px";
+					document.getElementById("container").style.height = "900px";
 					document.getElementById("select").style.height = "100px";
 				}
 				B_ColorModelForm_Flag = true;
@@ -1329,8 +1352,8 @@
 					CameraMsg.brightness = Number(CamBrightnessValue);
 					CameraMsg.contrast = Number(CamContrastValue);
 					CameraMsg.saturation = Number(CamSaturationValue);
-					CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-					CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+					CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+					CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 					CameraMsg.auto_exposure = CamAuto_ExposureValue;
 					Camera.publish(CameraMsg);
 				});
@@ -1343,10 +1366,10 @@
 				document.getElementById("Camera").style.display = "none";
 				document.getElementById("CameraPresetButtons").style.display = "inline";
 				if (B_ColorModelForm_Flag == false) {
-					document.getElementById("container").style.height = "1000px";
+					document.getElementById("container").style.height = "900px";
 					document.getElementById("select").style.height = "400px";
 				} else {
-					document.getElementById("container").style.height = "1000px";
+					document.getElementById("container").style.height = "900px";
 					document.getElementById("select").style.height = "400px";
 				}
 				B_SetupCamera_Flag = true;
@@ -1521,8 +1544,8 @@
 			CameraMsg.brightness = Number(CamBrightnessValue);
 			CameraMsg.contrast = Number(CamContrastValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 
@@ -1533,8 +1556,8 @@
 			CameraMsg.brightness = Number(CamBrightnessValue);
 			CameraMsg.contrast = Number(CamContrastValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 		}
@@ -1544,8 +1567,8 @@
 			CameraMsg.brightness = Number(CamBrightnessValue);
 			CameraMsg.contrast = Number(CamContrastValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 
@@ -1556,8 +1579,8 @@
 			CameraMsg.brightness = Number(CamBrightnessValue);
 			CameraMsg.contrast = Number(CamContrastValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 		}
@@ -1567,8 +1590,8 @@
 			CameraMsg.brightness = Number(CamBrightnessValue);
 			CameraMsg.contrast = Number(CamContrastValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 
@@ -1579,8 +1602,8 @@
 			CameraMsg.brightness = Number(CamBrightnessValue);
 			CameraMsg.contrast = Number(CamContrastValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 		}
@@ -1590,8 +1613,8 @@
 			CameraMsg.brightness = Number(CamBrightnessValue);
 			CameraMsg.contrast = Number(CamContrastValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 
@@ -1602,8 +1625,8 @@
 			CameraMsg.brightness = Number(CamBrightnessValue);
 			CameraMsg.contrast = Number(CamContrastValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 		}
@@ -1616,8 +1639,8 @@
 			CameraMsg.brightness = Number(CamBrightnessValue);
 			CameraMsg.contrast = Number(CamContrastValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 		}
@@ -1630,8 +1653,8 @@
 			CameraMsg.brightness = Number(CamBrightnessValue);
 			CameraMsg.contrast = Number(CamContrastValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamAuto_WhiteBalanceValue;
+			CameraMsg.white_balance = Number(CamWhiteBalanceValue);
+			CameraMsg.auto_white_balance = CamAuto_WhiteBalanceValue;
 			CameraMsg.auto_exposure = CamAuto_ExposureValue;
 			Camera.publish(CameraMsg);
 		}
@@ -1663,58 +1686,86 @@
 				WebStart_Topic.publish(WebStartcmd);
 			}
 		}
-		function updateHeadMotion(axis, val) {
-			var isHorizontal = (axis === 'Horizontal');
-			var web_id = isHorizontal ? 1 : 2;
-			var posInput = document.getElementById(axis + "PositionValue");
-			if (posInput) posInput.value = val;
-			var rangeInput = document.getElementById(axis + "PositionRange");
-			if (rangeInput) rangeInput.value = val;
-			var speedInput = document.getElementById(axis + "SpeedValue");
-			var speedVal = parseInt(speedInput ? speedInput.value : 50);
-			if (!speedVal || speedVal <= 0) speedVal = 50;
-			var finalPos = Math.min(4095, Math.max(0, parseInt(val)));
-			if (isHorizontal) horizontaltmp = finalPos;
-			else verticaltmp = finalPos;
-			if (typeof HeadPackagecmd !== 'undefined') {
-				HeadPackagecmd.id = web_id;
-				HeadPackagecmd.position = finalPos;
-				HeadPackagecmd.speed = speedVal;
-				Head_Topic.publish(HeadPackagecmd);
-			}
+		function showHorizontalPosition(newValue) {
+			document.getElementById("HorizontalPositionValue").value = newValue;
+			HeadPackagecmd.ID = Number(1);
+			HeadPackagecmd.Position = Number(document.getElementById("HorizontalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("HorizontalSpeedValue").value);
+            horizontaltmp = HeadPackagecmd.Position
+			Head_Topic.publish(HeadPackagecmd);
 		}
-		function showHorizontalPosition(newValue) { updateHeadMotion('Horizontal', newValue); }
-		function rangeHorizontalPosition(newValue) { updateHeadMotion('Horizontal', newValue); }
+
+		function rangeHorizontalPosition(newValue) {
+			document.getElementById("HorizontalPositionRange").value = newValue;
+			HeadPackagecmd.ID = Number(1);
+			HeadPackagecmd.Position = Number(document.getElementById("HorizontalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("HorizontalSpeedValue").value);
+            horizontaltmp = HeadPackagecmd.Position
+			Head_Topic.publish(HeadPackagecmd);
+		}
 		function showHorizontalSpeed(newValue) {
 			document.getElementById("HorizontalSpeedValue").value = newValue;
-			document.getElementById("HorizontalSpeedRange").value = newValue;
+			HeadPackagecmd.ID = Number(1);
+			HeadPackagecmd.Position = Number(document.getElementById("HorizontalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("HorizontalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
 		}
+
 		function rangeHorizontalSpeed(newValue) {
 			document.getElementById("HorizontalSpeedRange").value = newValue;
-			document.getElementById("HorizontalSpeedValue").value = newValue;
+			HeadPackagecmd.ID = Number(1);
+			HeadPackagecmd.Position = Number(document.getElementById("HorizontalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("HorizontalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
 		}
-		function showVerticalPosition(newValue) { updateHeadMotion('Vertical', newValue); }
-		function rangeVerticalPosition(newValue) { updateHeadMotion('Vertical', newValue); }
+		function showVerticalPosition(newValue) {
+			document.getElementById("VerticalPositionValue").value = newValue;
+			HeadPackagecmd.ID = Number(2);
+			HeadPackagecmd.Position = Number(document.getElementById("VerticalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("VerticalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
+		}
+
+		function rangeVerticalPosition(newValue) {
+			document.getElementById("VerticalPositionRange").value = newValue;
+			HeadPackagecmd.ID = Number(2);
+			HeadPackagecmd.Position = Number(document.getElementById("VerticalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("VerticalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
+		}
 		function showVerticalSpeed(newValue) {
 			document.getElementById("VerticalSpeedValue").value = newValue;
-			document.getElementById("VerticalSpeedRange").value = newValue;
+			HeadPackagecmd.ID = Number(2);
+			HeadPackagecmd.Position = Number(document.getElementById("VerticalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("VerticalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
+
 		}
+
 		function rangeVerticalSpeed(newValue) {
 			document.getElementById("VerticalSpeedRange").value = newValue;
-			document.getElementById("VerticalSpeedValue").value = newValue;
+			HeadPackagecmd.ID = Number(2);
+			HeadPackagecmd.Position = Number(document.getElementById("VerticalPositionValue").value);
+			HeadPackagecmd.Speed = Number(document.getElementById("VerticalSpeedValue").value);
+			Head_Topic.publish(HeadPackagecmd);
 		}
 		function changeCamera() {
 			CameraId_msg.data = Number(document.getElementById("Camera_Select").value);
 			CameraId_Topic.publish(CameraId_msg);
 		}
 
-		function setHeadPreset(horizontal, vertical, horizontalSpeed, verticalSpeed) {
+		function setHeadPreset(horizontal, vertical,horizontalSpeed,verticalSpeed) {
+			horizontaltmp = horizontal;
+			verticaltmp = vertical;
+
+			document.getElementById("HorizontalPositionValue").value = horizontal;
 			document.getElementById("HorizontalSpeedValue").value = horizontalSpeed;
-			document.getElementById("HorizontalSpeedRange").value = horizontalSpeed;
+			document.getElementById("VerticalPositionValue").value = vertical;
 			document.getElementById("VerticalSpeedValue").value = verticalSpeed;
-			document.getElementById("VerticalSpeedRange").value = verticalSpeed;
-			updateHeadMotion('Horizontal', horizontal);
-			updateHeadMotion('Vertical', vertical);
+			rangeHorizontalPosition(horizontal);
+			rangeHorizontalSpeed(horizontalSpeed);
+			rangeVerticalPosition(vertical);
+			rangeVerticalSpeed(verticalSpeed);
 		}
 
 
@@ -1728,20 +1779,14 @@
 				document.getElementById('current-strategy-name').innerText = loc;
 			}
 		});
-
-		// Override Interface.js standDRC: use dedicated stand topic instead of
-		// the sector-check path which tries to access MotionControlInterface DOM elements
-		function standDRC() {
-			StandExecuteTopic.publish(new ROSLIB.Message({ data: true }));
-		}
 	</script>
-	<script src="../src/strategy/strategy/strategy.js"></script>
+	<script src="../hurocup_interface/js/strategy.js"></script>
 	<style type="text/css">
 		body {
 			width: 1800px;
 			height: 1000px;
 			overflow: visible;
-			background-image: url(./picture/red_filter_image.jpg);
+			background-image: url(../hurocup_interface/picture/red_filter_image.jpg);
 			background-size: cover;
 			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 		}
@@ -1833,16 +1878,13 @@
 <body>
 	<!-- NAV BAR -->
 	<ul>
-		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
-        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
-		<li><a target="_blank" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
-		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="miniDRC.html">miniDRC</a></li>
-        <!-- <li><a target="_blank" class="navbarright" href="PIDcontroll.html">PIDcontroll</a></li> -->
+		<li><a target="_blank" class="navbarright" href="Walking_demo.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControl_demo.html">Motion</a></li>
+        <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="ImageProcess_demo.html">ImageProcess</a></li>
+		<li><a target="_blank" class="navbarright" href="../hurocup_interface/API.html">ROS2API</a></li>
+        <li><a target="_blank" class="navbarright" href="../hurocup_interface/PIDcontroll.html">PIDcontroll</a></li>
 		<li class="logo">
-			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+			<a target="_blank" href="../hurocup_interface/index.html" class="logo"><img id="logoimg" src="../hurocup_interface/resources/TKU_ICLab/iclablogo-02.png"></a>
 		</li>
 	</ul>
 	<br />
@@ -1863,7 +1905,7 @@
 				<tr>
 					<td>
 						<select style="height:25px; margin-right: 5px;" id="addressSelect">
-							<option value="172.17.121.10">172.17.121.10</option>
+							<option value="192.168.1.58">192.168.1.58</option>
 							<option value="localhost">localhost</option>
 						</select>
 					</td>
@@ -1876,7 +1918,7 @@
 		<div id="container" align="center">
 			<!-- 攝影機畫面 -->
             <div id="div_orign_image">
-				<img id="orign_image" style="-webkit-user-select: none; display:inline; transform: scale(3.5);margin-top: 300px;" src="http://172.17.121.10:8080/stream?topic=/zoom_in">
+				<img id="orign_image" style="-webkit-user-select: none; display:inline; transform: scale(3.5);margin-top: 300px;" src="http://192.168.1.58:8080/stream?topic=/zoom_in">
 			</div>
             <!-- 攝影機參數方向 -->
             <div id="select">

@@ -4,9 +4,9 @@
 <head lang="en">
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-	<link rel="SHORTCUT ICON" href="./picture/icon.png">
+	<link rel="SHORTCUT ICON" href="../hurocup_interface/picture/icon.png">
 
-	<link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
+	<link rel="stylesheet" type="text/css" rel="stylesheet" href="../hurocup_interface/css/style.css">
 	<title>Walking Interface</title>
 	<style>
 			section {
@@ -44,42 +44,47 @@
 
         .strategy-box {
             display: inline-block;
-            background-color: #222;
+            background-color: #222; 
             border: 1px solid #444;
             border-radius: 5px;
             padding: 8px 20px;
             box-shadow: inset 0 0 10px #000;
-            text-align: center;
+            
+            /* ★ 核心修改：讓框內所有元素水平置中 */
+            text-align: center; 
             min-width: 120px;
         }
 
         .strategy-label {
-            color: #888;
+            color: #888; 
             font-size: 12px;
             text-transform: uppercase;
-            display: block;
+            /* 設定為 block 才能受 text-align: center 影響 */
+            display: block; 
             margin-bottom: 3px;
         }
 
         #current-strategy-name {
-            color: #00D600;
-            font-family: 'Consolas', 'Monaco', monospace;
+            color: #00D600; 
+            font-family: 'Consolas', 'Monaco', monospace; 
             font-size: 22px;
             font-weight: bold;
             text-shadow: 0 0 8px rgba(0, 214, 0, 0.5);
         }
 		</style>
-	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
-	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+	<script type="text/javascript" src="../hurocup_interface/js/roslib/eventemitter2.min.js"></script>
+	<script type="text/javascript" src="../hurocup_interface/js/roslib/roslib.min.js"></script>
+	<script>window._DEMO_MODE_FORCED = true;</script>
+	<script type="text/javascript" src="../hurocup_interface/js/roslib-demo.js"></script>
 	<script type="text/javascript">
 		var wasOnline = true;
 		var ros = new ROSLIB.Ros({
-		url: "ws://172.17.121.10:9090"
+		url: "ws://192.168.1.58:9090"
 		});
 
 		function checkConnection() {
 			if (ros && window.navigator.onLine) {
-				document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+				document.body.style.backgroundImage = 'url(../hurocup_interface/picture/Background.jpg)';
 				console.log('Setting background to online image');
 				if(!wasOnline){
 					console.log("Network status changed to online. Triggering enterAddress().");
@@ -88,7 +93,7 @@
 				}
 
 			}else{
-				document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+				document.body.style.backgroundImage = 'url(../hurocup_interface/picture/red_filter_image.jpg)';
 				console.log('Setting background to offline image');
 				if(wasOnline){
 					console.log("Network status changed to offline. Triggering enterAddress().");
@@ -103,7 +108,6 @@
 		// Listen to online and offline events
 		window.addEventListener('online', checkConnection);
 		window.addEventListener('offline', checkConnection);
-
 		let lastDisplayState = '';
 		ros.on('connection', function () {
 			console.log('Connection made!');
@@ -120,14 +124,14 @@
 			clearInterval(checkConnectionInterval);
 			document.getElementById('connected').style.display = 'none';
 
-			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+			document.body.style.backgroundImage = 'url(../hurocup_interface/picture/red_filter_image.jpg)';
 		});
 		ros.on('close', function () {
 			console.log('Connection to websocket server closed.');
 			clearInterval(checkConnectionInterval);
 			document.getElementById('connected').style.display = 'none';
 
-			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+			document.body.style.backgroundImage = 'url(../hurocup_interface/picture/red_filter_image.jpg)';
 		});
 
 		var locationBack_Subscriber = new ROSLIB.Topic({
@@ -137,26 +141,32 @@
 		});
 		locationBack_Subscriber.subscribe(function (msg) {
 			console.log("locationBack:", msg.data);
+
 			let loc = msg.data;
 
+			// 如果是 "/ar/Parameter" 這種格式，拆出中間那段 "ar"
 			if (typeof loc === 'string') {
 				const parts = loc.split('/');
+				// parts 可能是 ["", "ar", "Parameter"]
 				if (parts.length > 1 && parts[1].length > 0) {
 					loc = parts[0].trim();
 				}
 			}
 			document.getElementById('current-strategy-name').innerText = loc;
-			
-			// 如果策略切換到 lc，才顯示 LC_up 與 LC_down 的按鈕
-			let targetDisplay = (loc === 'sr') ? 'block' : 'none';
+			console.log(loc)
+			let targetDisplay = (loc === 'lc') ? 'block' : 'none';
+
+			// 只有當這一次的狀態跟上一次不一樣時，才去更新 HTML
 			if (lastDisplayState !== targetDisplay) {
+				console.log("狀態改變，更新顯示為:", targetDisplay);
 				document.getElementById('extra-options').style.display = targetDisplay;
-				lastDisplayState = targetDisplay;
+				lastDisplayState = targetDisplay; // 更新紀錄
 				if (targetDisplay === 'none') {
 					const continuousRadio = document.querySelector('input[name="gender"][value="Continuous"]');
 					if (continuousRadio) {
 						continuousRadio.checked = true;
-						ContinuousFun();
+						console.log("已自動切換回 Continuous");
+						ContinuousFun()
 					}
 				}
 			}
@@ -217,28 +227,23 @@
 			name: '/web/parameter_Topic',
 			messageType: 'tku_msgs/Parameter'
 		});
+
 		var web_lc_parameter_Topic = new ROSLIB.Topic({
 			ros: ros,
 			name: '/web/lc_parameter_Topic',
-			messageType: 'tku_msgs/LCParameter'
-		});
-
-		var LoadLCWalkingGaitParameterClient = new ROSLIB.Service({
-			ros: ros,
-			name: '/web/LoadLCWalkingGaitParameter',
-			serviceType: 'tku_msgs/LCWalkingGaitParameter'
+			messageType: 'tku_msgs/LCParameter' // 你即將新增的 msg 名稱
 		});
 
 		var parameter_msg = new ROSLIB.Message({
-			com_y_swing		: 0.0,
-			width_size		: 4.5,
-			period_t		: 360,
-			t_dsp			: 0,
-			lift_height		: 2.5,
-			stand_height	: 50,
-			com_height		: 40,
-			hip_roll   		: 0,
-			ankle_roll 		: 0,
+			com_y_swing: 0.0,
+			// width_size: 4.5,
+			width_size: 0,
+			period_t: 360,
+			t_dsp: 0,
+			lift_height: 2.5,
+			stand_height: 23.5,
+			com_height: 29.5,
+			sample_time: 30,
 		});
 
 		var SensorSet_Publisher = new ROSLIB.Topic({
@@ -255,6 +260,11 @@
 			name: '/web/LoadWalkingGaitParameter',
 			serviceType: 'tku_msgs/WalkingGaitParameter'
 		});
+		var LoadLCWalkingGaitParameterClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/web/LoadLCWalkingGaitParameter',
+			serviceType: 'tku_msgs/LCWalkingGaitParameter' // 你即將新增的 srv 名稱
+		});
 		var WalkingGaitParameter_request = new ROSLIB.ServiceRequest({
 			mode: 0
 		});
@@ -263,7 +273,7 @@
 		var SensorPackage_Subscriber = null;
 
 		var connectFlag = false;
-		var myAddress = "172.17.121.10";
+		var myAddress = "192.168.1.58";
 		
 		var Thetavaluetmp = 0;
 		var Xvaluetmp = 0;
@@ -295,8 +305,8 @@
 				case 69:	//E, Right Turn
 					RightTurnFun();
 					break;
-               case 82:
-                   ResetFun();					
+				case 82:
+					ResetFun();
 			}
 		}
 
@@ -328,18 +338,20 @@
 			console.log("connect is", connectFlag);
 			myAddress = document.getElementById("addressSelect").value;
 			console.log("Connecting address is", myAddress);
+			
 
 			const state = ros.socket ? ros.socket.readyState : WebSocket.CLOSED;
-			if (state === WebSocket.OPEN || state === WebSocket.CONNECTING || state === WebSocket.CLOSING) {
+			// WebSocket.readyState: 0 CONNECTING, 1 OPEN, 2 CLOSING, 3 CLOSED
+			if (state === WebSocket.OPEN || state === WebSocket.CONNECTING || state === WebSocket.CLOSING) {				
 				ros.close();
-				console.log("state is", state);
-				ros.once('close', () => ros.connect("ws://" + myAddress + ":9090"));
-			} else {
-				ros.connect("ws://" + myAddress + ":9090");
-			}
-			strategylocation();
+				console.log("state is",state);
+				ros.once('close', () => ros.connect("ws://"+myAddress+":9090")); // 等真正關完再連						
+		    } else{
+				// WebSocket 連線 (9090)
+				ros.connect("ws://"+myAddress+":9090");
+			}			
+			strategylocation()
 		}
-
 		var location_strategy = new ROSLIB.Topic({
 			ros: ros,
 			name: '/location',
@@ -351,14 +363,31 @@
 
 		});
 
-		function strategylocation() {
-			var current_display = document.getElementById('current-strategy-name').innerText;
-			var target_strategy = (current_display === "---" || current_display === "WAITING...") ? "ar" : current_display;
-			location_msg.data = "/home/iclab/ros2_adult/src/strategy/strategy/" + target_strategy + "/Parameter";
-			console.log(`連線後保持策略: ${target_strategy}, 路徑: ${location_msg.data}`);
-			location_strategy.publish(location_msg);
-		}
+function strategylocation() {
+    // 優先讀取目前畫面上顯示的策略名稱
+    var current_display = document.getElementById('current-strategy-name').innerText;
+    
+    // 如果畫面上是 --- 或 WAITING，才使用預設值 ar
+    var target_strategy = (current_display === "---" || current_display === "WAITING...") ? "ar" : current_display;
+    
+    // 組合路徑
+    location_msg.data = "/home/iclab/ros2_kid/src/strategy/strategy/" + target_strategy + "/Parameter";
+    
+    console.log(`連線後保持策略: ${target_strategy}, 路徑: ${location_msg.data}`);
+    location_strategy.publish(location_msg);
+}
 
+		function ResetFun(){
+           document.getElementById("Xvalue").value = 0;
+           document.getElementById("Yvalue").value = 0;
+           document.getElementById("Thetavalue").value = 0;
+           Xvaluetmp = 0;
+           Yvaluetmp = 0;
+           Thetavaluetmp = 0;
+           if (statetype == 0 ||statetype == 7 || statetype == 8) {
+               ChangeContinuousValueFun();
+           }
+       }
 		function LeftTurnFun() {
 			Thetavaluetmp = Number(Thetavaluetmp) + 1;
 			document.getElementById("Thetavalue").value = Thetavaluetmp;
@@ -407,24 +436,15 @@
 			}
 		}
 		
-		function ResetFun(){
-           document.getElementById("Xvalue").value = 0;
-           document.getElementById("Yvalue").value = 0;
-           document.getElementById("Thetavalue").value = 0;
-           Xvaluetmp = 0;
-           Yvaluetmp = 0;
-           Thetavaluetmp = 0;
-           if (statetype == 0 ||statetype == 7 || statetype == 8) {
-               ChangeContinuousValueFun();
-           }
-       }
-
-		
 		function Generate() {
+			console.log("Generate 按鈕被點擊！目前的 statetype 模式是: ", statetype);
+			
 			if (statetype == 1 || statetype == 2) {
+				// ★ 單步模式：每次點擊永遠發送 1 (True)，不當作 toggle 開關，免除按兩次的麻煩
 				ContinousMode_msg.data = 1;
-				ContinousModetmp = 0;
+				ContinousModetmp = 0; // 歸零，讓下次點擊還是能發 1
 			} else if (statetype == 0 || statetype == 7 || statetype == 8) {
+				// ★ 連續模式：維持原本的 Toggle 開關邏輯 (1 -> 0 -> 1)
 				if (ContinousModetmp == 0) {
 					ContinousMode_msg.data = 1;
 					ContinousModetmp = 1;
@@ -433,6 +453,7 @@
 					ContinousModetmp = 0;
 				}
 			}
+			
 			ContinousMode_Topic.publish(ContinousMode_msg);
 			SendBodyAutoFun();
 		}
@@ -481,7 +502,6 @@
 			document.getElementById("lcupstep").style.display = "none";
 			document.getElementById("lcdownstep").style.display = "none";
 		}
-
 		function LC_upFun() {
 			statetype = 1;
 			Load();
@@ -489,7 +509,6 @@
 			document.getElementById("lcupstep").style.display = "inline";
 			document.getElementById("lcdownstep").style.display = "none";
 		}
-
 		function LC_downFun() {
 			statetype = 2;
 			Load();
@@ -499,6 +518,7 @@
 		}
 
 		function Load() {
+			// (保留原本 Continuousback 的處理邏輯)
 			if (document.getElementById("Continuousback").checked) {
 				Continuousback_msg.data = true;
 			} else {
@@ -507,8 +527,9 @@
 			Continuousback_Topic.publish(Continuousback_msg);
 			
 			WalkingGaitParameter_request.mode = Number(statetype);
-			
+
 			if (statetype === 0) {
+				// --- 載入平地連續步態 ---
 				LoadWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (res) {
 					document.getElementById("com_y_swing").value = res.com_y_swing;
 					document.getElementById("WidthSize").value = res.width_size;
@@ -517,21 +538,33 @@
 					document.getElementById("lift_height").value = res.lift_height;
 					document.getElementById("stand_height").value = res.stand_height;
 					document.getElementById("com_height").value = res.com_height;
-					if(document.getElementById("hip_roll")) document.getElementById("hip_roll").value = res.hip_roll;
-					if(document.getElementById("ankle_roll")) document.getElementById("ankle_roll").value = res.ankle_roll;
-				});
+				},function (err) {
+        // 失敗時會進來這裡
+        console.error("載入參數失敗，後端 ROS Service 可能尚未準備好或發生錯誤: ", err);
+        alert("參數載入失敗，請確認機器人後端策略是否已啟動！");
+    });
 			} else if (statetype === 1 || statetype === 2) {
+			// --- 載入上/下樓梯步態 ---
 				LoadLCWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (res) {
 					var prefix = (statetype === 1) ? "lu" : "ld";
+					
+					// ★ 收到後端回傳的 11 個參數後，把它們全部填回對應的 HTML 欄位
 					document.getElementById(prefix + "period_t").value = res.period_t;
 					document.getElementById(prefix + "com_y_swing").value = res.com_y_swing;
 					document.getElementById(prefix + "width_size").value = res.width_size;
 					document.getElementById(prefix + "osc_lockrange").value = res.t_dsp;
+					// document.getElementById(prefix + "base_default_z").value = res.lift_height;
 					document.getElementById(prefix + "now_stand_height").value = res.stand_height;
 					document.getElementById(prefix + "now_com_height").value = res.com_height;
 					document.getElementById(prefix + "base_lift_z").value = res.board_high;
 					document.getElementById(prefix + "Clearance").value = res.clearance;
-				});
+					document.getElementById(prefix + "Hip_roll").value = res.hip_roll;
+					document.getElementById(prefix + "Ankle_roll").value = res.ankle_roll;
+				},function (err) {
+        // 失敗時會進來這裡
+        console.error("載入參數失敗，後端 ROS Service 可能尚未準備好或發生錯誤: ", err);
+        alert("參數載入失敗，請確認機器人後端策略是否已啟動！");
+    });
 			}
 		}
 
@@ -544,35 +577,41 @@
 			}
 
 			if (s_type === 0) {
+				// --- 平地連續步態 ---
 				var msg_to_send = new ROSLIB.Message({
 					mode: s_type,
 					com_y_swing: getVal("com_y_swing", 0),
-					width_size: getVal("WidthSize", 4.5),
+					width_size: getVal("WidthSize", 0),
 					period_t: getVal("period_t", 360),
 					t_dsp: getVal("T_DSP", 0),
 					lift_height: getVal("lift_height", 2.5),
-					stand_height: getVal("stand_height", 50),
-					com_height: getVal("com_height", 40),
-					hip_roll: getVal("hip_roll", 0),
-					ankle_roll: getVal("ankle_roll", 0)
+					stand_height: getVal("stand_height", 23.5),
+					com_height: getVal("com_height", 29.5),
+					sample_time: 20  // 補上 Parameter.msg 要求的欄位
 				});
+				console.log("Saving Continuous Parameter:", msg_to_send);
 				web_parameter_Topic.publish(msg_to_send);
+
 			} else if (s_type === 1 || s_type === 2) {
+				// --- 上/下樓梯步態 ---
 				var prefix = (s_type === 1) ? "lu" : "ld"; 
+				
+				// ★ 這裡把 11 個參數完整打包，並對應到你 HTML 裡奇特的 ID 命名
 				var lc_msg_to_send = new ROSLIB.Message({
 					mode: s_type,
 					period_t: getVal(prefix + "period_t", 360),
 					com_y_swing: getVal(prefix + "com_y_swing", 0),
 					width_size: getVal(prefix + "width_size", 0),
-					t_dsp: getVal(prefix + "osc_lockrange", 0),
-					lift_height: getVal(prefix + "base_default_z", 0),
+					t_dsp: getVal(prefix + "osc_lockrange", 0),          // 對應 T_DSP
+					lift_height: getVal(prefix + "base_default_z", 0),   // 對應 lift_height
 					stand_height: getVal(prefix + "now_stand_height", 0),
 					com_height: getVal(prefix + "now_com_height", 0),
-					board_high: getVal(prefix + "base_lift_z", 0),
+					board_high: getVal(prefix + "base_lift_z", 0),       // 對應 Board_High
 					clearance: getVal(prefix + "Clearance", 3.0),
 					hip_roll: getVal(prefix + "Hip_roll", 0),
 					ankle_roll: getVal(prefix + "Ankle_roll", 0)
 				});
+				console.log("Saving LC Parameter:", lc_msg_to_send);
 				web_lc_parameter_Topic.publish(lc_msg_to_send);
 			}
 		}
@@ -585,21 +624,23 @@
 				var el = document.getElementById(id);
 				return el ? (Number(el.value) || 0) : 0;
 			}
+
 			var params = {};
 
 			if (statetype === 0) {
+				// --- 平地連續步態 ---
 				params = {
+					"com_y_swing": getVal("com_y_swing"),
+					"width_size":  getVal("WidthSize"),
 					"period_t":    getVal("period_t"),
 					"Tdsp":        getVal("T_DSP"),
-					"COM_HEIGHT":  getVal("com_height"),
-					"STAND_HEIGHT": getVal("stand_height"),
 					"lift_height": getVal("lift_height"),
-					"width_size":  getVal("WidthSize"),
-					"com_y_swing": getVal("com_y_swing"),
-					"hip_roll":    getVal("hip_roll"),
-					"ankle_roll":  getVal("ankle_roll")
+					"STAND_HEIGHT": getVal("stand_height"),
+					"COM_HEIGHT":  getVal("com_height"),
+					"COM_Y_shift": 0 
 				};
 			} else {
+				// --- 上/下樓梯 (LC) 步態 ---
 				var prefix = (statetype === 1) ? "lu" : "ld";
 				params = {
 					"com_y_swing": getVal(prefix + "com_y_swing"), 
@@ -616,11 +657,18 @@
 				};
 			}
 
-			const msg = new ROSLIB.Message({ data: JSON.stringify(params) });
+			const msg = new ROSLIB.Message({
+				data: JSON.stringify(params)
+			});
+
+			console.log("publish /walking_params_update:", params);
 			walkingParamsUpdateTopic.publish(msg);
 		}
+		
 		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 		// 網頁端參數
+// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+		// 網頁端參數 (自動根據 statetype 分流寫回對應的欄位)
 		
 		function changecom_y_swing_value(value) {
 			com_y_swing_tmp = value;
@@ -630,6 +678,7 @@
 				case 2: document.getElementById("ldcom_y_swing").value = com_y_swing_tmp; break;
 			}
 		}
+
 		function changeWidthSize_value(value){
 			width_size_tmp = Number(value) || 0;
 			switch (statetype) {
@@ -638,6 +687,7 @@
 				case 2: document.getElementById("ldwidth_size").value = width_size_tmp; break;
 			}
 		}
+
 		function changeperiod_t_value(value) {
 			period_t_tmp = value;
 			switch (statetype) {
@@ -646,32 +696,37 @@
 				case 2: document.getElementById("ldperiod_t").value = period_t_tmp; break;
 			}
 		}
+		
 		function changeT_DSP_value(value){
 			t_dsp_tmp = value;
 			switch (statetype) {
 				case 0: document.getElementById("T_DSP").value = t_dsp_tmp; break;
 			}
 		}
+
 		function changelift_height_value(value) {
 			lift_height_tmp = value;
 			switch (statetype) {
 				case 0: document.getElementById("lift_height").value = lift_height_tmp; break;
 			}
 		}
+
 		function change_stand_height_value(value) {
 			stand_height_tmp = value;
 			switch (statetype) {
 				case 0: document.getElementById("stand_height").value = stand_height_tmp; break;
 			}
 		}
+
 		function change_com_height_value(value) {
 			com_height_tmp = value;
 			switch (statetype) {
 				case 0: document.getElementById("com_height").value = com_height_tmp; break;
 			}
 		}
-	
-		//SR 專用參數
+
+		// --- 以下為 LC (上下樓梯) 專用的參數函數 ---
+
 		function changeosc_lockrange_value(value) {
 			osc_lockrange_tmp = value;
 			switch (statetype) {
@@ -679,6 +734,15 @@
 				case 2: document.getElementById("ldosc_lockrange").value = osc_lockrange_tmp; break;
 			}
 		}
+
+		function changebase_default_z_value(value) {
+			base_default_z_tmp = value;
+			switch (statetype) {
+				case 1: document.getElementById("lubase_default_z").value = base_default_z_tmp; break;
+				case 2: document.getElementById("ldbase_default_z").value = base_default_z_tmp; break;
+			}
+		}
+
 		function changebase_lift_z_value(value) {
 			base_lift_z_tmp = value;
 			switch (statetype) {
@@ -686,6 +750,7 @@
 				case 2: document.getElementById("ldbase_lift_z").value = base_lift_z_tmp; break;
 			}
 		}
+
 		function changenow_stand_height_value(value) {
 			now_stand_height_tmp = value;
 			switch (statetype) {
@@ -693,6 +758,7 @@
 				case 2: document.getElementById("ldnow_stand_height").value = now_stand_height_tmp; break;
 			}
 		}
+
 		function changenow_com_height_value(value) {
 			now_com_height_tmp = value;
 			switch (statetype) {
@@ -700,6 +766,23 @@
 				case 2: document.getElementById("ldnow_com_height").value = now_com_height_tmp; break;
 			}
 		}
+
+		function changeHip_roll_value(value) {
+			hip_roll_tmp = value;
+			switch (statetype) {
+				case 1: document.getElementById("luHip_roll").value = hip_roll_tmp; break;
+				case 2: document.getElementById("ldHip_roll").value = hip_roll_tmp; break;
+			}
+		}
+
+		function changeAnkle_roll(value) {
+			ankle_roll_tmp = value;
+			switch (statetype) {
+				case 1: document.getElementById("luAnkle_roll").value = ankle_roll_tmp; break;
+				case 2: document.getElementById("ldAnkle_roll").value = ankle_roll_tmp; break;
+			}
+		}
+
 		function changeClearance(value) {
 			clearance_tmp = value;
 			switch (statetype) {
@@ -731,60 +814,74 @@
 				SensorSet_msg.reset = false;
 			}
 		}
+
 		window.addEventListener('DOMContentLoaded', function () {
-			let loc = window.currentStrategy || "";
-			if (typeof loc === 'string') {
-				loc = loc.replace(/^\/+/, '');
-				loc = loc.split('/')[0].trim();
-			}
-			document.getElementById('current-strategy-name').innerText = loc || '---';
-			console.log('開機讀取到的 location:', loc);
+		let loc = window.currentStrategy || "";
+		
+		// 字串處理：把 "/lc/Parameter" 變成單純的 "lc"
+		if (typeof loc === 'string') {
+			loc = loc.replace(/^\/+/, '');
+			loc = loc.split('/')[0].trim();
+		}
 
-			let targetDisplay = (loc === 'sr') ? 'block' : 'none';
-			let extraOpts = document.getElementById('extra-options');
-			if(extraOpts) extraOpts.style.display = targetDisplay;
-			lastDisplayState = targetDisplay;
+		document.getElementById('current-strategy-name').innerText = loc;
 
-			if (targetDisplay === 'none') {
-				const continuousRadio = document.querySelector('input[name="gender"][value="Continuous"]');
-				if (continuousRadio) continuousRadio.checked = true;
-				statetype = 0; 
-				if(document.getElementById("continuousstep")) document.getElementById("continuousstep").style.display = "inline";
-				if(document.getElementById("lcupstep")) document.getElementById("lcupstep").style.display = "none";
-				if(document.getElementById("lcdownstep")) document.getElementById("lcdownstep").style.display = "none";
-			}
-			Load();
-		});
+		console.log('開機讀取到的 location:', loc);
+
+		// 判斷是不是 lc，直接改變 extra-options 的顯示狀態
+		let targetDisplay = (loc === 'lc') ? 'block' : 'none';
+		document.getElementById('extra-options').style.display = targetDisplay;
+		lastDisplayState = targetDisplay; // 同步你原本的紀錄變數
+
+		// 如果不是 lc，確保 UI 切換回預設的 Continuous 畫面
+		if (targetDisplay === 'none') {
+			const continuousRadio = document.querySelector('input[name="gender"][value="Continuous"]');
+			if (continuousRadio) continuousRadio.checked = true;
+			
+			statetype = 0; 
+			document.getElementById("continuousstep").style.display = "inline";
+			document.getElementById("lcupstep").style.display = "none";
+			document.getElementById("lcdownstep").style.display = "none";
+		}
+		Load()
+	});
 	</script>
 
-	<script src="../src/strategy/strategy/strategy.js"></script>
+	<script src="../hurocup_interface/js/strategy.js"></script>
 
+	<script>
+	
+	</script>
 </head>
 
 <body>
 	<!-- NAV BAR -->
 	<ul>
-		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
-        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
-		<li><a target="_blank" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>	
+		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="Walking_demo.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControl_demo.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcess_demo.html">ImageProcess</a></li>
+		<li><a target="_blank" class="navbarright" href="NodeMonitor_demo.html">NodeMonitor</a></li>
+		<li><a target="_blank" class="navbarright" href="../hurocup_interface/API.html">ROS2API</a></li>
         <li class="logo" style="width: 226px;">
-			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+			<a target="_blank" href="../hurocup_interface/index.html" class="logo"><img id="logoimg" src="../hurocup_interface/resources/TKU_ICLab/iclablogo-02.png"></a>
 		</li>
 	</ul>
-	<br>
-	<div style="padding-left: 20px; height: 100px;">
-		<div style="height: 30px;">
-			<p id="connected" style="color:#00D600; display:none; font-size: 20px; margin: 0;">Connected</p>
-		</div>
-		<div class="strategy-box" style="margin-top: 10px;">
-			<span class="strategy-label">Strategy</span>
-			<span id="current-strategy-name">---</span>
-		</div>
-	</div>
+<br>
+    <!-- 1. 狀態容器：固定在左側，不加 margin-left 確保位置不變 -->
+    <div style="padding-left: 20px; height: 100px;"> 
+        <!-- 固定高度容器，避免 Connected 顯示時下方框框往下跳 -->
+        <div style="height: 30px;">
+            <p id="connected" style="color:#00D600; display:none; font-size: 20px; margin: 0;">
+                Connected
+            </p>
+        </div>
+        
+        <!-- 狀態顯示窗：緊跟在 Connected 下方 -->
+        <div class="strategy-box" style="margin-top: 10px;">
+            <span class="strategy-label">Strategy</span>
+            <span id="current-strategy-name">---</span>
+        </div>
+    </div>
 	<form>
 		<div id="head" align="center">
 			<h1 align="center" id="header" style="color: white;">Walking Interface</h1>
@@ -792,7 +889,7 @@
 				<tr>
 					<td>
 						<select style="height:25px; margin-right: 5px;" id="addressSelect">
-							<option value="172.17.121.10">172.17.121.10</option>
+							<option value="192.168.1.58">192.168.1.58</option>
 							<option value="localhost">localhost</option>
 						</select>
 					</td>
@@ -842,10 +939,10 @@
 			</section>
 			<section id="walkinggaitcontrol" style="float: left; margin-left: 0%; min-width: 320px; max-width: 400px; width: 35%;">
 				<form action="">
-    				<input type="radio" name="gender" value="Continuous" onclick="ContinuousFun()"checked="checked"> Continuous<p></p>
-    				<div id="extra-options" style="display: none;">
-						<input type="radio" name="gender" value="SR_up" onclick="LC_upFun()"> SR_up
-						<input type="radio" name="gender" value="SR_down" onclick="LC_downFun()"> SR_down
+					<input type="radio" name="gender" value="Continuous" onclick="ContinuousFun()"checked="checked"> Continuous<p></p>
+					<div id="extra-options" style="display: none;">
+							<input type="radio" name="gender" value="LC_up" onclick="LC_upFun()"> LC_up
+							<input type="radio" name="gender" value="LC_down" onclick="LC_downFun()"> LC_down
 					</div>
 					<p></p>
 				</form>
@@ -924,13 +1021,6 @@
 						<td>COM_HEIGHT</td>
 						<td><input type="text" name="com_height" id="com_height" value="0" style="width: 140px" onchange="change_com_height_value(this.value)"></td>
 					</tr>
-					<tr>
-						<td>hip_roll</td>
-						<td><input type="text" name="hip_roll" id="hip_roll" value="0" style="width: 140px" onchange="change_hip_roll_value(this.value)"></td>
-					</tr><tr>
-						<td>ankle_roll</td>
-						<td><input type="text" name="ankle_roll" id="ankle_roll" value="0" style="width: 140px" onchange="change_ankle_roll_value(this.value)"></td>
-					</tr>
 				</table>
 				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="Save()">Save</button>
 				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendParam2FPGA()">Send</button>
@@ -955,6 +1045,10 @@
 						<td>T_DSP</td>
 						<td><input type="text" name="osc_lockrange" id="luosc_lockrange" value="0" style="width: 140px" onchange="changeosc_lockrange_value(this.value)"></td>
 					</tr>
+					<!-- <tr>
+						<td>base_default_z</td>
+						<td><input type="text" name="base_default_z" id="lubase_default_z" value="0" style="width: 140px" onchange="changebase_default_z_value(this.value)"></td>
+					</tr> -->
 					<tr>
 						<td>Clearance</td>
 						<td><input type="text" name="Clearance" id="luClearance" value="0" style="width: 140px" onchange="changeClearance(this.value)"></td>
@@ -971,12 +1065,19 @@
 						<td>COM_HEIGHT</td>
 						<td><input type="text" name="now_com_height" id="lunow_com_height" value="0" style="width: 140px" onchange="changenow_com_height_value(this.value)"></td>
 					</tr>
+					<!-- <tr>
+						<td>Hip_roll</td>
+						<td><input type="text" name="Hip_roll" id="luHip_roll" value="0" style="width: 140px" onchange="changeHip_roll_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>Ankle_roll</td>
+						<td><input type="text" name="Ankle_roll" id="luAnkle_roll" value="0" style="width: 140px" onchange="changeAnkle_roll(this.value)"></td>
+					</tr> -->
 				</table>
 				<br />
-				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" onclick="Save()">Save</button>
-				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" onclick="SendParam2FPGA()">Send</button>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="Save()">Save</button>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendParam2FPGA()">Send</button>
 			</section>
-
 			<section id="lcdownstep" style="float: left; margin-left: 0%; display: none; min-width: 300px; max-width: 350px; width: 33%;">
 				<b style="font-size: 25px;">LCdown Step</b>
 				<br /><br />
@@ -997,6 +1098,10 @@
 						<td>T_DSP</td>
 						<td><input type="text" name="osc_lockrange" id="ldosc_lockrange" value="0" style="width: 140px" onchange="changeosc_lockrange_value(this.value)"></td>
 					</tr>
+					<!-- <tr>
+						<td>base_default_z</td>
+						<td><input type="text" name="base_default_z" id="ldbase_default_z" value="0" style="width: 140px" onchange="changebase_default_z_value(this.value)"></td>
+					</tr> -->
 					<tr>
 						<td>Clearance</td>
 						<td><input type="text" name="Clearance" id="ldClearance" value="0" style="width: 140px" onchange="changeClearance(this.value)"></td>
@@ -1013,11 +1118,19 @@
 						<td>COM_HEIGHT</td>
 						<td><input type="text" name="now_com_height" id="ldnow_com_height" value="0" style="width: 140px" onchange="changenow_com_height_value(this.value)"></td>
 					</tr>
+					<!-- <tr>
+						<td>Hip_roll</td>
+						<td><input type="text" name="Hip_roll" id="ldHip_roll" value="0" style="width: 140px" onchange="changeHip_roll_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>Ankle_roll</td>
+						<td><input type="text" name="Ankle_roll" id="ldAnkle_roll" value="0" style="width: 140px" onchange="changeAnkle_roll(this.value)"></td>
+					</tr>			 -->
 				</table>
 				<br />
-				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" onclick="Save()">Save</button>
-				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" onclick="SendParam2FPGA()">Send</button>
-			</section>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="Save()">Save</button>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendParam2FPGA()">Send</button>
+			</section>			
 		</div>
 	</form>
 </body>

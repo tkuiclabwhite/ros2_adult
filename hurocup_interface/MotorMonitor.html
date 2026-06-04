@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="SHORTCUT ICON" href="./picture/icon.png">
+    <title>Motor Monitor</title>
+    <link rel="stylesheet" type="text/css" href="./css/style.css">
+    <script src="./js/roslib/eventemitter2.min.js"></script>
+    <script src="./js/roslib/roslib.min.js"></script>
+    <style>
+        body { width:1750px; min-width:1750px; color:white; }
+
+        /* ── Topbar ── */
+        .topbar {
+            display:flex; align-items:center; gap:14px;
+            padding:8px 24px;
+            background:rgba(10,18,20,0.75);
+            border-bottom:1px solid #1e2e33;
+        }
+        #connected {
+            color:#00D600; font-size:17px; font-weight:bold;
+            text-shadow:0 0 8px #00D600; margin:0; display:none;
+        }
+        .topbar select {
+            height:28px; background:#111d21; color:#ccc;
+            border:1px solid #3a4a50; border-radius:4px; padding:0 8px;
+        }
+        .topbar button {
+            height:28px; padding:0 14px; background:transparent;
+            border-radius:4px; cursor:pointer; font-size:13px; transition:0.25s;
+        }
+        #connectBtn { color:#03e9f4; border:1px solid #03e9f4; }
+        #connectBtn:hover { background:#03e9f4; color:#050505; box-shadow:0 0 10px #03e9f4; }
+
+        /* ── Layout ── */
+        .row { display:flex; gap:12px; padding:12px 20px 0; }
+        .row-bottom { padding-bottom:20px; }
+
+        /* ── Panel ── */
+        .panel {
+            flex:1; background:rgba(12,20,24,0.93);
+            border:1px solid #1e2e33; border-radius:8px;
+            padding:12px 14px 14px;
+            box-shadow:inset 0 0 18px rgba(0,0,0,0.5);
+        }
+        .panel-title {
+            font-size:15px; font-weight:bold; letter-spacing:5px;
+            text-transform:uppercase; text-align:center;
+            padding-bottom:8px; margin-bottom:12px;
+        }
+        .p-pos  { border-color:rgba(3,233,244,0.3); }
+        .p-vel  { border-color:rgba(120,180,255,0.3); }
+        .p-cur  { border-color:rgba(0,214,0,0.3); }
+
+        .p-pos  .panel-title { color:#03e9f4; text-shadow:0 0 6px #03e9f4; border-bottom:1px solid rgba(3,233,244,0.25); }
+        .p-vel  .panel-title { color:#7eb8ff; text-shadow:0 0 6px #7eb8ff; border-bottom:1px solid rgba(120,180,255,0.25); }
+        .p-cur  .panel-title { color:#00D600; text-shadow:0 0 6px #00D600; border-bottom:1px solid rgba(0,214,0,0.25); }
+
+        /* ── Groups ── */
+        .groups-row { display:flex; gap:8px; margin-bottom:10px; }
+        .motor-group { flex:1; min-width:0; }
+
+        /* group title: name left, avg right */
+        .group-hdr {
+            display:flex; justify-content:space-between; align-items:baseline;
+            padding:2px 0 4px; border-bottom:1px solid #1e2e33; margin-bottom:4px;
+        }
+        .group-name {
+            font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#666;
+        }
+        .group-avg {
+            font-size:11px; font-family:'Consolas',monospace; color:#555;
+            transition:color 0.3s;
+        }
+
+        /* ── Motor rows ── */
+        .motor-row { display:flex; align-items:center; gap:5px; margin-bottom:5px; }
+        .mid-label {
+            width:26px; font-size:13px; color:#666;
+            text-align:right; flex-shrink:0; font-family:'Consolas',monospace;
+        }
+        .bar-wrap {
+            flex:1; height:13px; background:#0a1518; border-radius:3px;
+            border:1px solid #1a2a2e; overflow:hidden; position:relative;
+        }
+        .bar-wrap .cmark {
+            position:absolute; left:50%; top:0;
+            width:1px; height:100%; background:#2a3a3e; z-index:1;
+        }
+        .bar-fill {
+            height:100%; border-radius:3px;
+            transition:width 0.08s linear, margin-left 0.08s linear, background-color 0.3s;
+        }
+        .val-label {
+            width:68px; font-size:13px; font-family:'Consolas',monospace;
+            text-align:right; flex-shrink:0; transition:color 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ══ NAVBAR ══ -->
+<ul>
+    <li class="logo" style="width:226px;">
+        <a target="_blank" href="index.html" class="logo">
+            <img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png">
+        </a>
+    </li>
+    <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+    <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+    <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+    <li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
+    <li><a target="_blank" class="navbarright" style="text-decoration:underline;color:#03e9f4;" href="MotorMonitor.html">Monitor</a></li>
+</ul>
+
+<!-- ══ TOPBAR ══ -->
+<div class="topbar">
+    <p id="connected">● Connected</p>
+    <select id="addressSelect">
+        <option value="172.17.121.10">172.17.121.10</option>
+        <option value="localhost">localhost</option>
+    </select>
+    <button id="connectBtn" onclick="enterAddress()">Enter Address</button>
+<span style="margin-left:auto;color:#2a3a3e;font-size:11px;letter-spacing:3px;">MOTOR MONITOR</span>
+</div>
+
+<div class="row row-bottom">
+    <div class="panel p-pos">
+        <div class="panel-title">Position (ticks)</div>
+        <div id="grp-position"></div>
+    </div>
+    <div class="panel p-vel">
+        <div class="panel-title">Velocity (raw)</div>
+        <div id="grp-velocity"></div>
+    </div>
+    <div class="panel p-cur">
+        <div class="panel-title">Current (mA)</div>
+        <div id="grp-current"></div>
+    </div>
+</div>
+
+
+<script>
+// ═══════════════════════════════════════════════════
+//  Layout definition
+// ═══════════════════════════════════════════════════
+const GROUPS = [
+    { name:'L.HAND', ids:[1,2,3,4,5,6,7]      },
+    { name:'R.HAND', ids:[8,9,10,11,12,13,14]  },
+    { name:'WAIST',  ids:[15]                  },
+    { name:'L.LEG',  ids:[16,17,18,19,20,21]   },
+    { name:'R.LEG',  ids:[22,23,24,25,26,27]   },
+    { name:'HEAD',   ids:[28,29]               },
+];
+const GROUPS_R1 = GROUPS.slice(0,3);
+const GROUPS_R2 = GROUPS.slice(3,6);
+const ALL_IDS   = GROUPS.flatMap(g => g.ids);
+
+// ═══════════════════════════════════════════════════
+//  Per-panel bar configuration
+// ═══════════════════════════════════════════════════
+const BAR_CFG = {
+    position: {
+        centre:true, min:-2048, max:2048,
+        fmt: v => Math.round(v),
+        col: ()  => '#03e9f4',
+    },
+    velocity: {
+        centre:true, min:-1000, max:1000,
+        fmt: v => (v>=0?'+':'')+Math.round(v),
+        col: ()  => '#7eb8ff',
+    },
+    current: {
+        // Bar shows absolute magnitude; label keeps sign so direction is still readable
+        absBar:true, max:2000,
+        fmt: v => (v>=0?'+':'')+Math.round(v)+' mA',
+        col: v  => { const a=Math.abs(v); return a<300?'#00D600':a<800?'#ffaa00':'#ff4444'; },
+    },
+};
+
+// ═══════════════════════════════════════════════════
+//  Master data store
+// ═══════════════════════════════════════════════════
+const mData = {};
+ALL_IDS.forEach(id => {
+    mData[id] = { position:0, velocity:0, current:0 };
+});
+
+// ═══════════════════════════════════════════════════
+//  DOM builder (shared for all 5 panels)
+// ═══════════════════════════════════════════════════
+function buildPanel(panelKey) {
+    const root = document.getElementById(`grp-${panelKey}`);
+    const cfg  = BAR_CFG[panelKey];
+
+    [GROUPS_R1, GROUPS_R2].forEach(rowGroups => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'groups-row';
+
+        rowGroups.forEach(g => {
+            const gDiv = document.createElement('div');
+            gDiv.className = 'motor-group';
+
+            gDiv.innerHTML = `
+                <div class="group-hdr">
+                    <span class="group-name">${g.name}</span>
+                </div>`;
+
+            g.ids.forEach(id => {
+                const initML = cfg.centre ? 'margin-left:50%;' : '';
+                gDiv.innerHTML += `
+                    <div class="motor-row">
+                        <span class="mid-label">${id}</span>
+                        <div class="bar-wrap">
+                            ${cfg.centre ? '<div class="cmark"></div>' : ''}
+                            <div class="bar-fill" id="bf-${panelKey}-${id}" style="width:0%;${initML}"></div>
+                        </div>
+                        <span class="val-label" id="bv-${panelKey}-${id}">---</span>
+                    </div>`;
+            });
+
+            rowDiv.appendChild(gDiv);
+        });
+        root.appendChild(rowDiv);
+    });
+}
+
+['position','velocity','current'].forEach(buildPanel);
+
+// ═══════════════════════════════════════════════════
+//  Update helpers
+// ═══════════════════════════════════════════════════
+function updateBarStd(panelKey, id, raw) {
+    const cfg = BAR_CFG[panelKey];
+    const bf  = document.getElementById(`bf-${panelKey}-${id}`);
+    const bv  = document.getElementById(`bv-${panelKey}-${id}`);
+    if (!bf) return;
+
+    const v   = Number(raw);
+    const col = cfg.col(v);
+
+    let pct, ml;
+    if (cfg.centre) {
+        const cl    = Math.max(cfg.min, Math.min(cfg.max, v));
+        const range = cfg.max - cfg.min;
+        const half  = 50;
+        const pos   = (cl - cfg.min) / range * 100;
+        if (v >= 0) { ml = half+'%'; pct = (pos-half)+'%'; }
+        else        { ml = pos+'%';  pct = (half-pos)+'%'; }
+    } else if (cfg.absBar) {
+        // absolute-value bar: width = |v| / max, no center line
+        ml  = '0%';
+        pct = Math.min(100, Math.abs(v) / cfg.max * 100) + '%';
+    } else {
+        const cl    = Math.max(cfg.min, Math.min(cfg.max, v));
+        const range = cfg.max - cfg.min;
+        ml  = '0%';
+        pct = ((cl - cfg.min) / range * 100) + '%';
+    }
+
+    bf.style.width      = pct;
+    bf.style.marginLeft = ml;
+    bf.style.background = col;
+    bf.style.boxShadow  = `0 0 3px ${col}`;
+    if (bv) { bv.textContent = cfg.fmt(v); bv.style.color = col; }
+}
+
+// Unified setter — updates mData then the bar
+function setField(field, id, val) {
+    if (!mData[id]) return;
+    mData[id][field] = Number(val);
+    updateBarStd(field, id, val);
+}
+
+// ═══════════════════════════════════════════════════
+//  ROS
+// ═══════════════════════════════════════════════════
+var ros = null, myAddress = '172.17.121.10';
+
+function enterAddress() {
+    const sel = document.getElementById('addressSelect');
+    if (sel) myAddress = sel.value;
+    connectRos();
+}
+
+function connectRos() {
+    if (ros) { try { ros.close(); } catch(e){} }
+    ros = new ROSLIB.Ros({ url:`ws://${myAddress}:9090` });
+    ros.on('connection', () => {
+        document.getElementById('connected').style.display = 'inline';
+        document.body.style.backgroundImage = "url('./picture/Background.jpg')";
+        subscribeAll();
+    });
+    ros.on('error', () => {
+        document.getElementById('connected').style.display = 'none';
+        document.body.style.backgroundImage = "url('./picture/red_filter_image.jpg')";
+    });
+    ros.on('close', () => {
+        document.getElementById('connected').style.display = 'none';
+        document.body.style.backgroundImage = "url('./picture/red_filter_image.jpg')";
+    });
+}
+
+function sub(name, type, cb) {
+    new ROSLIB.Topic({ ros, name, messageType:type }).subscribe(cb);
+}
+
+function subscribeAll() {
+    sub('/joint_states',     'sensor_msgs/msg/JointState', msg =>
+        msg.name.forEach((n,i) => setField('position', parseInt(n), msg.position[i])));
+    sub('/joint_velocities', 'sensor_msgs/msg/JointState', msg =>
+        msg.name.forEach((n,i) => setField('velocity', parseInt(n), msg.velocity[i])));
+    sub('/joint_currents',   'sensor_msgs/msg/JointState', msg =>
+        msg.name.forEach((n,i) => setField('current',  parseInt(n), msg.effort[i])));
+}
+
+window.onload = function() { try { connectRos(); } catch(e){} };
+</script>
+</body>
+</html>
