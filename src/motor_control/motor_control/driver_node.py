@@ -26,16 +26,16 @@ ADDR_P_GOAL_POSITION          = 596
 ADDR_P_PROFILE_VELOCITY       = 600
 ADDR_P_PRESENT_POSITION       = 611  # 4 bytes, signed
 ADDR_P_PRESENT_VELOCITY       = 615  # 4 bytes, signed
-ADDR_P_PRESENT_CURRENT        = 619  # 2 bytes, signed, 1mA
+ADDR_P_PRESENT_CURRENT        = 621  # 2 bytes, signed, 1mA  (619-620 reserved)
 ADDR_P_INDIRECT_WRITE_START   = 49
 
 # GroupSyncRead 視窗（電流+速度+位置）
 # X: addr=126, len=10 → [Cur(2)][Vel(4)][Pos(4)]
-# P: addr=611, len=10 → [Pos(4)][Vel(4)][Cur(2)]
+# P: addr=611, len=12 → [Pos(4)][Vel(4)][reserved(2)][Cur(2)]
 ADDR_X_READ_START = ADDR_X_PRESENT_CURRENT   # 126
 LEN_X_READ        = 10
 ADDR_P_READ_START = ADDR_P_PRESENT_POSITION  # 611
-LEN_P_READ        = 10
+LEN_P_READ        = 12
 
 # 共通位址 (Indirect Data)
 ADDR_INDIRECT_DATA_WRITE      = 634 
@@ -318,3 +318,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
