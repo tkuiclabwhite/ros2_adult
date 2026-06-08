@@ -229,6 +229,17 @@
 			serviceType: 'tku_msgs/LCWalkingGaitParameter'
 		});
 
+		var web_src_parameter_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/web/src_parameter_Topic',
+			messageType: 'tku_msgs/SRContinuousParameter'
+		});
+		var LoadSRContinuousParameterClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/web/LoadSRContinuousParameter',
+			serviceType: 'tku_msgs/LoadSRContinuousParameter'
+		});
+
 		var parameter_msg = new ROSLIB.Message({
 			com_y_swing		: 0.0,
 			width_size		: 4.5,
@@ -362,7 +373,7 @@
 		function LeftTurnFun() {
 			Thetavaluetmp = Number(Thetavaluetmp) + 1;
 			document.getElementById("Thetavalue").value = Thetavaluetmp;
-			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+			if (statetype == 0 || statetype == 3 || statetype == 7 || statetype == 8) {
 				ChangeContinuousValueFun();
 			}
 		}
@@ -370,7 +381,7 @@
 		function ForwardFun() {
 			Xvaluetmp = Number(Xvaluetmp) + 100;
 			document.getElementById("Xvalue").value = Xvaluetmp;
-			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+			if (statetype == 0 || statetype == 3 || statetype == 7 || statetype == 8) {
 				ChangeContinuousValueFun();
 			}
 		}
@@ -378,7 +389,7 @@
 		function RightTurnFun() {
 			Thetavaluetmp = Number(Thetavaluetmp) - 1;
 			document.getElementById("Thetavalue").value = Thetavaluetmp;
-			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+			if (statetype == 0 || statetype == 3 || statetype == 7 || statetype == 8) {
 				ChangeContinuousValueFun();
 			}
 		}
@@ -386,7 +397,7 @@
 		function LeftFun() {
 			Yvaluetmp = Number(Yvaluetmp) + 100;
 			document.getElementById("Yvalue").value = Yvaluetmp;
-			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+			if (statetype == 0 || statetype == 3 || statetype == 7 || statetype == 8) {
 				ChangeContinuousValueFun();
 			}
 		}
@@ -394,7 +405,7 @@
 		function RightFun() {
 			Yvaluetmp = Number(Yvaluetmp) - 100;
 			document.getElementById("Yvalue").value = Yvaluetmp;
-			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+			if (statetype == 0 || statetype == 3 || statetype == 7 || statetype == 8) {
 				ChangeContinuousValueFun();
 			}
 		}
@@ -402,7 +413,7 @@
 		function BackwardFun() {
 			Xvaluetmp = Number(Xvaluetmp) - 100;
 			document.getElementById("Xvalue").value = Xvaluetmp;
-			if (statetype == 0 ||statetype == 7 || statetype == 8) {
+			if (statetype == 0 || statetype == 3 || statetype == 7 || statetype == 8) {
 				ChangeContinuousValueFun();
 			}
 		}
@@ -414,7 +425,7 @@
            Xvaluetmp = 0;
            Yvaluetmp = 0;
            Thetavaluetmp = 0;
-           if (statetype == 0 ||statetype == 7 || statetype == 8) {
+           if (statetype == 0 || statetype == 3 || statetype == 7 || statetype == 8) {
                ChangeContinuousValueFun();
            }
        }
@@ -424,7 +435,7 @@
 			if (statetype == 1 || statetype == 2) {
 				ContinousMode_msg.data = 1;
 				ContinousModetmp = 0;
-			} else if (statetype == 0 || statetype == 7 || statetype == 8) {
+			} else if (statetype == 0 || statetype == 3 || statetype == 7 || statetype == 8) {
 				if (ContinousModetmp == 0) {
 					ContinousMode_msg.data = 1;
 					ContinousModetmp = 1;
@@ -480,6 +491,7 @@
 			document.getElementById("continuousstep").style.display = "inline";
 			document.getElementById("lcupstep").style.display = "none";
 			document.getElementById("lcdownstep").style.display = "none";
+			document.getElementById("lccontinuousstep").style.display = "none";
 		}
 
 		function LC_upFun() {
@@ -488,6 +500,7 @@
 			document.getElementById("continuousstep").style.display = "none";
 			document.getElementById("lcupstep").style.display = "inline";
 			document.getElementById("lcdownstep").style.display = "none";
+			document.getElementById("lccontinuousstep").style.display = "none";
 		}
 
 		function LC_downFun() {
@@ -496,6 +509,17 @@
 			document.getElementById("continuousstep").style.display = "none";
 			document.getElementById("lcupstep").style.display = "none";
 			document.getElementById("lcdownstep").style.display = "inline";
+			document.getElementById("lccontinuousstep").style.display = "none";
+		}
+
+		function LC_continuousFun() {
+			statetype = 3;
+			Load();
+			document.getElementById("continuousstep").style.display = "none";
+			document.getElementById("lcupstep").style.display = "none";
+			document.getElementById("lcdownstep").style.display = "none";
+			document.getElementById("lccontinuousstep").style.display = "inline";
+			ContinousModetmp = 0;
 		}
 
 		function Load() {
@@ -505,9 +529,9 @@
 				Continuousback_msg.data = false;
 			}
 			Continuousback_Topic.publish(Continuousback_msg);
-			
+
 			WalkingGaitParameter_request.mode = Number(statetype);
-			
+
 			if (statetype === 0) {
 				LoadWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (res) {
 					document.getElementById("com_y_swing").value = res.com_y_swing;
@@ -531,6 +555,23 @@
 					document.getElementById(prefix + "now_com_height").value = res.com_height;
 					document.getElementById(prefix + "base_lift_z").value = res.board_high;
 					document.getElementById(prefix + "Clearance").value = res.clearance;
+				});
+			} else if (statetype === 3) {
+				LoadSRContinuousParameterClient.callService(WalkingGaitParameter_request, function (res) {
+					document.getElementById("lccperiod_t").value = res.period_t;
+					document.getElementById("lcccom_y_swing").value = res.com_y_swing;
+					document.getElementById("lccwidth_size").value = res.width_size;
+					document.getElementById("lccosc_lockrange").value = res.t_dsp;
+					document.getElementById("lccnow_stand_height").value = res.stand_height;
+					document.getElementById("lccnow_com_height").value = res.com_height;
+					document.getElementById("lccbase_lift_z").value = res.board_high;
+					document.getElementById("lccClearance").value = res.clearance;
+					document.getElementById("lccimukp").value = res.imukp;
+					document.getElementById("lccimukd").value = res.imukd;
+					document.getElementById("lcctarget_pitch").value = res.target_pitch;
+					document.getElementById("lcctarget_roll").value = res.target_roll;
+					document.getElementById("lccyaw_kp").value = res.yaw_kp;
+					document.getElementById("lccmax_correction").value = res.max_correction;
 				});
 			}
 		}
@@ -558,7 +599,7 @@
 				});
 				web_parameter_Topic.publish(msg_to_send);
 			} else if (s_type === 1 || s_type === 2) {
-				var prefix = (s_type === 1) ? "lu" : "ld"; 
+				var prefix = (s_type === 1) ? "lu" : "ld";
 				var lc_msg_to_send = new ROSLIB.Message({
 					mode: s_type,
 					period_t: getVal(prefix + "period_t", 360),
@@ -574,6 +615,25 @@
 					ankle_roll: getVal(prefix + "Ankle_roll", 0)
 				});
 				web_lc_parameter_Topic.publish(lc_msg_to_send);
+			} else if (s_type === 3) {
+				var lcc_msg_to_send = new ROSLIB.Message({
+					mode: s_type,
+					period_t: getVal("lccperiod_t", 360),
+					com_y_swing: getVal("lcccom_y_swing", 0),
+					width_size: getVal("lccwidth_size", 0),
+					t_dsp: getVal("lccosc_lockrange", 0),
+					stand_height: getVal("lccnow_stand_height", 0),
+					com_height: getVal("lccnow_com_height", 0),
+					board_high: getVal("lccbase_lift_z", 0),
+					clearance: getVal("lccClearance", 3.0),
+					imukp: getVal("lccimukp", 0),
+					imukd: getVal("lccimukd", 0),
+					target_pitch: getVal("lcctarget_pitch", 0),
+					target_roll: getVal("lcctarget_roll", 0),
+					yaw_kp: getVal("lccyaw_kp", 0),
+					max_correction: getVal("lccmax_correction", 0)
+				});
+				web_src_parameter_Topic.publish(lcc_msg_to_send);
 			}
 		}
 
@@ -599,10 +659,10 @@
 					"hip_roll":    getVal("hip_roll"),
 					"ankle_roll":  getVal("ankle_roll")
 				};
-			} else {
+			} else if (statetype === 1 || statetype === 2) {
 				var prefix = (statetype === 1) ? "lu" : "ld";
 				params = {
-					"com_y_swing": getVal(prefix + "com_y_swing"), 
+					"com_y_swing": getVal(prefix + "com_y_swing"),
 					"width_size":  getVal(prefix + "width_size"),
 					"period_t":    getVal(prefix + "period_t"),
 					"Tdsp":        getVal(prefix + "osc_lockrange"),
@@ -613,6 +673,23 @@
 					"Hip_roll":    getVal(prefix + "Hip_roll"),
 					"Ankle_roll":  getVal(prefix + "Ankle_roll"),
 					"Clearance":   getVal(prefix + "Clearance")
+				};
+			} else if (statetype === 3) {
+				params = {
+					"com_y_swing":    getVal("lcccom_y_swing"),
+					"width_size":     getVal("lccwidth_size"),
+					"period_t":       getVal("lccperiod_t"),
+					"Tdsp":           getVal("lccosc_lockrange"),
+					"Board_High":     getVal("lccbase_lift_z"),
+					"STAND_HEIGHT":   getVal("lccnow_stand_height"),
+					"COM_HEIGHT":     getVal("lccnow_com_height"),
+					"Clearance":      getVal("lccClearance"),
+					"imukp":          getVal("lccimukp"),
+					"imukd":          getVal("lccimukd"),
+					"target_pitch":   getVal("lcctarget_pitch"),
+					"target_roll":    getVal("lcctarget_roll"),
+					"yaw_kp":         getVal("lccyaw_kp"),
+					"max_correction": getVal("lccmax_correction")
 				};
 			}
 
@@ -628,6 +705,7 @@
 				case 0: document.getElementById("com_y_swing").value = com_y_swing_tmp; break;
 				case 1: document.getElementById("lucom_y_swing").value = com_y_swing_tmp; break;
 				case 2: document.getElementById("ldcom_y_swing").value = com_y_swing_tmp; break;
+				case 3: document.getElementById("lcccom_y_swing").value = com_y_swing_tmp; break;
 			}
 		}
 		function changeWidthSize_value(value){
@@ -636,6 +714,7 @@
 				case 0: document.getElementById("WidthSize").value = width_size_tmp; break;
 				case 1: document.getElementById("luwidth_size").value = width_size_tmp; break;
 				case 2: document.getElementById("ldwidth_size").value = width_size_tmp; break;
+				case 3: document.getElementById("lccwidth_size").value = width_size_tmp; break;
 			}
 		}
 		function changeperiod_t_value(value) {
@@ -644,6 +723,7 @@
 				case 0: document.getElementById("period_t").value = period_t_tmp; break;
 				case 1: document.getElementById("luperiod_t").value = period_t_tmp; break;
 				case 2: document.getElementById("ldperiod_t").value = period_t_tmp; break;
+				case 3: document.getElementById("lccperiod_t").value = period_t_tmp; break;
 			}
 		}
 		function changeT_DSP_value(value){
@@ -670,13 +750,14 @@
 				case 0: document.getElementById("com_height").value = com_height_tmp; break;
 			}
 		}
-	
+
 		//SR 專用參數
 		function changeosc_lockrange_value(value) {
 			osc_lockrange_tmp = value;
 			switch (statetype) {
 				case 1: document.getElementById("luosc_lockrange").value = osc_lockrange_tmp; break;
 				case 2: document.getElementById("ldosc_lockrange").value = osc_lockrange_tmp; break;
+				case 3: document.getElementById("lccosc_lockrange").value = osc_lockrange_tmp; break;
 			}
 		}
 		function changebase_lift_z_value(value) {
@@ -684,6 +765,7 @@
 			switch (statetype) {
 				case 1: document.getElementById("lubase_lift_z").value = base_lift_z_tmp; break;
 				case 2: document.getElementById("ldbase_lift_z").value = base_lift_z_tmp; break;
+				case 3: document.getElementById("lccbase_lift_z").value = base_lift_z_tmp; break;
 			}
 		}
 		function changenow_stand_height_value(value) {
@@ -691,6 +773,7 @@
 			switch (statetype) {
 				case 1: document.getElementById("lunow_stand_height").value = now_stand_height_tmp; break;
 				case 2: document.getElementById("ldnow_stand_height").value = now_stand_height_tmp; break;
+				case 3: document.getElementById("lccnow_stand_height").value = now_stand_height_tmp; break;
 			}
 		}
 		function changenow_com_height_value(value) {
@@ -698,6 +781,7 @@
 			switch (statetype) {
 				case 1: document.getElementById("lunow_com_height").value = now_com_height_tmp; break;
 				case 2: document.getElementById("ldnow_com_height").value = now_com_height_tmp; break;
+				case 3: document.getElementById("lccnow_com_height").value = now_com_height_tmp; break;
 			}
 		}
 		function changeClearance(value) {
@@ -705,6 +789,7 @@
 			switch (statetype) {
 				case 1: document.getElementById("luClearance").value = clearance_tmp; break;
 				case 2: document.getElementById("ldClearance").value = clearance_tmp; break;
+				case 3: document.getElementById("lccClearance").value = clearance_tmp; break;
 			}
 		}
 		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
@@ -752,6 +837,7 @@
 				if(document.getElementById("continuousstep")) document.getElementById("continuousstep").style.display = "inline";
 				if(document.getElementById("lcupstep")) document.getElementById("lcupstep").style.display = "none";
 				if(document.getElementById("lcdownstep")) document.getElementById("lcdownstep").style.display = "none";
+				if(document.getElementById("lccontinuousstep")) document.getElementById("lccontinuousstep").style.display = "none";
 			}
 			Load();
 		});
@@ -770,7 +856,8 @@
 		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
 		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
 		<li><a target="_blank" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>	
+		<li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>
+		<li><a target="_blank" class="navbarright" href="WaveformMonitor.html">Waveform</a></li>
         <li class="logo" style="width: 226px;">
 			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
 		</li>
@@ -846,6 +933,8 @@
     				<div id="extra-options" style="display: none;">
 						<input type="radio" name="gender" value="SR_up" onclick="LC_upFun()"> SR_up
 						<input type="radio" name="gender" value="SR_down" onclick="LC_downFun()"> SR_down
+						<br>
+						<input style="margin-top: 5%;" type="radio" name="gender" value="SR_Continuous" onclick="LC_continuousFun()"> SR_Continuous
 					</div>
 					<p></p>
 				</form>
@@ -1012,6 +1101,71 @@
 					<tr>
 						<td>COM_HEIGHT</td>
 						<td><input type="text" name="now_com_height" id="ldnow_com_height" value="0" style="width: 140px" onchange="changenow_com_height_value(this.value)"></td>
+					</tr>
+				</table>
+				<br />
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" onclick="Save()">Save</button>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" onclick="SendParam2FPGA()">Send</button>
+			</section>
+			<section id="lccontinuousstep" style="float: left; margin-left: 0%; display: none; min-width: 300px; max-width: 350px; width: 33%;">
+				<b style="font-size: 25px;">SR_Continuous Step</b>
+				<br /><br />
+				<table>
+					<tr>
+						<td>com_y_swing</td>
+						<td><input type="text" name="lcccom_y_swing" id="lcccom_y_swing" value="0" style="width: 140px" onchange="changecom_y_swing_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>width_size</td>
+						<td><input type="text" name="lccwidth_size" id="lccwidth_size" value="0" style="width: 140px" onchange="changeWidthSize_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>period_t</td>
+						<td><input type="text" name="lccperiod_t" id="lccperiod_t" value="0" style="width: 140px" onchange="changeperiod_t_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>T_DSP</td>
+						<td><input type="text" name="lccosc_lockrange" id="lccosc_lockrange" value="0" style="width: 140px" onchange="changeosc_lockrange_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>Clearance</td>
+						<td><input type="text" name="lccClearance" id="lccClearance" value="0" style="width: 140px" onchange="changeClearance(this.value)"></td>
+					</tr>
+					<tr>
+						<td>Board_High</td>
+						<td><input type="text" name="lccbase_lift_z" id="lccbase_lift_z" value="0" style="width: 140px" onchange="changebase_lift_z_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>STAND_HEIGHT</td>
+						<td><input type="text" name="lccnow_stand_height" id="lccnow_stand_height" value="0" style="width: 140px" onchange="changenow_stand_height_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>COM_HEIGHT</td>
+						<td><input type="text" name="lccnow_com_height" id="lccnow_com_height" value="0" style="width: 140px" onchange="changenow_com_height_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td>imu_kp</td>
+						<td><input type="text" name="lccimukp" id="lccimukp" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>imu_kd</td>
+						<td><input type="text" name="lccimukd" id="lccimukd" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>target_pitch</td>
+						<td><input type="text" name="lcctarget_pitch" id="lcctarget_pitch" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>target_roll</td>
+						<td><input type="text" name="lcctarget_roll" id="lcctarget_roll" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>yaw_kp</td>
+						<td><input type="text" name="lccyaw_kp" id="lccyaw_kp" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>max_correction</td>
+						<td><input type="text" name="lccmax_correction" id="lccmax_correction" value="0" style="width: 140px"></td>
 					</tr>
 				</table>
 				<br />

@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="SHORTCUT ICON" href="./picture/icon.png">
+    <link rel="stylesheet" type="text/css" href="./css/style.css">
+    <title>Waveform Monitor</title>
+    <style>
+        body {
+            width: auto;
+            min-width: 1100px;
+            color: white;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        #top-bar {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            padding: 8px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-bottom: 1px solid #333;
+            flex-wrap: wrap;
+        }
+
+        .strategy-box {
+            display: inline-block;
+            background-color: #222;
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 4px 16px;
+            box-shadow: inset 0 0 10px #000;
+            text-align: center;
+        }
+        .strategy-label {
+            color: #888;
+            font-size: 11px;
+            text-transform: uppercase;
+            display: block;
+        }
+        #current-strategy-name {
+            color: #00D600;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 0 0 8px rgba(0, 214, 0, 0.5);
+        }
+
+        #ctrl-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 7px 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border-bottom: 1px solid #2a2a2a;
+            flex-wrap: wrap;
+        }
+        #ctrl-bar label { color: #aaa; font-size: 13px; }
+        #ctrl-bar input[type=number] {
+            width: 58px;
+            background: #111;
+            color: #ccc;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 13px;
+        }
+        #ctrl-bar button {
+            padding: 4px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            background: transparent;
+            transition: 0.2s;
+        }
+        #pauseBtn  { color: #03e9f4; border: 1px solid #03e9f4; }
+        #pauseBtn:hover, #pauseBtn.paused { background: #03e9f4; color: #050505; box-shadow: 0 0 8px #03e9f4; }
+        #clearBtn  { color: #ff9944; border: 1px solid #ff9944; }
+        #clearBtn:hover { background: #ff9944; color: #050505; }
+
+        #waves-container {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 10px 12px;
+            gap: 10px;
+        }
+
+        .wave-panel {
+            background: rgba(10, 14, 24, 0.92);
+            border: 1px solid #1e2e3a;
+            border-radius: 8px;
+            padding: 10px 14px 12px;
+            box-shadow: inset 0 0 18px rgba(0,0,0,0.5);
+            flex: 1;
+            min-width: 320px;
+        }
+
+        .wave-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 6px;
+        }
+        .wave-title {
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+        .wave-value {
+            font-size: 26px;
+            font-weight: bold;
+            font-family: 'Consolas', monospace;
+        }
+
+        canvas {
+            display: block;
+            background: #070710;
+            border: 1px solid #1a1a2e;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        .ref-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #888;
+        }
+        .ref-row input[type=number] {
+            width: 58px;
+            background: #111;
+            color: #ccc;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 2px 5px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- NAV BAR -->
+    <ul>
+        <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+        <li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
+        <li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
+        <li><a target="_blank" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
+        <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="WaveformMonitor.html">Waveform</a></li>
+        <li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>
+        <li class="logo" style="width: 226px;">
+            <a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+        </li>
+    </ul>
+
+    <!-- TOP BAR -->
+    <div id="top-bar">
+        <p id="connected" style="color:#00D600; display:none; font-size:18px; margin:0; text-shadow:0 0 8px #00D600;">Connected</p>
+        <div class="strategy-box">
+            <span class="strategy-label">Strategy</span>
+            <span id="current-strategy-name">---</span>
+        </div>
+        <select style="height:25px; background:#111; color:#ccc; border:1px solid #444; border-radius:4px; padding:0 8px;" id="addressSelect">
+            <option value="172.17.121.10">172.17.121.10</option>
+            <option value="localhost">localhost</option>
+        </select>
+        <button type="button" style="height:25px; padding:0 14px; background:transparent; color:#00D600; border:1px solid #00D600; border-radius:4px; cursor:pointer;" onclick="enterAddress()">Connect</button>
+        <h2 style="margin:0; font-size:20px; color:white; letter-spacing:4px;">WAVEFORM MONITOR</h2>
+    </div>
+
+    <!-- CONTROL BAR -->
+    <div id="ctrl-bar">
+        <label>Time (s):</label>
+        <input type="number" id="timeWindow" value="10" min="2" max="60" step="1">
+
+        <label>Y Scale (°):</label>
+        <input type="number" id="yScale" value="30" min="5" max="180" step="5">
+
+        <button id="pauseBtn" onclick="togglePause()">Pause</button>
+        <button id="clearBtn" onclick="clearBuffers()">Clear</button>
+    </div>
+
+    <!-- WAVE PANELS -->
+    <div id="waves-container">
+
+        <div class="wave-panel">
+            <div class="wave-header">
+                <span class="wave-title" style="color:#f0c040;">&#9642; Pitch</span>
+                <span class="wave-value" style="color:#f0c040;"><span id="valPitch">0.0</span>°</span>
+            </div>
+            <canvas id="canvasPitch" height="200"></canvas>
+            <div class="ref-row">
+                <span>Ref:</span>
+                <input type="number" id="refPitch" value="0" step="0.1" placeholder="target_pitch">
+                <span style="color:#666;">— dashed line</span>
+            </div>
+        </div>
+
+        <div class="wave-panel">
+            <div class="wave-header">
+                <span class="wave-title" style="color:#40c8f0;">&#9642; Roll</span>
+                <span class="wave-value" style="color:#40c8f0;"><span id="valRoll">0.0</span>°</span>
+            </div>
+            <canvas id="canvasRoll" height="200"></canvas>
+            <div class="ref-row">
+                <span>Ref:</span>
+                <input type="number" id="refRoll" value="0" step="0.1" placeholder="target_roll">
+                <span style="color:#666;">— dashed line</span>
+            </div>
+        </div>
+
+        <div class="wave-panel">
+            <div class="wave-header">
+                <span class="wave-title" style="color:#80ff80;">&#9642; Yaw</span>
+                <span class="wave-value" style="color:#80ff80;"><span id="valYaw">0.0</span>°</span>
+            </div>
+            <canvas id="canvasYaw" height="200"></canvas>
+            <div class="ref-row">
+                <span>Ref:</span>
+                <input type="number" id="refYaw" value="0" step="0.1" placeholder="locked yaw">
+                <span style="color:#666;">— dashed line</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
+    <script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+    <script>
+        // ── ROS ──
+        var ros = new ROSLIB.Ros({ url: "ws://172.17.121.10:9090" });
+        var connectFlag = false;
+        var wasOnline = true;
+        var checkConnectionInterval;
+        var SensorSub = null;
+        var LocationSub = null;
+
+        function checkConnection() {
+            if (ros && window.navigator.onLine) {
+                document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+                if (!wasOnline) {
+                    enterAddress();
+                    wasOnline = true;
+                }
+            } else {
+                document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+                if (wasOnline) {
+                    enterAddress();
+                    wasOnline = false;
+                }
+                wasOnline = false;
+            }
+        }
+
+        window.addEventListener('online',  checkConnection);
+        window.addEventListener('offline', checkConnection);
+
+        ros.on('connection', function () {
+            connectFlag = true;
+            document.getElementById('connected').style.display = 'inline';
+            checkConnectionInterval = setInterval(checkConnection, 1000);
+            subscribeTopics();
+        });
+        ros.on('error', function () {
+            clearInterval(checkConnectionInterval);
+            document.getElementById('connected').style.display = 'none';
+            document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+        });
+        ros.on('close', function () {
+            connectFlag = false;
+            clearInterval(checkConnectionInterval);
+            document.getElementById('connected').style.display = 'none';
+            document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+        });
+
+        function enterAddress() {
+            if (connectFlag) { ros.close(); connectFlag = false; }
+            var addr = document.getElementById('addressSelect').value;
+            var state = ros.socket ? ros.socket.readyState : WebSocket.CLOSED;
+            if (state === WebSocket.OPEN || state === WebSocket.CONNECTING || state === WebSocket.CLOSING) {
+                ros.close();
+                ros.once('close', function () { ros.connect("ws://" + addr + ":9090"); });
+            } else {
+                ros.connect("ws://" + addr + ":9090");
+            }
+        }
+
+        function subscribeTopics() {
+            if (SensorSub) SensorSub.unsubscribe();
+            SensorSub = new ROSLIB.Topic({
+                ros: ros,
+                name: '/package/sensorpackage',
+                messageType: 'tku_msgs/SensorPackage'
+            });
+            SensorSub.subscribe(function (msg) {
+                var t = Date.now();
+                pushData(pitchBuf, t, parseFloat(msg.pitch));
+                pushData(rollBuf,  t, parseFloat(msg.roll));
+                pushData(yawBuf,   t, parseFloat(msg.yaw));
+                document.getElementById('valPitch').textContent = parseFloat(msg.pitch).toFixed(1);
+                document.getElementById('valRoll').textContent  = parseFloat(msg.roll).toFixed(1);
+                document.getElementById('valYaw').textContent   = parseFloat(msg.yaw).toFixed(1);
+            });
+
+            if (LocationSub) LocationSub.unsubscribe();
+            LocationSub = new ROSLIB.Topic({
+                ros: ros,
+                name: '/locationBack',
+                messageType: 'tku_msgs/msg/Location'
+            });
+            LocationSub.subscribe(function (msg) {
+                var loc = msg.data;
+                if (typeof loc === 'string') {
+                    var parts = loc.split('/');
+                    if (parts.length > 1 && parts[1].length > 0) loc = parts[0].trim();
+                }
+                document.getElementById('current-strategy-name').innerText = loc;
+            });
+        }
+
+        // ── Buffers ──
+        var MAX_POINTS = 3000;
+        var pitchBuf = [], rollBuf = [], yawBuf = [];
+        var paused = false;
+
+        function pushData(buf, t, val) {
+            if (paused) return;
+            buf.push({ t: t, v: val });
+            if (buf.length > MAX_POINTS) buf.shift();
+        }
+
+        function clearBuffers() {
+            pitchBuf = []; rollBuf = []; yawBuf = [];
+        }
+
+        function togglePause() {
+            paused = !paused;
+            var btn = document.getElementById('pauseBtn');
+            btn.textContent = paused ? 'Resume' : 'Pause';
+            btn.classList.toggle('paused', paused);
+        }
+
+        // ── Draw ──
+        function drawWave(canvasId, buf, lineColor, refInputId) {
+            var canvas = document.getElementById(canvasId);
+            var ctx = canvas.getContext('2d');
+            var W = canvas.offsetWidth;
+            if (canvas.width !== W) canvas.width = W;
+            var H = canvas.height;
+
+            var yScale     = parseFloat(document.getElementById('yScale').value)     || 30;
+            var timeWinMs  = (parseFloat(document.getElementById('timeWindow').value) || 10) * 1000;
+            var refVal     = parseFloat(document.getElementById(refInputId).value);
+            var now        = Date.now();
+            var tStart     = now - timeWinMs;
+
+            ctx.clearRect(0, 0, W, H);
+
+            // Background
+            ctx.fillStyle = '#070710';
+            ctx.fillRect(0, 0, W, H);
+
+            // Grid
+            var gridVals = [-yScale, -yScale / 2, 0, yScale / 2, yScale];
+            gridVals.forEach(function (v) {
+                var y = valToY(v, H, yScale);
+                ctx.strokeStyle = (v === 0) ? '#2a2a44' : '#141420';
+                ctx.lineWidth = (v === 0) ? 1.5 : 1;
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+                ctx.fillStyle = '#3a3a55';
+                ctx.font = '11px Consolas';
+                ctx.fillText((v > 0 ? '+' : '') + v + '°', 3, y - 2);
+            });
+
+            // Reference line (dashed)
+            if (!isNaN(refVal)) {
+                var ry = valToY(refVal, H, yScale);
+                ctx.strokeStyle = 'rgba(255, 230, 80, 0.7)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([8, 5]);
+                ctx.beginPath(); ctx.moveTo(0, ry); ctx.lineTo(W, ry); ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = 'rgba(255, 230, 80, 0.8)';
+                ctx.font = '11px Consolas';
+                ctx.fillText('ref ' + refVal.toFixed(1) + '°', W - 80, ry - 3);
+            }
+
+            // Data line
+            var visible = buf.filter(function (p) { return p.t >= tStart; });
+            if (visible.length < 2) return;
+
+            ctx.strokeStyle = lineColor;
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            visible.forEach(function (p, i) {
+                var x = ((p.t - tStart) / timeWinMs) * W;
+                var y = valToY(p.v, H, yScale);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
+
+        function valToY(v, H, yScale) {
+            return Math.max(2, Math.min(H - 2, H / 2 - (v / yScale) * (H / 2 - 14)));
+        }
+
+        function redrawAll() {
+            drawWave('canvasPitch', pitchBuf, '#f0c040', 'refPitch');
+            drawWave('canvasRoll',  rollBuf,  '#40c8f0', 'refRoll');
+            drawWave('canvasYaw',   yawBuf,   '#80ff80', 'refYaw');
+        }
+
+        (function loop() { redrawAll(); requestAnimationFrame(loop); })();
+
+        window.addEventListener('DOMContentLoaded', function () {
+            var loc = window.currentStrategy || "";
+            if (typeof loc === 'string') {
+                loc = loc.replace(/^\/+/, '');
+                loc = loc.split('/')[0].trim();
+            }
+            document.getElementById('current-strategy-name').innerText = loc || '---';
+        });
+    </script>
+    <script src="../src/strategy/strategy/strategy.js"></script>
+</body>
+</html>
