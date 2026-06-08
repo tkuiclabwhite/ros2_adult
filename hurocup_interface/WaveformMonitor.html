@@ -81,8 +81,14 @@
 
         #waves-container {
             display: flex;
+            flex-direction: column;
+            padding: 10px 0 0;
+        }
+
+        .wave-row {
+            display: flex;
             flex-wrap: wrap;
-            padding: 10px 12px;
+            padding: 0 12px 10px;
             gap: 10px;
         }
 
@@ -94,6 +100,10 @@
             box-shadow: inset 0 0 18px rgba(0,0,0,0.5);
             flex: 1;
             min-width: 320px;
+        }
+
+        .wave-panel-motor {
+            min-width: 220px;
         }
 
         .wave-header {
@@ -178,8 +188,8 @@
         <label>Time (s):</label>
         <input type="number" id="timeWindow" value="10" min="2" max="60" step="1">
 
-        <label>Y Scale (°):</label>
-        <input type="number" id="yScale" value="30" min="5" max="180" step="5">
+        <label>IMU Scale (°):</label>
+        <input type="number" id="yScale" value="15" min="5" max="180" step="5">
 
         <button id="pauseBtn" onclick="togglePause()">Pause</button>
         <button id="clearBtn" onclick="clearBuffers()">Clear</button>
@@ -188,44 +198,48 @@
     <!-- WAVE PANELS -->
     <div id="waves-container">
 
-        <div class="wave-panel">
-            <div class="wave-header">
-                <span class="wave-title" style="color:#f0c040;">&#9642; Pitch</span>
-                <span class="wave-value" style="color:#f0c040;"><span id="valPitch">0.0</span>°</span>
+        <!-- Row 1: IMU -->
+        <div class="wave-row">
+            <div class="wave-panel">
+                <div class="wave-header">
+                    <span class="wave-title" style="color:#f0c040;">&#9642; Pitch</span>
+                    <span class="wave-value" style="color:#f0c040;"><span id="valPitch">0.0</span>°</span>
+                </div>
+                <canvas id="canvasPitch" height="200"></canvas>
+                <div class="ref-row">
+                    <span>Ref:</span>
+                    <input type="number" id="refPitch" value="0" step="0.1" placeholder="target_pitch">
+                    <span style="color:#666;">— dashed line</span>
+                </div>
             </div>
-            <canvas id="canvasPitch" height="200"></canvas>
-            <div class="ref-row">
-                <span>Ref:</span>
-                <input type="number" id="refPitch" value="0" step="0.1" placeholder="target_pitch">
-                <span style="color:#666;">— dashed line</span>
+            <div class="wave-panel">
+                <div class="wave-header">
+                    <span class="wave-title" style="color:#40c8f0;">&#9642; Roll</span>
+                    <span class="wave-value" style="color:#40c8f0;"><span id="valRoll">0.0</span>°</span>
+                </div>
+                <canvas id="canvasRoll" height="200"></canvas>
+                <div class="ref-row">
+                    <span>Ref:</span>
+                    <input type="number" id="refRoll" value="0" step="0.1" placeholder="target_roll">
+                    <span style="color:#666;">— dashed line</span>
+                </div>
+            </div>
+            <div class="wave-panel">
+                <div class="wave-header">
+                    <span class="wave-title" style="color:#80ff80;">&#9642; Yaw</span>
+                    <span class="wave-value" style="color:#80ff80;"><span id="valYaw">0.0</span>°</span>
+                </div>
+                <canvas id="canvasYaw" height="200"></canvas>
+                <div class="ref-row">
+                    <span>Ref:</span>
+                    <input type="number" id="refYaw" value="0" step="0.1" placeholder="locked yaw">
+                    <span style="color:#666;">— dashed line</span>
+                </div>
             </div>
         </div>
 
-        <div class="wave-panel">
-            <div class="wave-header">
-                <span class="wave-title" style="color:#40c8f0;">&#9642; Roll</span>
-                <span class="wave-value" style="color:#40c8f0;"><span id="valRoll">0.0</span>°</span>
-            </div>
-            <canvas id="canvasRoll" height="200"></canvas>
-            <div class="ref-row">
-                <span>Ref:</span>
-                <input type="number" id="refRoll" value="0" step="0.1" placeholder="target_roll">
-                <span style="color:#666;">— dashed line</span>
-            </div>
-        </div>
-
-        <div class="wave-panel">
-            <div class="wave-header">
-                <span class="wave-title" style="color:#80ff80;">&#9642; Yaw</span>
-                <span class="wave-value" style="color:#80ff80;"><span id="valYaw">0.0</span>°</span>
-            </div>
-            <canvas id="canvasYaw" height="200"></canvas>
-            <div class="ref-row">
-                <span>Ref:</span>
-                <input type="number" id="refYaw" value="0" step="0.1" placeholder="locked yaw">
-                <span style="color:#666;">— dashed line</span>
-            </div>
-        </div>
+        <!-- Row 2: Motor Current -->
+        <div class="wave-row" id="motor-row"></div>
 
     </div>
 
@@ -239,6 +253,7 @@
         var checkConnectionInterval;
         var SensorSub = null;
         var LocationSub = null;
+        var JointCurrentSub = null;
 
         function checkConnection() {
             if (ros && window.navigator.onLine) {
@@ -307,6 +322,26 @@
                 document.getElementById('valYaw').textContent   = parseFloat(msg.yaw).toFixed(1);
             });
 
+            if (JointCurrentSub) JointCurrentSub.unsubscribe();
+            JointCurrentSub = new ROSLIB.Topic({
+                ros: ros,
+                name: '/joint_currents',
+                messageType: 'sensor_msgs/msg/JointState'
+            });
+            JointCurrentSub.subscribe(function (msg) {
+                var t = Date.now();
+                msg.name.forEach(function (n, i) {
+                    var id = parseInt(n);
+                    var val = parseFloat(msg.effort[i]);
+                    motorPanels.forEach(function (p, idx) {
+                        if (p.id === id) {
+                            pushData(p.buf, t, val);
+                            document.getElementById('valCur' + idx).textContent = Math.round(val);
+                        }
+                    });
+                });
+            });
+
             if (LocationSub) LocationSub.unsubscribe();
             LocationSub = new ROSLIB.Topic({
                 ros: ros,
@@ -327,6 +362,42 @@
         var MAX_POINTS = 3000;
         var pitchBuf = [], rollBuf = [], yawBuf = [];
         var paused = false;
+        var pausedAt = null;
+
+        var motorPanels = [
+            { id: 16, color: '#ff7744' },
+            { id: 18, color: '#ffaa00' },
+            { id: 19, color: '#ffe044' },
+            { id: 22, color: '#44ccff' },
+            { id: 24, color: '#8866ff' },
+            { id: 25, color: '#ff55aa' },
+        ];
+        motorPanels.forEach(function (p) { p.buf = []; });
+
+        // Build motor panel DOM
+        (function () {
+            var row = document.getElementById('motor-row');
+            motorPanels.forEach(function (p, i) {
+                var c = p.color;
+                var inStyle = 'width:44px;background:#111;color:' + c + ';border:1px solid ' + c + ';border-radius:3px;padding:1px 4px;font-size:14px;font-weight:bold;';
+                var div = document.createElement('div');
+                div.className = 'wave-panel wave-panel-motor';
+                div.innerHTML =
+                    '<div class="wave-header">' +
+                        '<span class="wave-title" style="color:' + c + ';">&#9642; M<input type="number" id="motorId' + i + '" value="' + p.id + '" min="1" max="29" style="' + inStyle + '" onchange="changeMotorId(' + i + ')"> Cur</span>' +
+                        '<span class="wave-value" style="color:' + c + ';font-size:18px;"><span id="valCur' + i + '">0</span><span style="font-size:13px;"> mA</span></span>' +
+                    '</div>' +
+                    '<canvas id="canvasCur' + i + '" height="180"></canvas>' +
+                    '<div class="ref-row"><span>mA Scale: ±</span><input type="number" id="mAScale' + i + '" value="1000" min="100" max="5000" step="100"></div>';
+                row.appendChild(div);
+            });
+        })();
+
+        function changeMotorId(idx) {
+            motorPanels[idx].id  = parseInt(document.getElementById('motorId' + idx).value);
+            motorPanels[idx].buf = [];
+            document.getElementById('valCur' + idx).textContent = '0';
+        }
 
         function pushData(buf, t, val) {
             if (paused) return;
@@ -336,28 +407,35 @@
 
         function clearBuffers() {
             pitchBuf = []; rollBuf = []; yawBuf = [];
+            motorPanels.forEach(function (p) { p.buf = []; });
         }
 
         function togglePause() {
             paused = !paused;
+            pausedAt = paused ? Date.now() : null;
             var btn = document.getElementById('pauseBtn');
             btn.textContent = paused ? 'Resume' : 'Pause';
             btn.classList.toggle('paused', paused);
         }
 
         // ── Draw ──
-        function drawWave(canvasId, buf, lineColor, refInputId) {
+        // opts: { scaleId, refInputId, unit }
+        function drawWave(canvasId, buf, lineColor, opts) {
             var canvas = document.getElementById(canvasId);
             var ctx = canvas.getContext('2d');
             var W = canvas.offsetWidth;
             if (canvas.width !== W) canvas.width = W;
             var H = canvas.height;
 
-            var yScale     = parseFloat(document.getElementById('yScale').value)     || 30;
-            var timeWinMs  = (parseFloat(document.getElementById('timeWindow').value) || 10) * 1000;
-            var refVal     = parseFloat(document.getElementById(refInputId).value);
-            var now        = Date.now();
-            var tStart     = now - timeWinMs;
+            var scaleId   = (opts && opts.scaleId)    || 'yScale';
+            var unit      = (opts && opts.unit)        || '°';
+            var refInputId= (opts && opts.refInputId)  || null;
+
+            var yScale    = parseFloat(document.getElementById(scaleId).value) || 15;
+            var timeWinMs = (parseFloat(document.getElementById('timeWindow').value) || 10) * 1000;
+            var refVal    = refInputId ? parseFloat(document.getElementById(refInputId).value) : NaN;
+            var now       = (paused && pausedAt !== null) ? pausedAt : Date.now();
+            var tStart    = now - timeWinMs;
 
             ctx.clearRect(0, 0, W, H);
 
@@ -372,9 +450,9 @@
                 ctx.strokeStyle = (v === 0) ? '#2a2a44' : '#141420';
                 ctx.lineWidth = (v === 0) ? 1.5 : 1;
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-                ctx.fillStyle = '#3a3a55';
+                ctx.fillStyle = '#9999bb';
                 ctx.font = '11px Consolas';
-                ctx.fillText((v > 0 ? '+' : '') + v + '°', 3, y - 2);
+                ctx.fillText((v > 0 ? '+' : '') + v + unit, 3, y - 2);
             });
 
             // Reference line (dashed)
@@ -387,7 +465,7 @@
                 ctx.setLineDash([]);
                 ctx.fillStyle = 'rgba(255, 230, 80, 0.8)';
                 ctx.font = '11px Consolas';
-                ctx.fillText('ref ' + refVal.toFixed(1) + '°', W - 80, ry - 3);
+                ctx.fillText('ref ' + refVal.toFixed(1) + unit, W - 85, ry - 3);
             }
 
             // Data line
@@ -410,9 +488,12 @@
         }
 
         function redrawAll() {
-            drawWave('canvasPitch', pitchBuf, '#f0c040', 'refPitch');
-            drawWave('canvasRoll',  rollBuf,  '#40c8f0', 'refRoll');
-            drawWave('canvasYaw',   yawBuf,   '#80ff80', 'refYaw');
+            drawWave('canvasPitch', pitchBuf, '#f0c040', { refInputId: 'refPitch' });
+            drawWave('canvasRoll',  rollBuf,  '#40c8f0', { refInputId: 'refRoll'  });
+            drawWave('canvasYaw',   yawBuf,   '#80ff80', { refInputId: 'refYaw'   });
+            motorPanels.forEach(function (p, i) {
+                drawWave('canvasCur' + i, p.buf, p.color, { scaleId: 'mAScale' + i, unit: 'mA' });
+            });
         }
 
         (function loop() { redrawAll(); requestAnimationFrame(loop); })();
