@@ -113,6 +113,18 @@ class WalkingGaitByLIPM:
         self.lpt_ = 0.0
         self.rpt_ = 0.0
 
+        # SR_Continuous 自適應平衡狀態
+        self._imu_pitch      = 0.0
+        self._imu_roll       = 0.0
+        self._imu_yaw        = 0.0
+        self._locked_yaw     = 0.0
+        self._prev_pitch_err = 0.0
+        self._prev_roll_err  = 0.0
+        # Kalman 濾波狀態（pitch / roll / yaw 各一組）
+        self._kf_x_pitch = 0.0;  self._kf_p_pitch = 1.0
+        self._kf_x_roll  = 0.0;  self._kf_p_roll  = 1.0
+        self._kf_x_yaw   = 0.0;  self._kf_p_yaw   = 1.0
+
         # 中間/末端點（body frame）
         self.step_point_lx_ = self.step_point_ly_ = self.step_point_lz_ = 0.0
         self.step_point_rx_ = self.step_point_ry_ = self.step_point_rz_ = 0.0
@@ -761,3 +773,74 @@ class WalkingGaitByLIPM:
 
         self.coordinate_offset()
         self.push_data_ = True
+
+    # =========================================================
+    # SR_Continuous 自適應平衡步態
+    # =========================================================
+    def _kalman_update(self, axis: str, z: float, Q: float = 0.001, R: float = 0.05) -> float:
+        """1D 純量卡爾曼濾波器，每軸獨立維護狀態。
+        Q: 過程雜訊（角度真實變化率，調大→反應快但抖）
+        R: 量測雜訊（IMU 感測器雜訊，調大→更平滑但延遲）
+        """
+        x = getattr(self, f"_kf_x_{axis}", z)
+        p = getattr(self, f"_kf_p_{axis}", 1.0)
+        p = p + Q
+        K = p / (p + R)
+        x = x + K * (z - x)
+        p = (1.0 - K) * p
+        setattr(self, f"_kf_x_{axis}", x)
+        setattr(self, f"_kf_p_{axis}", p)
+        return x
+
+    def process_sr_continuous(self):
+        """連續步態 + IMU PD 即時平衡補正。
+        進入此模式前，呼叫端需先設定 _locked_yaw = 當前 imu_yaw。
+        IMU 值由走路節點在每幀寫入 _imu_pitch / _imu_roll / _imu_yaw。
+        """
+        self.process()
+
+        if not self.push_data_:
+            return
+
+        imu_pitch = self._kalman_update("pitch", getattr(self, "_imu_pitch", 0.0))
+        imu_roll  = self._kalman_update("roll",  getattr(self, "_imu_roll",  0.0))
+        imu_yaw   = self._kalman_update("yaw",   getattr(self, "_imu_yaw",   0.0))
+
+        target_pitch   = float(getattr(parameter, "target_pitch",   0.0))
+        target_roll    = float(getattr(parameter, "target_roll",    0.0))
+        locked_yaw     = getattr(self, "_locked_yaw", imu_yaw)
+        imukp          = float(getattr(parameter, "imukp",          0.1))
+        imukd          = float(getattr(parameter, "imukd",          0.01))
+        yaw_kp         = float(getattr(parameter, "yaw_kp",         0.05))
+        max_corr       = float(getattr(parameter, "max_correction",  5.0))
+        dt             = max(float(self.sample_time_) / 1000.0, 1e-6)
+
+        # Pitch PD (前後補正 → px_u)
+        pitch_err  = imu_pitch - target_pitch
+        d_pitch    = (pitch_err - getattr(self, "_prev_pitch_err", pitch_err)) / dt
+        self._prev_pitch_err = pitch_err
+        pitch_corr = max(-max_corr, min(max_corr,
+                         imukp * pitch_err + imukd * d_pitch))
+
+        # Roll PD (側傾補正 → py_u)
+        roll_err   = imu_roll - target_roll
+        d_roll     = (roll_err - getattr(self, "_prev_roll_err", roll_err)) / dt
+        self._prev_roll_err  = roll_err
+        roll_corr  = max(-max_corr, min(max_corr,
+                         imukp * roll_err + imukd * d_roll))
+
+        # Yaw P (方向偏移補正 → var_theta_)
+        yaw_err = imu_yaw - locked_yaw
+        while yaw_err >  180.0: yaw_err -= 360.0
+        while yaw_err < -180.0: yaw_err += 360.0
+        yaw_corr = max(-max_corr, min(max_corr, yaw_kp * yaw_err))
+
+        # 把 Pitch/Roll 補正疊加到 COM 參考位置，重新計算足端座標
+        self.px_u += pitch_corr
+        self.py_u += roll_corr
+        self.coordinate_transformation()
+        self.coordinate_offset()
+
+        # Yaw 補正：微調下一步的轉向角，抑制方向累積漂移
+        base_theta = float(getattr(parameter, "THTA", 0.0))
+        self.var_theta_ = base_theta - math.radians(yaw_corr)

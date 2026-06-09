@@ -21,7 +21,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Int16, String, Bool
 from sensor_msgs.msg import JointState
-from tku_msgs.msg import Interface
+from tku_msgs.msg import Interface, SensorPackage
 
 # ==== 專案內部匯入 ====
 try:
@@ -100,7 +100,8 @@ def calc_rel_gp_from_ang(ang_now: List[float], baseline_ang: List[float]) -> Dic
 PARAM_KEYS = ["period_t","Tdsp","COM_HEIGHT","STAND_HEIGHT","lift_height",
               "com_y_swing","COM_Y_shift","width_size","step_length","shift_length",
               "theta","THTA","compensation_swing_ankle",
-              "Board_High", "Clearance", "Hip_roll", "Ankle_roll"]
+              "Board_High", "Clearance", "Hip_roll", "Ankle_roll",
+              "imukp", "imukd", "target_pitch", "target_roll", "yaw_kp", "max_correction"]
 
 def get_param_dict():
     out = {}
@@ -184,6 +185,7 @@ class WalkingNode(Node):
 
         self.req_reset_anchor: bool = False
         self.create_subscription(Bool, '/walking_reset_anchor', self._reset_anchor_cb, 10)
+        self.create_subscription(SensorPackage, '/package/sensorpackage', self._imu_cb, 10)
 
         self.walk_active: bool = False
         self.last_width_size: float = float(getattr(parameter, "width_size", 0.0))
@@ -221,6 +223,11 @@ class WalkingNode(Node):
     def _reset_anchor_cb(self, msg: Bool):
         if msg.data:
             self.req_reset_anchor = True
+
+    def _imu_cb(self, msg: SensorPackage):
+        walking._imu_pitch = float(msg.pitch)
+        walking._imu_roll  = float(msg.roll)
+        walking._imu_yaw   = float(msg.yaw)
 
     def _cmd_cb(self, msg: Interface):
         scale = 0.001; theta_scale = 0.01
@@ -315,6 +322,19 @@ def main():
             # ==========================================================
             if is_walking and not was_walking:
                 print("\n[Generate ON] STARTING...")
+                # SR_Continuous: 進入模式時鎖定 Yaw，清除 PD 微分狀態
+                if getattr(parameter, "walking_mode", 0) == 3:
+                    walking._locked_yaw = getattr(walking, "_imu_yaw", 0.0)
+                    walking._prev_pitch_err = getattr(walking, "_imu_pitch", 0.0) - float(getattr(parameter, "target_pitch", 0.0))
+                    walking._prev_roll_err  = getattr(walking, "_imu_roll",  0.0) - float(getattr(parameter, "target_roll",  0.0))
+                    # ★ Kalman 初始化成當前 IMU,避免前幾幀從 0 爬升的錯補
+                    walking._kf_x_pitch = getattr(walking, "_imu_pitch", 0.0)
+                    walking._kf_x_roll  = getattr(walking, "_imu_roll",  0.0)
+                    walking._kf_x_yaw   = getattr(walking, "_imu_yaw",   0.0)
+                    walking._kf_p_pitch = 1.0
+                    walking._kf_p_roll  = 1.0
+                    walking._kf_p_yaw   = 1.0
+                    print(f"[SR_Continuous] Locked yaw={walking._locked_yaw:.2f}°, Kalman seeded")
                 if (not initial_ticks) or node.req_reset_anchor:
                     if node.req_reset_anchor:
                         node.req_reset_anchor = False
@@ -388,7 +408,7 @@ def main():
                 # === 關鍵分流：根據 walking_mode 切換演算法 ===
                 current_mode = getattr(parameter, "walking_mode", 0)
                 if current_mode in [1, 2]:
-                    # 如果 Walkinggait 裡有寫 process_lc_step 就呼叫
+                    # 上下樓梯單步模式
                     if hasattr(walking, "process_lc_step"):
                         walking.process_lc_step()
                     else:
@@ -398,10 +418,17 @@ def main():
                     if not hasattr(node, "trajectory_log"): node.trajectory_log = []
                     t_sec = walking.time_point_ / 1000.0
                     node.trajectory_log.append(f"{t_sec:.3f},{walking.now_step_},{walking.lpx_:.3f},{walking.lpz_:.3f},{walking.rpx_:.3f},{walking.rpz_:.3f},{walking.pz_:.3f}")
-                    
+
                     # 上下樓梯是「單步模式」，走完一步後自動停止
-                    if getattr(walking, "ready_to_stop_", False) or getattr(walking, "if_finish_", False): 
+                    if getattr(walking, "ready_to_stop_", False) or getattr(walking, "if_finish_", False):
                         node.walk_active = False
+                elif current_mode == 3:
+                    # SR_Continuous：連續步態 + IMU 自適應平衡
+                    if stopping_active:
+                        # 停止收尾階段：不疊 IMU 補償,讓腳乾淨收回站姿
+                        walking.process()
+                    else:
+                        walking.process_sr_continuous()
                 else:
                     # 一般平地連續走路
                     walking.process()

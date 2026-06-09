@@ -20,6 +20,10 @@ from tku_msgs.msg import Location as LocationMsg
 from tku_msgs.msg import LCParameter as LCParameterMsg
 from tku_msgs.srv import LCWalkingGaitParameter
 
+# === SR_Continuous 自適應平衡 ===
+from tku_msgs.msg import SRContinuousParameter as SRContinuousParameterMsg
+from tku_msgs.srv import LoadSRContinuousParameter
+
 from . import Parameter as parameter
 
 # 骨盆寬度（全寬, cm）
@@ -90,6 +94,10 @@ class WalkingWebBridge(Node):
         self.lc_param_save_sub = self.create_subscription(LCParameterMsg, '/web/lc_parameter_Topic', self.lc_param_save_callback, 10)
         self.lc_srv = self.create_service(LCWalkingGaitParameter, '/web/LoadLCWalkingGaitParameter', self.handle_load_lc_walking_param)
 
+        # === SR_Continuous 自適應平衡參數 Service & Topic ===
+        self.src_param_save_sub = self.create_subscription(SRContinuousParameterMsg, '/web/src_parameter_Topic', self.src_param_save_callback, 10)
+        self.src_srv = self.create_service(LoadSRContinuousParameter, '/web/LoadSRContinuousParameter', self.handle_load_src_param)
+
         self.get_logger().info('WalkingWebBridge Ready & Waiting for messages...')
 
         # 4. 初始載入
@@ -115,10 +123,12 @@ class WalkingWebBridge(Node):
     # === 新增：針對不同 mode 取不同的檔案 (UpStair / DownStair) ===
     def _get_save_path(self, mode=0) -> Path:
         base_dir = Path(self.location) if self.location else Path(DEFAULT_SAVE_PATH).parent
-        if mode == 1: 
+        if mode == 1:
             return base_dir / "UpStair.ini"
-        elif mode == 2: 
+        elif mode == 2:
             return base_dir / "DownStair.ini"
+        elif mode == 3:
+            return base_dir / "SRContinuous.ini"
         else:
             if base_dir.is_dir(): return base_dir / "WalkingParameter.ini"
             if base_dir.suffix: return base_dir
@@ -284,6 +294,77 @@ class WalkingWebBridge(Node):
             self.current_params.update(data)
         except Exception as e:
             self.get_logger().error(f"ERROR: [Save LC] Failed: {e}")
+
+    # === SR_Continuous 參數儲存 Callback ===
+    def src_param_save_callback(self, msg: SRContinuousParameterMsg):
+        target_path = self._get_save_path(3)
+        data = {
+            "period_t":      msg.period_t,
+            "com_y_swing":   msg.com_y_swing,
+            "width_size":    msg.width_size,
+            "t_dsp":         msg.t_dsp,
+            "lift_height":   msg.lift_height,
+            "stand_height":  msg.stand_height,
+            "com_height":    msg.com_height,
+            "imukp":         msg.imukp,
+            "imukd":         msg.imukd,
+            "target_pitch":  msg.target_pitch,
+            "target_roll":   msg.target_roll,
+            "yaw_kp":        msg.yaw_kp,
+            "max_correction": msg.max_correction,
+        }
+        try:
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            with open(target_path, "w", encoding="utf-8") as f:
+                for k, v in data.items():
+                    f.write(f"{k}={v}\n")
+            print(f"\033[96m✅ [Save SR_Continuous] Success: {target_path}\033[0m", flush=True)
+            self.current_params.update(data)
+            # 同步推送到 walking_node
+            self.params_update_pub.publish(String(data=json.dumps(data)))
+        except Exception as e:
+            self.get_logger().error(f"ERROR: [Save SR_Continuous] Failed: {e}")
+
+    # === SR_Continuous 參數讀取 Service ===
+    def handle_load_src_param(self, _request, response):
+        target_path = self._get_save_path(3)
+        self.get_logger().info(f"DEBUG: [Service] Load SR_Continuous params. Source: {target_path}")
+        loaded = {}
+        if os.path.exists(target_path):
+            with open(target_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if "=" in line and not line.startswith(("#", ";", "[")):
+                        parts = line.split("=", 1)
+                        try:
+                            loaded[parts[0].strip()] = float(parts[1].strip())
+                        except ValueError:
+                            pass
+
+        response.period_t       = int  (loaded.get("period_t",      360))
+        response.com_y_swing    = float(loaded.get("com_y_swing",   0.0))
+        response.width_size     = float(loaded.get("width_size",    0.0))
+        response.t_dsp          = float(loaded.get("t_dsp",         0.0))
+        response.lift_height    = float(loaded.get("lift_height",   3.0))
+        response.stand_height   = float(loaded.get("stand_height",  50.0))
+        response.com_height     = float(loaded.get("com_height",    40.0))
+        response.imukp          = float(loaded.get("imukp",         0.1))
+        response.imukd          = float(loaded.get("imukd",         0.01))
+        response.target_pitch   = float(loaded.get("target_pitch",  0.0))
+        response.target_roll    = float(loaded.get("target_roll",   0.0))
+        response.yaw_kp         = float(loaded.get("yaw_kp",        0.05))
+        response.max_correction = float(loaded.get("max_correction", 5.0))
+
+        print(f"DEBUG: [Check] period_t 最終回傳值:       {response.period_t}"      , flush=True)
+        print(f"DEBUG: [Check] t_dsp 最終回傳值:          {response.t_dsp}"         , flush=True)
+        print(f"DEBUG: [Check] lift_height 最終回傳值:    {response.lift_height}"   , flush=True)
+        print(f"DEBUG: [Check] imukp 最終回傳值:          {response.imukp}"         , flush=True)
+        print(f"DEBUG: [Check] imukd 最終回傳值:          {response.imukd}"         , flush=True)
+        print(f"DEBUG: [Check] target_pitch 最終回傳值:   {response.target_pitch}"  , flush=True)
+        print(f"DEBUG: [Check] target_roll 最終回傳值:    {response.target_roll}"   , flush=True)
+        print(f"DEBUG: [Check] yaw_kp 最終回傳值:         {response.yaw_kp}"        , flush=True)
+        print(f"DEBUG: [Check] max_correction 最終回傳值: {response.max_correction}", flush=True)
+
+        return response
 
     def walking_params_callback(self, msg: String):
         try:

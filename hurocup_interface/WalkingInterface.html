@@ -564,8 +564,7 @@
 					document.getElementById("lccosc_lockrange").value = res.t_dsp;
 					document.getElementById("lccnow_stand_height").value = res.stand_height;
 					document.getElementById("lccnow_com_height").value = res.com_height;
-					document.getElementById("lccbase_lift_z").value = res.board_high;
-					document.getElementById("lccClearance").value = res.clearance;
+					document.getElementById("lcclift_height").value = res.lift_height;
 					document.getElementById("lccimukp").value = res.imukp;
 					document.getElementById("lccimukd").value = res.imukd;
 					document.getElementById("lcctarget_pitch").value = res.target_pitch;
@@ -624,8 +623,7 @@
 					t_dsp: getVal("lccosc_lockrange", 0),
 					stand_height: getVal("lccnow_stand_height", 0),
 					com_height: getVal("lccnow_com_height", 0),
-					board_high: getVal("lccbase_lift_z", 0),
-					clearance: getVal("lccClearance", 3.0),
+					lift_height: getVal("lcclift_height", 3.0),
 					imukp: getVal("lccimukp", 0),
 					imukd: getVal("lccimukd", 0),
 					target_pitch: getVal("lcctarget_pitch", 0),
@@ -680,10 +678,9 @@
 					"width_size":     getVal("lccwidth_size"),
 					"period_t":       getVal("lccperiod_t"),
 					"Tdsp":           getVal("lccosc_lockrange"),
-					"Board_High":     getVal("lccbase_lift_z"),
 					"STAND_HEIGHT":   getVal("lccnow_stand_height"),
 					"COM_HEIGHT":     getVal("lccnow_com_height"),
-					"Clearance":      getVal("lccClearance"),
+					"lift_height":    getVal("lcclift_height"),
 					"imukp":          getVal("lccimukp"),
 					"imukd":          getVal("lccimukd"),
 					"target_pitch":   getVal("lcctarget_pitch"),
@@ -789,7 +786,6 @@
 			switch (statetype) {
 				case 1: document.getElementById("luClearance").value = clearance_tmp; break;
 				case 2: document.getElementById("ldClearance").value = clearance_tmp; break;
-				case 3: document.getElementById("lccClearance").value = clearance_tmp; break;
 			}
 		}
 		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
@@ -1128,12 +1124,8 @@
 						<td><input type="text" name="lccosc_lockrange" id="lccosc_lockrange" value="0" style="width: 140px" onchange="changeosc_lockrange_value(this.value)"></td>
 					</tr>
 					<tr>
-						<td>Clearance</td>
-						<td><input type="text" name="lccClearance" id="lccClearance" value="0" style="width: 140px" onchange="changeClearance(this.value)"></td>
-					</tr>
-					<tr>
-						<td>Board_High</td>
-						<td><input type="text" name="lccbase_lift_z" id="lccbase_lift_z" value="0" style="width: 140px" onchange="changebase_lift_z_value(this.value)"></td>
+						<td>lift_height</td>
+						<td><input type="text" name="lcclift_height" id="lcclift_height" value="0" style="width: 140px"></td>
 					</tr>
 					<tr>
 						<td>STAND_HEIGHT</td>

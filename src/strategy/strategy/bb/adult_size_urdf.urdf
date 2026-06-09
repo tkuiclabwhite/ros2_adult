@@ -1,0 +1,789 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="adult_size_urdf">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="0.00510395048783952 -0.0546850508321678 0.0388309276895874"
+        rpy="0 0 0" />
+      <mass
+        value="5.22719865600222" />
+      <inertia
+        ixx="0.0168012324244165"
+        ixy="0.000152296979205532"
+        ixz="0.000196930140473486"
+        iyy="0.0103501427590297"
+        iyz="2.18842415400528E-05"
+        izz="0.0111225434677094" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="LshouderLink">
+    <inertial>
+      <origin
+        xyz="2.69315819645399E-15 0.0127349610429351 -0.00431250142878326"
+        rpy="0 0 0" />
+      <mass
+        value="0.0166381722378883" />
+      <inertia
+        ixx="3.51055975460836E-06"
+        ixy="1.12496563307212E-21"
+        ixz="-2.4141810303369E-21"
+        iyy="4.19975377043794E-06"
+        iyz="5.90434814792621E-07"
+        izz="2.6897634817419E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/LshouderLink.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.796078431372549 0.823529411764706 0.937254901960784 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/LshouderLink.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="LshouderJoint"
+    type="continuous">
+    <origin
+      xyz="-0.00473735954454751 -0.138428383003044 0.34358895185261"
+      rpy="0 0 3.10802059661545" />
+    <parent
+      link="base_link" />
+    <child
+      link="LshouderLink" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+  <link
+    name="LarmLink">
+    <inertial>
+      <origin
+        xyz="-0.0254431327991871 -2.84166761788107E-08 -0.0453660808585317"
+        rpy="0 0 0" />
+      <mass
+        value="0.141309168933975" />
+      <inertia
+        ixx="4.11630311851378E-05"
+        ixy="2.31155132492315E-11"
+        ixz="-2.54055265618632E-07"
+        iyy="5.65958503634313E-05"
+        iyz="-4.72713506213281E-11"
+        izz="3.78708068851647E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/LarmLink.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/LarmLink.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="LarmJoint"
+    type="continuous">
+    <origin
+      xyz="0.0220000000000027 0.0324999999999992 -0.0219999999999996"
+      rpy="0 0 0" />
+    <parent
+      link="LshouderLink" />
+    <child
+      link="LarmLink" />
+    <axis
+      xyz="-1 0 0" />
+  </joint>
+  <link
+    name="Larm1Link">
+    <inertial>
+      <origin
+        xyz="0.0356493646024895 1.08150821631625E-10 1.32074803611132E-09"
+        rpy="0 0 0" />
+      <mass
+        value="0.0175390470155776" />
+      <inertia
+        ixx="3.65804025581533E-06"
+        ixy="-3.31202391393222E-14"
+        ixz="-3.74639134553411E-13"
+        iyy="3.78158652669842E-06"
+        iyz="1.75612867684203E-14"
+        izz="3.48193243107936E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Larm1Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.796078431372549 0.823529411764706 0.937254901960784 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Larm1Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Larm1Joint"
+    type="continuous">
+    <origin
+      xyz="-0.0220000000000001 0 -0.1139999999999"
+      rpy="0 1.5707963267949 0" />
+    <parent
+      link="LarmLink" />
+    <child
+      link="Larm1Link" />
+    <axis
+      xyz="-1 0 0" />
+  </joint>
+  <link
+    name="LforarmLink">
+    <inertial>
+      <origin
+        xyz="-6.22173805984068E-05 -0.0214031525488118 -0.0177658284778842"
+        rpy="0 0 0" />
+      <mass
+        value="0.0966113138534233" />
+      <inertia
+        ixx="4.41676035157063E-05"
+        ixy="1.33544557011334E-14"
+        ixz="-8.11421838649608E-14"
+        iyy="3.90514108309385E-05"
+        iyz="-1.61883473472997E-07"
+        izz="2.67692642021392E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/LforarmLink.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/LforarmLink.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="LforarmJoint"
+    type="continuous">
+    <origin
+      xyz="0.0650000000000999 0.0220000000000001 0"
+      rpy="3.14159265358979 -1.57079631189374 3.14159265358979" />
+    <parent
+      link="Larm1Link" />
+    <child
+      link="LforarmLink" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+  <link
+    name="Lforarm1Link">
+    <inertial>
+      <origin
+        xyz="-0.0360406071201559 0.00033302774050778 0.0120936213390911"
+        rpy="0 0 0" />
+      <mass
+        value="0.0927487723369501" />
+      <inertia
+        ixx="1.89485544740457E-05"
+        ixy="-8.67207671662887E-21"
+        ixz="1.33272213763992E-09"
+        iyy="2.22463995791545E-05"
+        iyz="1.33272213764238E-09"
+        izz="1.10041023060775E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Lforarm1Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Lforarm1Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Lforarm1Joint"
+    type="continuous">
+    <origin
+      xyz="-0.000500000000000924 -0.0219999999999998 -0.0624999999999998"
+      rpy="3.14159265358979 -1.5707963267949 0" />
+    <parent
+      link="LforarmLink" />
+    <child
+      link="Lforarm1Link" />
+    <axis
+      xyz="-1 0 0" />
+  </joint>
+  <link
+    name="Lforarm2Link">
+    <inertial>
+      <origin
+        xyz="-0.0122713118989787 -0.0164998118246879 -0.0611397166951295"
+        rpy="0 0 0" />
+      <mass
+        value="0.0617519269689018" />
+      <inertia
+        ixx="2.07035136203282E-05"
+        ixy="-1.3334090700897E-09"
+        ixz="1.10810503103234E-07"
+        iyy="2.37888482300953E-05"
+        iyz="1.23853532408592E-12"
+        izz="1.51442656759861E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Lforarm2Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Lforarm2Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Lforarm2Joint"
+    type="continuous">
+    <origin
+      xyz="-0.056250000000001 0.0169999999999995 0"
+      rpy="0 1.5707963267949 0" />
+    <parent
+      link="Lforarm1Link" />
+    <child
+      link="Lforarm2Link" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+  <link
+    name="LhandLink">
+    <inertial>
+      <origin
+        xyz="0.0161223890513382 -0.0170002080549341 -0.0537939592650263"
+        rpy="0 0 0" />
+      <mass
+        value="0.0422969318287648" />
+      <inertia
+        ixx="9.15318081312721E-05"
+        ixy="-7.47187884762776E-11"
+        ixz="4.6248343272673E-06"
+        iyy="5.99680628152761E-05"
+        iyz="5.73032367223611E-10"
+        izz="3.44976734592447E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/LhandLink.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.866666666666667 0.909803921568627 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/LhandLink.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="LhandJoint"
+    type="continuous">
+    <origin
+      xyz="0.00399999999999974 0 -0.06125"
+      rpy="0 0 0" />
+    <parent
+      link="Lforarm2Link" />
+    <child
+      link="LhandLink" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+  <link
+    name="RshouderLink">
+    <inertial>
+      <origin
+        xyz="2.47198095326695E-17 0.0127349610429351 0.00431250142878331"
+        rpy="0 0 0" />
+      <mass
+        value="0.0166381722378882" />
+      <inertia
+        ixx="3.51055975460836E-06"
+        ixy="-8.9335506155727E-22"
+        ixz="-1.70902808993723E-21"
+        iyy="4.19975377043793E-06"
+        iyz="-5.9043481479262E-07"
+        izz="2.6897634817419E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/RshouderLink.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.796078431372549 0.823529411764706 0.937254901960784 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/RshouderLink.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="RshouderJoint"
+    type="continuous">
+    <origin
+      xyz="0.0019757906382302 0.0614589192815765 0.343088951852611"
+      rpy="3.14159265358979 0 3.10802059661545" />
+    <parent
+      link="base_link" />
+    <child
+      link="RshouderLink" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+  <link
+    name="RarmLink">
+    <inertial>
+      <origin
+        xyz="-0.0254074168688081 2.85417815076849E-08 0.0452404040566858"
+        rpy="0 0 0" />
+      <mass
+        value="0.140824019011935" />
+      <inertia
+        ixx="4.11053737669201E-05"
+        ixy="-2.31240789663665E-11"
+        ixz="2.53638925469369E-07"
+        iyy="5.65858725732884E-05"
+        iyz="-4.7279763526165E-11"
+        izz="3.78072180878477E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/RarmLink.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/RarmLink.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="RarmJoint"
+    type="continuous">
+    <origin
+      xyz="0.0220000000000001 0.0325 0.0220000000000001"
+      rpy="0 0 0" />
+    <parent
+      link="RshouderLink" />
+    <child
+      link="RarmLink" />
+    <axis
+      xyz="-1 0 0" />
+  </joint>
+  <link
+    name="Rarm1Link">
+    <inertial>
+      <origin
+        xyz="0.0356493646024895 -1.08150835509413E-10 -1.32074772169269E-09"
+        rpy="0 0 0" />
+      <mass
+        value="0.0175390470155777" />
+      <inertia
+        ixx="3.65804025581534E-06"
+        ixy="3.31202380764887E-14"
+        ixz="3.7463913280068E-13"
+        iyy="3.78158652669842E-06"
+        iyz="1.75612971379564E-14"
+        izz="3.48193243107937E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Rarm1Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.796078431372549 0.823529411764706 0.937254901960784 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Rarm1Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Rarm1Joint"
+    type="continuous">
+    <origin
+      xyz="-0.022 0 0.1139999999999"
+      rpy="3.14159265358979 -1.5707963267949 0" />
+    <parent
+      link="RarmLink" />
+    <child
+      link="Rarm1Link" />
+    <axis
+      xyz="-1 0 0" />
+  </joint>
+  <link
+    name="RforarmLink">
+    <inertial>
+      <origin
+        xyz="-6.17954638116214E-05 -0.0215354967897027 0.0177575930654002"
+        rpy="0 0 0" />
+      <mass
+        value="0.0972708554385383" />
+      <inertia
+        ixx="4.41881820532845E-05"
+        ixy="-1.33409245615593E-14"
+        ixz="-8.99218113952824E-14"
+        iyy="3.91754683919937E-05"
+        iyz="1.61068844231226E-07"
+        izz="2.6889755361105E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/RforarmLink.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/RforarmLink.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="RforarmJoint"
+    type="continuous">
+    <origin
+      xyz="0.0650000000001 0.0220000000000001 0"
+      rpy="0 1.5707963267949 0" />
+    <parent
+      link="Rarm1Link" />
+    <child
+      link="RforarmLink" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+  <link
+    name="Rforarm1Link">
+    <inertial>
+      <origin
+        xyz="-0.0360299175318685 0.000344010218486762 -0.0120618624260523"
+        rpy="0 0 0" />
+      <mass
+        value="0.092895598196511" />
+      <inertia
+        ixx="1.89488959023114E-05"
+        ixy="-1.88687890881449E-21"
+        ixz="-1.33272213764434E-09"
+        iyy="2.22467410074202E-05"
+        iyz="-1.33272213764116E-09"
+        izz="1.10044422947546E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Rforarm1Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Rforarm1Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Rforarm1Joint"
+    type="continuous">
+    <origin
+      xyz="-0.000500000000000209 -0.0219999999999999 0.0625"
+      rpy="0 1.5707963267949 0" />
+    <parent
+      link="RforarmLink" />
+    <child
+      link="Rforarm1Link" />
+    <axis
+      xyz="-1 0 0" />
+  </joint>
+  <link
+    name="Rforarm2Link">
+    <inertial>
+      <origin
+        xyz="0.0122713118989784 -0.0164998011233644 -0.0611397166951295"
+        rpy="0 0 0" />
+      <mass
+        value="0.0617519269689018" />
+      <inertia
+        ixx="2.07035136203281E-05"
+        ixy="1.33203520520162E-09"
+        ixz="-1.10810503103238E-07"
+        iyy="2.37888482300953E-05"
+        iyz="-1.23853532733361E-12"
+        izz="1.51442656759861E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Rforarm2Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/Rforarm2Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Rforarm2Joint"
+    type="continuous">
+    <origin
+      xyz="-0.05625 0.017 0"
+      rpy="0 1.5707963267949 0" />
+    <parent
+      link="Rforarm1Link" />
+    <child
+      link="Rforarm2Link" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+  <link
+    name="RhandLink">
+    <inertial>
+      <origin
+        xyz="0.0161223890513385 -0.0169997919450656 0.0537939592650262"
+        rpy="0 0 0" />
+      <mass
+        value="0.0422969318287647" />
+      <inertia
+        ixx="9.15318081312719E-05"
+        ixy="7.47187884788187E-11"
+        ixz="-4.62483432726768E-06"
+        iyy="5.99680628152761E-05"
+        iyz="5.73032367182634E-10"
+        izz="3.44976734592446E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/RhandLink.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.866666666666667 0.909803921568627 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://adult_size_urdf/meshes/RhandLink.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="RhandJoint"
+    type="continuous">
+    <origin
+      xyz="-0.00399999999999998 0 -0.0612500000000001"
+      rpy="-3.14159265358979 0 -3.14159265358979" />
+    <parent
+      link="Rforarm2Link" />
+    <child
+      link="RhandLink" />
+    <axis
+      xyz="0 -1 0" />
+  </joint>
+</robot>

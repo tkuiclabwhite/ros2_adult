@@ -11,6 +11,7 @@ setup(
             'mar/*.engine',
             'mar/*.onnx',
             'mar/*.pt',
+            'bb/*.urdf',
         ],
     },
     include_package_data=True,

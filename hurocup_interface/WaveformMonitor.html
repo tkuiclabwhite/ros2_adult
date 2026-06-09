@@ -9,7 +9,7 @@
     <style>
         body {
             width: auto;
-            min-width: 1100px;
+            min-width: 500px;
             color: white;
             font-family: 'Consolas', 'Monaco', monospace;
         }
@@ -99,11 +99,11 @@
             padding: 10px 14px 12px;
             box-shadow: inset 0 0 18px rgba(0,0,0,0.5);
             flex: 1;
-            min-width: 320px;
+            min-width: 180px;
         }
 
         .wave-panel-motor {
-            min-width: 220px;
+            min-width: 150px;
         }
 
         .wave-header {
@@ -238,8 +238,11 @@
             </div>
         </div>
 
-        <!-- Row 2: Motor Current -->
+        <!-- Row 2: Motor Current L.LEG -->
         <div class="wave-row" id="motor-row"></div>
+
+        <!-- Row 3: Motor Current R.LEG -->
+        <div class="wave-row" id="motor-row-2"></div>
 
     </div>
 
@@ -373,11 +376,10 @@
             { id: 25, color: '#ff55aa' },
         ];
         motorPanels.forEach(function (p) { p.buf = []; });
-
         // Build motor panel DOM
         (function () {
-            var row = document.getElementById('motor-row');
             motorPanels.forEach(function (p, i) {
+                var row = i < 3 ? document.getElementById('motor-row') : document.getElementById('motor-row-2');
                 var c = p.color;
                 var inStyle = 'width:44px;background:#111;color:' + c + ';border:1px solid ' + c + ';border-radius:3px;padding:1px 4px;font-size:14px;font-weight:bold;';
                 var div = document.createElement('div');
@@ -450,8 +452,8 @@
                 ctx.strokeStyle = (v === 0) ? '#2a2a44' : '#141420';
                 ctx.lineWidth = (v === 0) ? 1.5 : 1;
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-                ctx.fillStyle = '#9999bb';
-                ctx.font = '11px Consolas';
+                ctx.fillStyle = '#dde0f0';
+                ctx.font = '13px Consolas';
                 ctx.fillText((v > 0 ? '+' : '') + v + unit, 3, y - 2);
             });
 
@@ -463,13 +465,31 @@
                 ctx.setLineDash([8, 5]);
                 ctx.beginPath(); ctx.moveTo(0, ry); ctx.lineTo(W, ry); ctx.stroke();
                 ctx.setLineDash([]);
-                ctx.fillStyle = 'rgba(255, 230, 80, 0.8)';
+                ctx.fillStyle = 'rgba(255, 230, 80, 0.85)';
                 ctx.font = '11px Consolas';
-                ctx.fillText('ref ' + refVal.toFixed(1) + unit, W - 85, ry - 3);
+                ctx.textAlign = 'left';
+                ctx.fillText('ref ' + refVal.toFixed(1) + unit, 52, Math.max(12, ry - 3));
             }
 
             // Data line
             var visible = buf.filter(function (p) { return p.t >= tStart; });
+
+            // Max / Min overlay
+            var fmtV = unit === 'mA'
+                ? function (v) { return Math.round(v) + ' mA'; }
+                : function (v) { return v.toFixed(1) + unit; };
+            var hasData = visible.length >= 1;
+            var maxV = hasData ? Math.max.apply(null, visible.map(function (p) { return p.v; })) : 0;
+            var minV = hasData ? Math.min.apply(null, visible.map(function (p) { return p.v; })) : 0;
+            var maxStr = hasData ? fmtV(maxV) : (unit === 'mA' ? '0 mA' : '0' + unit);
+            var minStr = hasData ? fmtV(minV) : (unit === 'mA' ? '-0 mA' : '-0' + unit);
+            ctx.font = 'bold 20px Consolas';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = 'rgba(255,255,255,0.75)';
+            ctx.fillText('max: ' + maxStr, W - 4, 16);
+            ctx.fillText('min: ' + minStr, W - 4, H - 4);
+            ctx.textAlign = 'left';
+
             if (visible.length < 2) return;
 
             ctx.strokeStyle = lineColor;

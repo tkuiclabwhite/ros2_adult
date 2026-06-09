@@ -61,6 +61,14 @@ ankle_roll   = 0
 SPEED_SCALE  = 1
 
 # ---- 新增：樓梯與姿態補償參數 ----
-walking_mode = 0     # 0:平地, 1:上樓, 2:下樓
+walking_mode = 0     # 0:平地, 1:上樓, 2:下樓, 3:SR_Continuous
 Board_High   = 0.0   # 階梯高度 (cm)
 Clearance    = 3.0   # 越障安全餘裕 (cm)
+
+# ---- SR_Continuous 自適應平衡參數 ----
+imukp          = 0.1   # Pitch/Roll 誤差比例增益
+imukd          = 0.01  # Pitch/Roll 誤差微分增益
+target_pitch   = 0.0   # 目標俯仰角 (°)
+target_roll    = 0.0   # 目標側傾角 (°)
+yaw_kp         = 0.05  # Yaw 偏移比例增益
+max_correction = 5.0   # 補正量上限 (cm)
