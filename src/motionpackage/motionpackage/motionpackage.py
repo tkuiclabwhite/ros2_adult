@@ -208,6 +208,17 @@ class MotionNode(Node):
             msg.data = [motor_id, state]
             self.torque_pub.publish(msg)
 
+            # 恢復扭力時，將 last_goals 同步至當前實際位置，
+            # 確保後續相對動作以正確刻度為基準
+            if state == 1:
+                with self.joints_lock:
+                    snapshot = dict(self.current_joints)
+                if motor_id == 0:
+                    self.last_goals.update(snapshot)
+                elif motor_id in snapshot:
+                    self.last_goals[motor_id] = snapshot[motor_id]
+                self.get_logger().info(f"[Torque ON] last_goals 已同步，ID={motor_id}")
+
         elif opcode in [241, 242, 243, 244]: # Save Sector Data (RAM) & Backup to Sector Folder
             data_content = list(packet[3:-2])
             sector_id = str(self.current_sector_name)
