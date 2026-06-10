@@ -745,6 +745,8 @@ class MotionNode(Node):
             mid = i + 1
 
             if mode == "RELATIVE":
+                if raw_val == 0:
+                    continue  # delta=0 不發指令，也不更新 last_goals
                 # adult: 優先讀真實回授位置
                 if mid in self.current_joints:
                     base_pos = self.current_joints[mid]
