@@ -571,6 +571,8 @@
 					document.getElementById("lcctarget_roll").value = res.target_roll;
 					document.getElementById("lccyaw_kp").value = res.yaw_kp;
 					document.getElementById("lccmax_correction").value = res.max_correction;
+					document.getElementById("lccpitch_deadband").value = res.pitch_deadband;
+					document.getElementById("lccroll_deadband").value = res.roll_deadband;
 				});
 			}
 		}
@@ -629,7 +631,9 @@
 					target_pitch: getVal("lcctarget_pitch", 0),
 					target_roll: getVal("lcctarget_roll", 0),
 					yaw_kp: getVal("lccyaw_kp", 0),
-					max_correction: getVal("lccmax_correction", 0)
+					max_correction: getVal("lccmax_correction", 0),
+					pitch_deadband: getVal("lccpitch_deadband", 3.0),
+					roll_deadband: getVal("lccroll_deadband", 5.0)
 				});
 				web_src_parameter_Topic.publish(lcc_msg_to_send);
 			}
@@ -686,7 +690,9 @@
 					"target_pitch":   getVal("lcctarget_pitch"),
 					"target_roll":    getVal("lcctarget_roll"),
 					"yaw_kp":         getVal("lccyaw_kp"),
-					"max_correction": getVal("lccmax_correction")
+					"max_correction": getVal("lccmax_correction"),
+					"pitch_deadband": getVal("lccpitch_deadband"),
+					"roll_deadband":  getVal("lccroll_deadband")
 				};
 			}
 
@@ -1158,6 +1164,14 @@
 					<tr>
 						<td>max_correction</td>
 						<td><input type="text" name="lccmax_correction" id="lccmax_correction" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>pitch_deadband</td>
+						<td><input type="text" name="lccpitch_deadband" id="lccpitch_deadband" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>roll_deadband</td>
+						<td><input type="text" name="lccroll_deadband" id="lccroll_deadband" value="0" style="width: 140px"></td>
 					</tr>
 				</table>
 				<br />

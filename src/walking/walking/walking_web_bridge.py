@@ -312,6 +312,8 @@ class WalkingWebBridge(Node):
             "target_roll":   msg.target_roll,
             "yaw_kp":        msg.yaw_kp,
             "max_correction": msg.max_correction,
+            "pitch_deadband": msg.pitch_deadband,
+            "roll_deadband":  msg.roll_deadband,
         }
         try:
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
@@ -344,7 +346,6 @@ class WalkingWebBridge(Node):
         response.com_y_swing    = float(loaded.get("com_y_swing",   0.0))
         response.width_size     = float(loaded.get("width_size",    0.0))
         response.t_dsp          = float(loaded.get("t_dsp",         0.0))
-        response.lift_height    = float(loaded.get("lift_height",   3.0))
         response.stand_height   = float(loaded.get("stand_height",  50.0))
         response.com_height     = float(loaded.get("com_height",    40.0))
         response.imukp          = float(loaded.get("imukp",         0.1))
@@ -353,6 +354,8 @@ class WalkingWebBridge(Node):
         response.target_roll    = float(loaded.get("target_roll",   0.0))
         response.yaw_kp         = float(loaded.get("yaw_kp",        0.05))
         response.max_correction = float(loaded.get("max_correction", 5.0))
+        response.pitch_deadband = float(loaded.get("pitch_deadband", 3.0))
+        response.roll_deadband  = float(loaded.get("roll_deadband",  5.0))
 
         print(f"DEBUG: [Check] period_t 最終回傳值:       {response.period_t}"      , flush=True)
         print(f"DEBUG: [Check] t_dsp 最終回傳值:          {response.t_dsp}"         , flush=True)
@@ -363,6 +366,8 @@ class WalkingWebBridge(Node):
         print(f"DEBUG: [Check] target_roll 最終回傳值:    {response.target_roll}"   , flush=True)
         print(f"DEBUG: [Check] yaw_kp 最終回傳值:         {response.yaw_kp}"        , flush=True)
         print(f"DEBUG: [Check] max_correction 最終回傳值: {response.max_correction}", flush=True)
+        print(f"DEBUG: [Check] pitch_deadband 最終回傳值: {response.pitch_deadband}", flush=True)
+        print(f"DEBUG: [Check] roll_deadband 最終回傳值:  {response.roll_deadband}", flush=True)
 
         return response
 

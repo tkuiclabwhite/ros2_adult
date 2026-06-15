@@ -72,3 +72,5 @@ target_pitch   = 0.0   # 目標俯仰角 (°)
 target_roll    = 0.0   # 目標側傾角 (°)
 yaw_kp         = 0.05  # Yaw 偏移比例增益
 max_correction = 5.0   # 補正量上限 (cm)
+pitch_deadband = 3.0   # Pitch 死區 (°)：誤差小於此值不補償（平地搖擺約 ±2.7°，故設略高）
+roll_deadband  = 5.0   # Roll  死區 (°)：誤差小於此值不補償（平地搖擺約 ±3.5°，故設略高）

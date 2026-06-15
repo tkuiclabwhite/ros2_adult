@@ -13,3 +13,5 @@ float64 target_pitch
 float64 target_roll
 float64 yaw_kp
 float64 max_correction
+float64 pitch_deadband
+float64 roll_deadband

@@ -101,7 +101,8 @@ PARAM_KEYS = ["period_t","Tdsp","COM_HEIGHT","STAND_HEIGHT","lift_height",
               "com_y_swing","COM_Y_shift","width_size","step_length","shift_length",
               "theta","THTA","compensation_swing_ankle",
               "Board_High", "Clearance", "Hip_roll", "Ankle_roll",
-              "imukp", "imukd", "target_pitch", "target_roll", "yaw_kp", "max_correction"]
+              "imukp", "imukd", "target_pitch", "target_roll", "yaw_kp", "max_correction",
+              "pitch_deadband", "roll_deadband"]
 
 def get_param_dict():
     out = {}
@@ -325,16 +326,13 @@ def main():
                 # SR_Continuous: 進入模式時鎖定 Yaw，清除 PD 微分狀態
                 if getattr(parameter, "walking_mode", 0) == 3:
                     walking._locked_yaw = getattr(walking, "_imu_yaw", 0.0)
-                    walking._prev_pitch_err = getattr(walking, "_imu_pitch", 0.0) - float(getattr(parameter, "target_pitch", 0.0))
-                    walking._prev_roll_err  = getattr(walking, "_imu_roll",  0.0) - float(getattr(parameter, "target_roll",  0.0))
-                    # ★ Kalman 初始化成當前 IMU,避免前幾幀從 0 爬升的錯補
-                    walking._kf_x_pitch = getattr(walking, "_imu_pitch", 0.0)
-                    walking._kf_x_roll  = getattr(walking, "_imu_roll",  0.0)
-                    walking._kf_x_yaw   = getattr(walking, "_imu_yaw",   0.0)
-                    walking._kf_p_pitch = 1.0
-                    walking._kf_p_roll  = 1.0
-                    walking._kf_p_yaw   = 1.0
-                    print(f"[SR_Continuous] Locked yaw={walking._locked_yaw:.2f}°, Kalman seeded")
+                    # 進入模式時，把 PD 微分狀態種成「過死區後」的當前誤差，
+                    # 避免首幀 D 項從 0 爬升造成錯補
+                    _pe = getattr(walking, "_imu_pitch", 0.0) - float(getattr(parameter, "target_pitch", 0.0))
+                    _re = getattr(walking, "_imu_roll",  0.0) - float(getattr(parameter, "target_roll",  0.0))
+                    walking._prev_pitch_err = walking._apply_deadband(_pe, float(getattr(parameter, "pitch_deadband", 0.0)))
+                    walking._prev_roll_err  = walking._apply_deadband(_re, float(getattr(parameter, "roll_deadband",  0.0)))
+                    print(f"[SR_Continuous] Locked yaw={walking._locked_yaw:.2f}°")
                 if (not initial_ticks) or node.req_reset_anchor:
                     if node.req_reset_anchor:
                         node.req_reset_anchor = False
