@@ -74,3 +74,15 @@ yaw_kp         = 0.05  # Yaw 偏移比例增益
 max_correction = 5.0   # 補正量上限 (cm)
 pitch_deadband = 3.0   # Pitch 死區 (°)：誤差小於此值不補償（平地搖擺約 ±2.7°，故設略高）
 roll_deadband  = 5.0   # Roll  死區 (°)：誤差小於此值不補償（平地搖擺約 ±3.5°，故設略高）
+
+# ---- SR_Continuous 關節空間 pitch 反射補償（只作用於 SR_Continuous，疊在 px_u 之上）----
+# 依 IMU pitch 誤差(與 px_u 共用 pitch_deadband，已過死區)與角速度，直接對 pitch 軸關節加角度偏移。
+# 各關節獨立增益：想髖補多、踝補少、膝不補，就分別設值（設 0 = 該關節不參與）。
+# 增益全 0 → 行為與現在完全相同。kd(角速度項)=製造角動量、抗倒主力；kp≈移重心(與 px_u 同性質)。
+hip_reflex_kp    = 0.0   # 髖/腰(16/22) 比例增益 (deg偏移 / deg誤差)
+hip_reflex_kd    = 0.0   # 髖/腰(16/22) 微分增益 (deg偏移 / (deg·s⁻¹))：腰前傾抗倒主力
+knee_reflex_kp   = 0.0   # 膝(19/25) 比例增益（不建議用，膝管站高/吸震，預設 0）
+knee_reflex_kd   = 0.0   # 膝(19/25) 微分增益（預設 0）
+ankle_reflex_kp  = 0.0   # 踝(20/21,26/27) 比例增益（小擾動微調）
+ankle_reflex_kd  = 0.0   # 踝(20/21,26/27) 微分增益
+reflex_max_deg   = 15.0  # 每顆關節偏移上限 (°)，防暴衝/超限位

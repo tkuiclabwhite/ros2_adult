@@ -15,3 +15,10 @@ float64 yaw_kp
 float64 max_correction
 float64 pitch_deadband
 float64 roll_deadband
+float64 hip_reflex_kp
+float64 hip_reflex_kd
+float64 knee_reflex_kp
+float64 knee_reflex_kd
+float64 ankle_reflex_kp
+float64 ankle_reflex_kd
+float64 reflex_max_deg

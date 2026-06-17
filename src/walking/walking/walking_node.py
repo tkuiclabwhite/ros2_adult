@@ -102,7 +102,9 @@ PARAM_KEYS = ["period_t","Tdsp","COM_HEIGHT","STAND_HEIGHT","lift_height",
               "theta","THTA","compensation_swing_ankle",
               "Board_High", "Clearance", "Hip_roll", "Ankle_roll",
               "imukp", "imukd", "target_pitch", "target_roll", "yaw_kp", "max_correction",
-              "pitch_deadband", "roll_deadband"]
+              "pitch_deadband", "roll_deadband",
+              "hip_reflex_kp", "hip_reflex_kd", "knee_reflex_kp", "knee_reflex_kd",
+              "ankle_reflex_kp", "ankle_reflex_kd", "reflex_max_deg"]
 
 def get_param_dict():
     out = {}
@@ -438,6 +440,10 @@ def main():
                     lroll=getattr(walking, "end_point_lroll_", 0.0), rroll=getattr(walking, "end_point_rroll_", 0.0)
                 )
                 ang_now = apply_ankle_compensation(ang_now)
+
+                # SR_Continuous 專用：關節空間 pitch 反射補償（只在 mode 3 連續走、非收尾）
+                if current_mode == 3 and not stopping_active and hasattr(walking, "apply_pitch_reflex"):
+                    ang_now = walking.apply_pitch_reflex(ang_now)
                 
                 # 下發目標角度
                 if baseline_ang:

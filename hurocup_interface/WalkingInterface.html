@@ -573,6 +573,13 @@
 					document.getElementById("lccmax_correction").value = res.max_correction;
 					document.getElementById("lccpitch_deadband").value = res.pitch_deadband;
 					document.getElementById("lccroll_deadband").value = res.roll_deadband;
+					document.getElementById("lcchip_reflex_kp").value = res.hip_reflex_kp;
+					document.getElementById("lcchip_reflex_kd").value = res.hip_reflex_kd;
+					document.getElementById("lccknee_reflex_kp").value = res.knee_reflex_kp;
+					document.getElementById("lccknee_reflex_kd").value = res.knee_reflex_kd;
+					document.getElementById("lccankle_reflex_kp").value = res.ankle_reflex_kp;
+					document.getElementById("lccankle_reflex_kd").value = res.ankle_reflex_kd;
+					document.getElementById("lccreflex_max_deg").value = res.reflex_max_deg;
 				});
 			}
 		}
@@ -605,9 +612,9 @@
 					mode: s_type,
 					period_t: getVal(prefix + "period_t", 360),
 					com_y_swing: getVal(prefix + "com_y_swing", 0),
-					width_size: getVal(prefix + "width_size", 0),
+					width_size: getVal(prefix + "width_size", 4.5),
 					t_dsp: getVal(prefix + "osc_lockrange", 0),
-					lift_height: getVal(prefix + "base_default_z", 0),
+					lift_height: getVal(prefix + "base_default_z", 2.5),
 					stand_height: getVal(prefix + "now_stand_height", 0),
 					com_height: getVal(prefix + "now_com_height", 0),
 					board_high: getVal(prefix + "base_lift_z", 0),
@@ -621,11 +628,11 @@
 					mode: s_type,
 					period_t: getVal("lccperiod_t", 360),
 					com_y_swing: getVal("lcccom_y_swing", 0),
-					width_size: getVal("lccwidth_size", 0),
+					width_size: getVal("lccwidth_size", 4.5),
 					t_dsp: getVal("lccosc_lockrange", 0),
 					stand_height: getVal("lccnow_stand_height", 0),
 					com_height: getVal("lccnow_com_height", 0),
-					lift_height: getVal("lcclift_height", 3.0),
+					lift_height: getVal("lcclift_height", 2.5),
 					imukp: getVal("lccimukp", 0),
 					imukd: getVal("lccimukd", 0),
 					target_pitch: getVal("lcctarget_pitch", 0),
@@ -633,7 +640,14 @@
 					yaw_kp: getVal("lccyaw_kp", 0),
 					max_correction: getVal("lccmax_correction", 0),
 					pitch_deadband: getVal("lccpitch_deadband", 3.0),
-					roll_deadband: getVal("lccroll_deadband", 5.0)
+					roll_deadband: getVal("lccroll_deadband", 5.0),
+					hip_reflex_kp: getVal("lcchip_reflex_kp", 0),
+					hip_reflex_kd: getVal("lcchip_reflex_kd", 0),
+					knee_reflex_kp: getVal("lccknee_reflex_kp", 0),
+					knee_reflex_kd: getVal("lccknee_reflex_kd", 0),
+					ankle_reflex_kp: getVal("lccankle_reflex_kp", 0),
+					ankle_reflex_kd: getVal("lccankle_reflex_kd", 0),
+					reflex_max_deg: getVal("lccreflex_max_deg", 15.0)
 				});
 				web_src_parameter_Topic.publish(lcc_msg_to_send);
 			}
@@ -692,7 +706,14 @@
 					"yaw_kp":         getVal("lccyaw_kp"),
 					"max_correction": getVal("lccmax_correction"),
 					"pitch_deadband": getVal("lccpitch_deadband"),
-					"roll_deadband":  getVal("lccroll_deadband")
+					"roll_deadband":  getVal("lccroll_deadband"),
+					"hip_reflex_kp":   getVal("lcchip_reflex_kp"),
+					"hip_reflex_kd":   getVal("lcchip_reflex_kd"),
+					"knee_reflex_kp":  getVal("lccknee_reflex_kp"),
+					"knee_reflex_kd":  getVal("lccknee_reflex_kd"),
+					"ankle_reflex_kp": getVal("lccankle_reflex_kp"),
+					"ankle_reflex_kd": getVal("lccankle_reflex_kd"),
+					"reflex_max_deg":  getVal("lccreflex_max_deg")
 				};
 			}
 
@@ -1172,6 +1193,34 @@
 					<tr>
 						<td>roll_deadband</td>
 						<td><input type="text" name="lccroll_deadband" id="lccroll_deadband" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>hip_reflex_kp</td>
+						<td><input type="text" name="lcchip_reflex_kp" id="lcchip_reflex_kp" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>hip_reflex_kd</td>
+						<td><input type="text" name="lcchip_reflex_kd" id="lcchip_reflex_kd" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>knee_reflex_kp</td>
+						<td><input type="text" name="lccknee_reflex_kp" id="lccknee_reflex_kp" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>knee_reflex_kd</td>
+						<td><input type="text" name="lccknee_reflex_kd" id="lccknee_reflex_kd" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>ankle_reflex_kp</td>
+						<td><input type="text" name="lccankle_reflex_kp" id="lccankle_reflex_kp" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>ankle_reflex_kd</td>
+						<td><input type="text" name="lccankle_reflex_kd" id="lccankle_reflex_kd" value="0" style="width: 140px"></td>
+					</tr>
+					<tr>
+						<td>reflex_max_deg</td>
+						<td><input type="text" name="lccreflex_max_deg" id="lccreflex_max_deg" value="15" style="width: 140px"></td>
 					</tr>
 				</table>
 				<br />

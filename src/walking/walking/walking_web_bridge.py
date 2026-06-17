@@ -314,6 +314,13 @@ class WalkingWebBridge(Node):
             "max_correction": msg.max_correction,
             "pitch_deadband": msg.pitch_deadband,
             "roll_deadband":  msg.roll_deadband,
+            "hip_reflex_kp":   msg.hip_reflex_kp,
+            "hip_reflex_kd":   msg.hip_reflex_kd,
+            "knee_reflex_kp":  msg.knee_reflex_kp,
+            "knee_reflex_kd":  msg.knee_reflex_kd,
+            "ankle_reflex_kp": msg.ankle_reflex_kp,
+            "ankle_reflex_kd": msg.ankle_reflex_kd,
+            "reflex_max_deg":  msg.reflex_max_deg,
         }
         try:
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
@@ -344,8 +351,9 @@ class WalkingWebBridge(Node):
 
         response.period_t       = int  (loaded.get("period_t",      360))
         response.com_y_swing    = float(loaded.get("com_y_swing",   0.0))
-        response.width_size     = float(loaded.get("width_size",    0.0))
+        response.width_size     = float(loaded.get("width_size",    4.5))
         response.t_dsp          = float(loaded.get("t_dsp",         0.0))
+        response.lift_height    = float(loaded.get("lift_height",   2.5))
         response.stand_height   = float(loaded.get("stand_height",  50.0))
         response.com_height     = float(loaded.get("com_height",    40.0))
         response.imukp          = float(loaded.get("imukp",         0.1))
@@ -356,18 +364,34 @@ class WalkingWebBridge(Node):
         response.max_correction = float(loaded.get("max_correction", 5.0))
         response.pitch_deadband = float(loaded.get("pitch_deadband", 3.0))
         response.roll_deadband  = float(loaded.get("roll_deadband",  5.0))
+        response.hip_reflex_kp   = float(loaded.get("hip_reflex_kp",   0.0))
+        response.hip_reflex_kd   = float(loaded.get("hip_reflex_kd",   0.0))
+        response.knee_reflex_kp  = float(loaded.get("knee_reflex_kp",  0.0))
+        response.knee_reflex_kd  = float(loaded.get("knee_reflex_kd",  0.0))
+        response.ankle_reflex_kp = float(loaded.get("ankle_reflex_kp", 0.0))
+        response.ankle_reflex_kd = float(loaded.get("ankle_reflex_kd", 0.0))
+        response.reflex_max_deg  = float(loaded.get("reflex_max_deg", 15.0))
 
-        print(f"DEBUG: [Check] period_t 最終回傳值:       {response.period_t}"      , flush=True)
-        print(f"DEBUG: [Check] t_dsp 最終回傳值:          {response.t_dsp}"         , flush=True)
-        print(f"DEBUG: [Check] lift_height 最終回傳值:    {response.lift_height}"   , flush=True)
-        print(f"DEBUG: [Check] imukp 最終回傳值:          {response.imukp}"         , flush=True)
-        print(f"DEBUG: [Check] imukd 最終回傳值:          {response.imukd}"         , flush=True)
-        print(f"DEBUG: [Check] target_pitch 最終回傳值:   {response.target_pitch}"  , flush=True)
-        print(f"DEBUG: [Check] target_roll 最終回傳值:    {response.target_roll}"   , flush=True)
-        print(f"DEBUG: [Check] yaw_kp 最終回傳值:         {response.yaw_kp}"        , flush=True)
-        print(f"DEBUG: [Check] max_correction 最終回傳值: {response.max_correction}", flush=True)
-        print(f"DEBUG: [Check] pitch_deadband 最終回傳值: {response.pitch_deadband}", flush=True)
-        print(f"DEBUG: [Check] roll_deadband 最終回傳值:  {response.roll_deadband}", flush=True)
+        print(f"DEBUG: [Check] period_t 最終回傳值:       {response.period_t}"       , flush=True)
+        print(f"DEBUG: [Check] t_dsp 最終回傳值:          {response.t_dsp}"          , flush=True)
+        print(f"DEBUG: [Check] lift_height 最終回傳值:    {response.lift_height}"    , flush=True)
+        print(f"DEBUG: [Check] width_size 最終回傳值:     {response.width_size}"     , flush=True)
+        print(f"DEBUG: [Check] imukp 最終回傳值:          {response.imukp}"          , flush=True)
+        print(f"DEBUG: [Check] imukd 最終回傳值:          {response.imukd}"          , flush=True)
+        print(f"DEBUG: [Check] target_pitch 最終回傳值:   {response.target_pitch}"   , flush=True)
+        print(f"DEBUG: [Check] target_roll 最終回傳值:    {response.target_roll}"    , flush=True)
+        print(f"DEBUG: [Check] yaw_kp 最終回傳值:         {response.yaw_kp}"         , flush=True)
+        print(f"DEBUG: [Check] max_correction 最終回傳值: {response.max_correction}" , flush=True)
+        print(f"DEBUG: [Check] pitch_deadband 最終回傳值: {response.pitch_deadband}" , flush=True)
+        print(f"DEBUG: [Check] roll_deadband 最終回傳值:  {response.roll_deadband}"  , flush=True)
+        print(f"DEBUG: [Check] hip_reflex_kp 最終回傳值:  {response.hip_reflex_kp}"  , flush=True)
+        print(f"DEBUG: [Check] hip_reflex_kd 最終回傳值:  {response.hip_reflex_kd}"  , flush=True)
+        print(f"DEBUG: [Check] knee_reflex_kp 最終回傳值: {response.knee_reflex_kp}" , flush=True)
+        print(f"DEBUG: [Check] knee_reflex_kp 最終回傳值: {response.knee_reflex_kp}" , flush=True)
+        print(f"DEBUG: [Check] ankle_reflex_kp 最終回傳值:{response.ankle_reflex_kp}", flush=True)
+        print(f"DEBUG: [Check] ankle_reflex_kd 最終回傳值:{response.ankle_reflex_kd}", flush=True)
+        print(f"DEBUG: [Check] reflex_max_deg 最終回傳值: {response.reflex_max_deg}" , flush=True)
+
 
         return response
 
