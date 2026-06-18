@@ -856,17 +856,7 @@ class WalkingGaitByLIPM:
     # SR_Continuous 關節空間 pitch 反射補償
     # =========================================================
     def apply_pitch_reflex(self, ang_list):
-        """依 IMU pitch 誤差/角速度，對 pitch 軸關節直接加角度偏移（rad），回傳新角度 list。
-        踝(小擾動微調) + 髖/腰(角動量、抗倒主力)，疊在既有 px_u(COM 平移) 之上。
-        只應由 walking_node 的 SR_Continuous(mode 3、非收尾) 分支呼叫，不影響其他模式。
-
-        誤差來源 self._pitch_err 已過 pitch_deadband（與 px_u 共用死區）→ 平地一起安靜。
-        各關節獨立增益：髖/膝/踝 各自 kp(比例)+kd(微分)。設 0 = 該關節不參與。
-        符號(使用者確認硬體)：髖 16+/22−、膝 19+/25−（左右異號）；
-        踝連桿差動+鏡像：20−/21+（左）、26+/27−（右）。
-        Δ 絕對正負實機驗：往後推→腰應前傾，反了把對應增益改負號。
-        每顆夾在 ±reflex_max_deg。誤差回死區內 → 偏移自然回 0（不需額外平滑）。
-        """
+        
         err  = float(getattr(self, "_pitch_err",  0.0))   # deg（已過死區）
         rate = float(getattr(self, "_pitch_rate", 0.0))   # deg/s
         cap  = float(getattr(parameter, "reflex_max_deg", 15.0))
@@ -883,8 +873,10 @@ class WalkingGaitByLIPM:
                      float(getattr(parameter, "ankle_reflex_kd", 0.0)))
 
         a = list(ang_list)
-        a[0]  += hip;    a[6]  -= hip      # 髖 16(+) / 22(−)
+        a[0]  += hip;    a[6]  += hip      # 髖 16(+) / 22(−)
         a[3]  += knee;   a[9]  -= knee     # 膝 19(+) / 25(−)
         a[4]  -= ankle;  a[5]  += ankle    # 左踝連桿 20(−) / 21(+)
         a[10] += ankle;  a[11] -= ankle    # 右踝連桿 26(+) / 27(−)
+        #print(f"補償角度: {[hip]}", flush=True)
+
         return a

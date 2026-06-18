@@ -403,7 +403,24 @@ class WalkingWebBridge(Node):
 
     def handle_load_walking_param(self, request, response):
         self.get_logger().info(f"DEBUG: [Service] Load params called. Source: {self.current_save_path}")
-        p = self.current_params
+        
+        # --- 修改重點：強制從硬碟讀最新檔案，確保不被記憶體殘留值污染 ---
+        loaded_data = {}
+        if os.path.exists(self.current_save_path):
+            with open(self.current_save_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if '=' in line and not line.startswith(('#', ';', '[')):
+                        parts = line.split('=', 1)
+                        try:
+                            loaded_data[parts[0].strip()] = float(parts[1].strip())
+                        except ValueError:
+                            pass
+
+        # 以檔案讀到的真實數據為準，與記憶體 current_params 合併（檔案優先）
+        p = self.current_params.copy()
+        p.update(loaded_data)
+        # -------------------------------------------------------------
 
         # =========================================================================
         # p.get("名稱", 預設值))
