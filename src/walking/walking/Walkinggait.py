@@ -871,11 +871,12 @@ class WalkingGaitByLIPM:
                      float(getattr(parameter, "knee_reflex_kd",  0.0)))
         ankle = _off(float(getattr(parameter, "ankle_reflex_kp", 0.0)),
                      float(getattr(parameter, "ankle_reflex_kd", 0.0)))
+        
 
         a = list(ang_list)
         a[0]  += hip;    a[6]  += hip      # 髖 16(+) / 22(−)
         a[3]  += knee;   a[9]  -= knee     # 膝 19(+) / 25(−)
-        a[4]  -= ankle;  a[5]  += ankle    # 左踝連桿 20(−) / 21(+)
+        a[4]  += ankle;  a[5]  -= ankle    # 左踝連桿 20(−) / 21(+)
         a[10] += ankle;  a[11] -= ankle    # 右踝連桿 26(+) / 27(−)
         #print(f"補償角度: {[hip]}", flush=True)
 

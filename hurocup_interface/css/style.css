@@ -30,11 +30,56 @@ ul {
     width: 100%;
     margin: 0;
     padding: 0;
-    overflow: hidden;
+    overflow: visible; /* 改為 visible，讓 dropdown 可以超出 navbar 高度顯示 */
+    display: flow-root;
     /* background-color: #ff0000; */
     height: 82px;
     border-bottom: #00fa9a solid 3px;
 }
+
+/* ── Dropdown ── */
+li.dropdown { position: relative; }
+
+li.dropdown:hover .dropdown-menu { display: block; }
+
+.dropdown-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 82px;           /* 緊貼 navbar 底部 */
+    /* 重設繼承自 ul 的 navbar 樣式 */
+    height: auto;
+    width: auto;
+    border-bottom: none;
+    /* Dropdown 本身樣式 */
+    min-width: 160px;
+    background: rgba(5, 10, 15, 0.97);
+    border: 1px solid #00fa9a;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    z-index: 1000;
+    padding: 4px 0;
+    box-shadow: 0 8px 24px rgba(0, 250, 154, 0.12);
+}
+
+.dropdown-menu li {
+    float: none;
+    font-size: 16px;
+    height: auto;
+    border-bottom: 1px solid #0a1a0a;
+}
+.dropdown-menu li:last-child { border-bottom: none; }
+
+.dropdown-menu li a {
+    display: block;
+    color: #bbb;
+    padding: 10px 20px;
+    text-align: left;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.dropdown-menu li a:hover { background: #000080; color: #00fa9a; }
+.dropdown-menu li a.dm-active { color: #03e9f4; text-decoration: underline; }
 
 li {
     float: right;

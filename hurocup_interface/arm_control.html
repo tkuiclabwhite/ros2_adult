@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="SHORTCUT ICON" href="./picture/icon.png">
+  <title>Arm IK Control</title>
+
+  <link rel="stylesheet" type="text/css" href="./css/style.css">
+
+  <script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
+  <script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+  <script type="text/javascript">
+
+    var connectFlag = false;
+    var checkConnectionInterval = null;
+    var myAddress = '172.17.121.10';
+
+    var ros = new ROSLIB.Ros({ url: 'ws://172.17.121.10:9090' });
+
+    ros.on('connection', function () {
+      connectFlag = true;
+      document.getElementById('connected').style.display = 'inline';
+      document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+      checkConnectionInterval = setInterval(checkConnection, 1000);
+      createTopics();
+    });
+    ros.on('error', function () {
+      document.getElementById('connected').style.display = 'none';
+      document.body.style.backgroundImage = 'url(./picture/Gray_Background.jpg)';
+      clearInterval(checkConnectionInterval);
+    });
+    ros.on('close', function () {
+      connectFlag = false;
+      document.getElementById('connected').style.display = 'none';
+      document.body.style.backgroundImage = 'url(./picture/Gray_Background.jpg)';
+      clearInterval(checkConnectionInterval);
+    });
+
+    function checkConnection() {
+      if (ros && window.navigator.onLine) {
+        document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+      } else {
+        document.body.style.backgroundImage = 'url(./picture/Gray_Background.jpg)';
+      }
+    }
+    window.addEventListener('online',  checkConnection);
+    window.addEventListener('offline', checkConnection);
+
+    function enterAddress() {
+      myAddress = document.getElementById('addressSelect').value;
+      var state = ros.socket ? ros.socket.readyState : WebSocket.CLOSED;
+      if (state === WebSocket.OPEN || state === WebSocket.CONNECTING || state === WebSocket.CLOSING) {
+        ros.close();
+        ros.once('close', function () { ros.connect('ws://' + myAddress + ':9090'); });
+      } else {
+        ros.connect('ws://' + myAddress + ':9090');
+      }
+    }
+
+    // ── Topics ─────────────────────────────────────────────
+    var topicTarget = null, topicMode = null, topicSpeed = null, topicStand = null;
+
+    function createTopics() {
+      topicTarget = new ROSLIB.Topic({
+        ros: ros, name: '/arm_ik_target',
+        messageType: 'geometry_msgs/PoseStamped'
+      });
+      topicMode = new ROSLIB.Topic({
+        ros: ros, name: '/arm_ik_mode',
+        messageType: 'std_msgs/String'
+      });
+      topicSpeed = new ROSLIB.Topic({
+        ros: ros, name: '/arm_speed_cmd',
+        messageType: 'std_msgs/Float64'
+      });
+      topicStand = new ROSLIB.Topic({
+        ros: ros, name: '/arm_stand',
+        messageType: 'std_msgs/Bool'
+      });
+
+      var jsSub = new ROSLIB.Topic({
+        ros: ros, name: '/joint_states',
+        messageType: 'sensor_msgs/JointState',
+        throttle_rate: 200
+      });
+      jsSub.subscribe(updateJointState);
+    }
+
+    // ── Constants ──────────────────────────────────────────
+    var CENTER   = 2048;
+    var TPR      = 4096.0 / (2.0 * Math.PI);
+    var LEFT_ARM = [1, 2, 3, 4, 5, 6];
+    var DIR      = {1:-1, 2:1, 3:-1, 4:1, 5:1, 6:-1};
+    function ticksToRad(mid, tick) { return DIR[mid] * (tick - CENTER) / TPR; }
+    function radToDeg(r)           { return r * 180 / Math.PI; }
+
+    // ── RPY → Quaternion ───────────────────────────────────
+    function rpyToQuat(rollDeg, pitchDeg, yawDeg) {
+      var r = rollDeg  * Math.PI / 180;
+      var p = pitchDeg * Math.PI / 180;
+      var y = yawDeg   * Math.PI / 180;
+      var cr=Math.cos(r/2), sr=Math.sin(r/2);
+      var cp=Math.cos(p/2), sp=Math.sin(p/2);
+      var cy=Math.cos(y/2), sy=Math.sin(y/2);
+      return {
+        x: sr*cp*cy - cr*sp*sy, y: cr*sp*cy + sr*cp*sy,
+        z: cr*cp*sy - sr*sp*cy, w: cr*cp*cy + sr*sp*sy
+      };
+    }
+
+    function getCurrentPose() {
+      var x     = parseFloat(document.getElementById('vX').value);
+      var y     = parseFloat(document.getElementById('vY').value);
+      var z     = parseFloat(document.getElementById('vZ').value);
+      var roll  = parseFloat(document.getElementById('vRoll').value);
+      var pitch = parseFloat(document.getElementById('vPitch').value);
+      var yaw   = parseFloat(document.getElementById('vYaw').value);
+      var spd   = parseFloat(document.getElementById('vSpd').value);
+      return { x:x, y:y, z:z, roll:roll, pitch:pitch, yaw:yaw,
+               quat:rpyToQuat(roll,pitch,yaw), speed:spd };
+    }
+
+    // ── Slider ↔ Number sync ───────────────────────────────
+    function syncVal(ax) {
+      var v = parseFloat(document.getElementById('s'+ax).value);
+      var dec = ['Roll','Pitch','Yaw','Spd'].indexOf(ax) >= 0 ? 0 : 3;
+      document.getElementById('v'+ax).value = v.toFixed(dec);
+    }
+    function syncSlider(ax) {
+      var v = parseFloat(document.getElementById('v'+ax).value);
+      if (!isNaN(v)) document.getElementById('s'+ax).value = v;
+    }
+
+    // ── IK Mode ────────────────────────────────────────────
+    var currentMode = 'pos_only';
+    function setMode(mode) {
+      currentMode = mode;
+      ['full','pos_only','z_locked'].forEach(function(m) {
+        var el = document.getElementById('btn_mode_' + m);
+        el.style.backgroundColor = (m === mode) ? '#4CAF50' : '';
+        el.style.color           = (m === mode) ? 'white'   : '';
+      });
+      if (connectFlag && topicMode) {
+        topicMode.publish(new ROSLIB.Message({ data: mode }));
+        setLabel('Mode → ' + mode);
+      }
+    }
+
+    // ── Send target ────────────────────────────────────────
+    function sendTarget() {
+      if (!connectFlag) { setLabel('Not connected !'); return; }
+      var p = getCurrentPose();
+      topicSpeed.publish(new ROSLIB.Message({ data: p.speed }));
+      topicMode.publish(new ROSLIB.Message({ data: currentMode }));
+      topicTarget.publish(new ROSLIB.Message({
+        header: { frame_id: 'world' },
+        pose: {
+          position:    { x: p.x, y: p.y, z: p.z },
+          orientation: { x: p.quat.x, y: p.quat.y, z: p.quat.z, w: p.quat.w }
+        }
+      }));
+      setLabel('[' + currentMode + '] pos=(' + p.x.toFixed(3) + ', ' + p.y.toFixed(3) + ', ' + p.z.toFixed(3) + ')' +
+               '  rpy=(' + p.roll + '°, ' + p.pitch + '°, ' + p.yaw + '°)  spd=' + p.speed);
+      addLog('→ SEND [' + currentMode + '] pos=(' + p.x.toFixed(3) + ', ' + p.y.toFixed(3) + ', ' + p.z.toFixed(3) + ')' +
+             '  rpy=(' + p.roll + '°, ' + p.pitch + '°, ' + p.yaw + '°)');
+    }
+
+    // ── Waypoints ──────────────────────────────────────────
+    var waypoints = [];
+
+    function addWaypoint() {
+      waypoints.push(getCurrentPose());
+      renderWaypoints();
+      setLabel('Waypoint #' + waypoints.length + ' added');
+    }
+    function removeWaypoint(i) {
+      waypoints.splice(i, 1);
+      renderWaypoints();
+    }
+    function clearWaypoints() {
+      waypoints = [];
+      renderWaypoints();
+      setLabel('Waypoints cleared');
+    }
+    function renderWaypoints() {
+      var list = document.getElementById('waypointList');
+      list.innerHTML = '';
+      waypoints.forEach(function(p, i) {
+        var row = document.createElement('tr');
+        row.innerHTML =
+          '<td style="padding:3px 8px;">#' + (i+1) + '</td>' +
+          '<td style="padding:3px 8px;">(' + p.x.toFixed(3) + ', ' + p.y.toFixed(3) + ', ' + p.z.toFixed(3) + ')</td>' +
+          '<td style="padding:3px 8px;">(' + p.roll + '°, ' + p.pitch + '°, ' + p.yaw + '°)</td>' +
+          '<td style="padding:3px 8px;">' + p.speed + '</td>' +
+          '<td style="padding:3px 8px;"><input type="button" value="✕" onclick="removeWaypoint(' + i + ')" style="color:red;background:none;border:1px solid red;cursor:pointer;"></td>';
+        list.appendChild(row);
+      });
+    }
+
+    async function runTrajectory() {
+      if (!connectFlag || waypoints.length === 0) return;
+      var delay = parseInt(document.getElementById('wpDelay').value) || 2000;
+      document.getElementById('execStatus').innerHTML = '';
+      for (var i = 0; i < waypoints.length; i++) {
+        var p = waypoints[i];
+        setLabel('▶ Executing waypoint ' + (i+1) + ' / ' + waypoints.length + ' ...');
+        addLog('→ WP #' + (i+1) + ': pos=(' + p.x.toFixed(3) + ', ' + p.y.toFixed(3) + ', ' + p.z.toFixed(3) + ')');
+        topicSpeed.publish(new ROSLIB.Message({ data: p.speed }));
+        topicTarget.publish(new ROSLIB.Message({
+          header: { frame_id: 'world' },
+          pose: {
+            position:    { x: p.x, y: p.y, z: p.z },
+            orientation: { x: p.quat.x, y: p.quat.y, z: p.quat.z, w: p.quat.w }
+          }
+        }));
+        await new Promise(function(r) { setTimeout(r, delay); });
+      }
+      setLabel('✓ Trajectory complete (' + waypoints.length + ' waypoints)');
+      addLog('✓ Trajectory complete');
+    }
+
+    // ── Joint state feedback ───────────────────────────────
+    function updateJointState(msg) {
+      var ticks = {};
+      msg.name.forEach(function(name, i) {
+        var mid = parseInt(name);
+        if (mid >= 1 && mid <= 6) ticks[mid] = parseInt(msg.position[i]);
+      });
+      if (Object.keys(ticks).length === 0) return;
+      var rowDeg  = document.getElementById('rowDeg').cells;
+      var rowTick = document.getElementById('rowTick').cells;
+      LEFT_ARM.forEach(function(mid, i) {
+        if (ticks[mid] !== undefined) {
+          rowDeg[i+1].textContent  = radToDeg(ticksToRad(mid, ticks[mid])).toFixed(1) + '°';
+          rowTick[i+1].textContent = ticks[mid];
+        }
+      });
+    }
+
+    // ── Stand pose shortcut ────────────────────────────────
+    // 直接發 /arm_stand，節點從 stand.ini 讀刻度，不走 IK
+    // Stand in WORLD frame: pos=(-0.299, -0.333, 0.045)  rpy=(-67°, 2°, 111°)
+    function setStandPose() {
+      if (!connectFlag) { setLabel('Not connected!'); return; }
+      topicSpeed.publish(new ROSLIB.Message({ data: parseFloat(document.getElementById('vSpd').value) }));
+      topicStand.publish(new ROSLIB.Message({ data: true }));
+      // 同步更新滑桿到 WORLD 座標系的站姿值（x=前, y=左, z=上）
+      document.getElementById('vX').value = '0.299';
+      document.getElementById('vY').value = '0.333';
+      document.getElementById('vZ').value = '-0.044';
+      document.getElementById('vRoll').value  = '-67';
+      document.getElementById('vPitch').value = '2';
+      document.getElementById('vYaw').value   = '111';
+      ['X','Y','Z','Roll','Pitch','Yaw'].forEach(function(ax){ syncSlider(ax); });
+      setLabel('↩ Stand pose sent (direct ticks, no IK)');
+      addLog('→ STAND: ticks sent directly via /arm_stand');
+    }
+
+    // ── Quick preset positions (WORLD frame) ──────────────
+    function setPreset(x, y, z, roll, pitch, yaw) {
+      document.getElementById('vX').value = x;
+      document.getElementById('vY').value = y;
+      document.getElementById('vZ').value = z;
+      document.getElementById('vRoll').value  = roll;
+      document.getElementById('vPitch').value = pitch;
+      document.getElementById('vYaw').value   = yaw;
+      ['X','Y','Z','Roll','Pitch','Yaw'].forEach(function(ax){ syncSlider(ax); });
+    }
+
+    // ── Helpers ────────────────────────────────────────────
+    function setLabel(msg) {
+      document.getElementById('label').innerHTML = msg;
+    }
+    function addLog(msg) {
+      var box  = document.getElementById('logBox');
+      var line = document.createElement('div');
+      var ts   = new Date().toTimeString().slice(0, 8);
+      line.textContent = '[' + ts + '] ' + msg;
+      line.style.color = '#aef';
+      box.appendChild(line);
+      box.scrollTop = box.scrollHeight;
+    }
+
+  </script>
+
+  <style>
+    body {
+      width: 1200px;
+      min-width: 900px;
+      overflow: visible;
+      background-image: url(./picture/Gray_Background.jpg);
+      background-size: cover;
+    }
+    section {
+      background-color: #333;
+      border: 2px black solid;
+      padding: 10px 16px;
+      margin: 10px;
+      color: white;
+      display: inline-block;
+      vertical-align: top;
+    }
+    section h3 {
+      color: #00fa9a;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 1px solid #555;
+      padding-bottom: 5px;
+      margin: 0 0 10px 0;
+    }
+    .row-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 7px;
+      gap: 6px;
+    }
+    .row-item label {
+      width: 52px;
+      text-align: right;
+      font-size: 13px;
+      color: #aaa;
+    }
+    .row-item input[type=range] { flex: 1; accent-color: #00fa9a; }
+    .row-item input[type=number] {
+      width: 70px;
+      background: #222;
+      border: 1px solid #555;
+      color: white;
+      padding: 3px 5px;
+      text-align: right;
+      font-size: 13px;
+    }
+    .row-item span { width: 30px; color: #888; font-size: 11px; }
+
+    .mode-btn {
+      padding: 5px 12px;
+      background: #444;
+      color: #ccc;
+      border: 1px solid #666;
+      cursor: pointer;
+      font-size: 12px;
+      margin-right: 4px;
+    }
+    .mode-btn:hover { background: #555; }
+
+    input[type=button].action-btn {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 6px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      margin: 4px 2px;
+    }
+    input[type=button].action-btn:hover { background-color: #45a049; }
+    input[type=button].action-btn:disabled {
+      background-color: #555;
+      color: #999;
+      cursor: not-allowed;
+    }
+    input[type=button].danger-btn {
+      background-color: #c0392b;
+      color: white;
+      border: none;
+      padding: 6px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      margin: 4px 2px;
+    }
+    input[type=button].danger-btn:hover { background-color: #e74c3c; }
+
+    #waypointTable { border-collapse: collapse; font-size: 12px; color: #ccc; width: 100%; }
+    #waypointTable th {
+      color: #00fa9a; text-align: left;
+      padding: 4px 8px;
+      border-bottom: 1px solid #555;
+    }
+
+    #jointTable { border-collapse: collapse; font-size: 13px; width: 100%; }
+    #jointTable th { color: #00fa9a; text-align: center; padding: 5px; border-bottom: 1px solid #555; }
+    #jointTable td { text-align: center; padding: 5px; }
+    #jointTable tr:nth-child(even) td { background-color: #2a2a2a; }
+
+    #logBox {
+      width: 100%;
+      height: 80px;
+      overflow-y: auto;
+      background: #222;
+      border: 1px solid #555;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-family: monospace;
+      color: #888;
+      margin-top: 8px;
+    }
+
+    #label { color: #ffd700; font-size: 13px; margin: 4px 10px; min-height: 18px; }
+    #execStatus { color: #ffd700; font-size: 12px; }
+  </style>
+</head>
+
+<body>
+
+<!-- ── Navbar ── -->
+<ul>
+    <li class="logo" style="width: 226px;">
+        <a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+    </li>
+    <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+    <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+    <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+    <li class="dropdown">
+        <a class="navbarright" style="text-decoration:underline;" href="#">Tools ▾</a>
+        <ul class="dropdown-menu">
+            <li><a target="_blank" href="RecordInterface.html">RecordInterface</a></li>
+            <li><a target="_blank" href="NodeMonitor.html">NodeMonitor</a></li>
+            <li><a target="_blank" href="MotorMonitor.html">MotorMonitor</a></li>
+            <li><a target="_blank" href="API.html">ROS2API</a></li>                
+            <li><a target="_blank" href="miniDRC.html">miniDRC</a></li>
+            <li><a target="_blank" href="RobotViewer.html">RobotViewer</a></li>
+            <li><a target="_blank" href="WaveformMonitor.html">WaveformMonitor</a></li>
+            <li><a target="_blank" class="dm-active" href="arm_control.html">arm_control</a></li>            
+        </ul>
+    </li>
+</ul>
+
+<!-- ── Status bar ── -->
+<div style="padding: 6px 30px; display: flex; align-items: center; gap: 20px;">
+  <p id="connected" style="color:#00D600; display:none; font-size:20px; margin:0;">● Connected</p>
+  <div id="head">
+    <table>
+      <tr>
+        <td>
+          <select style="height:25px; margin-right:5px;" id="addressSelect">
+            <option value="172.17.121.10">172.17.121.10</option>
+            <option value="localhost">localhost</option>
+          </select>
+        </td>
+        <td>
+          <button type="button" style="width:110px; height:25px;" onclick="enterAddress()">Enter Address</button>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div id="label"></div>
+
+<!-- ── Sections ── -->
+<div style="padding: 0 10px;">
+
+  <!-- Target + Mode + Speed -->
+  <section style="width: 400px;">
+    <h3>Target Position — WORLD Frame
+      <span style="float:right; font-size:11px; color:#888;">x=前 y=左 z=上</span>
+    </h3>
+    <div style="font-size:11px; color:#888; margin-bottom:8px;">
+      World 座標（x=前+ y=左+ z=上+）&nbsp;|&nbsp; 站姿 x=+0.299 y=+0.333（左臂在左側）✓
+    </div>
+    <div class="row-item">
+      <label>X (前+)</label>
+      <input type="range" id="sX" min="-0.60" max="0.60" step="0.001" value="0.299" oninput="syncVal('X')">
+      <input type="number" id="vX" value="0.299" step="0.001" oninput="syncSlider('X')">
+      <span>m</span>
+    </div>
+    <div class="row-item">
+      <label>Y (左+)</label>
+      <input type="range" id="sY" min="-0.10" max="0.60" step="0.001" value="0.333" oninput="syncVal('Y')">
+      <input type="number" id="vY" value="0.333" step="0.001" oninput="syncSlider('Y')">
+      <span>m</span>
+    </div>
+    <div class="row-item">
+      <label>Z (上+)</label>
+      <input type="range" id="sZ" min="-0.60" max="0.60" step="0.001" value="-0.044" oninput="syncVal('Z')">
+      <input type="number" id="vZ" value="-0.044" step="0.001" oninput="syncSlider('Z')">
+      <span>m</span>
+    </div>
+
+    <!-- Quick Presets — World 座標 (x=前, y=左, z=上) -->
+    <div style="margin-bottom:8px; display:flex; gap:4px; flex-wrap:wrap;">
+      <button class="mode-btn" onclick="setPreset(0.299,0.333,-0.044,-67,2,111)">站姿</button>
+      <button class="mode-btn" onclick="setPreset(0.320,0.230,0.004,-67,2,111)">向前</button>
+      <button class="mode-btn" onclick="setPreset(-0.005,0.230,0.319,-67,2,111)">向上</button>
+      <button class="mode-btn" onclick="setPreset(0.230,0.230,-0.223,-67,2,111)">前下</button>
+      <button class="mode-btn" onclick="setPreset(0.005,0.230,-0.320,-67,2,111)">正下</button>
+    </div>
+
+    <h3 style="margin-top:12px;">Target Orientation (°)
+      <span style="float:right; font-size:11px; color:#aaa;">站姿(world): (−67°, 2°, 111°)</span>
+    </h3>
+    <div class="row-item">
+      <label>Roll</label>
+      <input type="range" id="sRoll" min="-180" max="180" step="1" value="-67" oninput="syncVal('Roll')">
+      <input type="number" id="vRoll" value="-67" step="1" oninput="syncSlider('Roll')">
+      <span>°</span>
+    </div>
+    <div class="row-item">
+      <label>Pitch</label>
+      <input type="range" id="sPitch" min="-180" max="180" step="1" value="2" oninput="syncVal('Pitch')">
+      <input type="number" id="vPitch" value="2" step="1" oninput="syncSlider('Pitch')">
+      <span>°</span>
+    </div>
+    <div class="row-item">
+      <label>Yaw</label>
+      <input type="range" id="sYaw" min="-180" max="180" step="1" value="111" oninput="syncVal('Yaw')">
+      <input type="number" id="vYaw" value="111" step="1" oninput="syncSlider('Yaw')">
+      <span>°</span>
+    </div>
+
+    <h3 style="margin-top:12px;">IK Mode</h3>
+    <div style="margin-bottom:10px;">
+      <button id="btn_mode_full"     class="mode-btn" onclick="setMode('full')">Full 6DOF</button>
+      <button id="btn_mode_pos_only" class="mode-btn" onclick="setMode('pos_only')"
+              style="background:#4CAF50;color:white;">Pos Only</button>
+      <button id="btn_mode_z_locked" class="mode-btn" onclick="setMode('z_locked')">Z Locked</button>
+    </div>
+
+    <h3>Speed</h3>
+    <div class="row-item">
+      <label>PV</label>
+      <input type="range" id="sSpd" min="10" max="500" step="10" value="100" oninput="syncVal('Spd')">
+      <input type="number" id="vSpd" value="100" step="10" oninput="syncSlider('Spd')">
+      <span>tk/s</span>
+    </div>
+
+    <div style="margin-top:12px; display:flex; gap:6px;">
+      <input type="button" class="action-btn" value="Send Target" onclick="sendTarget()">
+      <input type="button" class="action-btn" value="↩ Stand Pose"
+             style="background:#1a6fa0;"
+             onclick="setStandPose()">
+    </div>
+  </section>
+
+  <!-- Trajectory -->
+  <section style="width: 500px;">
+    <h3>Trajectory (Waypoints)</h3>
+    <div style="overflow-y:auto; max-height:160px; margin-bottom:8px;">
+      <table id="waypointTable">
+        <thead>
+          <tr><th>#</th><th>pos (m)</th><th>rpy (°)</th><th>spd</th><th></th></tr>
+        </thead>
+        <tbody id="waypointList"></tbody>
+      </table>
+    </div>
+    <input type="button" class="action-btn" value="＋ Add Waypoint" onclick="addWaypoint()">
+    <input type="button" class="danger-btn"  value="Clear All"     onclick="clearWaypoints()">
+    <div style="margin-top:8px; font-size:12px; color:#aaa;">
+      Delay between waypoints:
+      <input type="number" id="wpDelay" value="2000" min="100" step="100"
+             style="width:60px; background:#222; border:1px solid #555; color:white; padding:3px; text-align:right;">
+      ms
+    </div>
+    <div style="margin-top:8px;">
+      <input type="button" class="action-btn" value="▶ Run Trajectory" onclick="runTrajectory()"
+             style="background:#d97706;">
+    </div>
+    <div id="execStatus"></div>
+
+    <h3 style="margin-top:14px;">Current Joint State</h3>
+    <table id="jointTable">
+      <tr><th>Joint</th><th>q1</th><th>q2</th><th>q3</th><th>q4</th><th>q5</th><th>q6</th></tr>
+      <tr id="rowDeg"> <td>deg</td> <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr id="rowTick"><td>tick</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+    </table>
+
+    <h3 style="margin-top:14px;">Log</h3>
+    <div id="logBox"></div>
+  </section>
+
+</div>
+
+</body>
+</html>
