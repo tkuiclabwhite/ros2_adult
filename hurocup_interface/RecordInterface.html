@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="SHORTCUT ICON" href="./picture/icon.png">
+    <title>Record Interface</title>
+    <script src="./js/roslib/eventemitter2.min.js"></script>
+    <script src="./js/roslib/roslib.min.js"></script>
+    <link rel="stylesheet" href="./css/style.css">
+    <style>
+        body { min-width: 1400px; }
+
+        .conn-bar {
+            display: flex; align-items: center; gap: 12px;
+            padding: 6px 16px;
+            background: rgba(10,18,20,0.85);
+            border-bottom: 1px solid #1e2e33;
+        }
+        #connected { color:#00D600; font-size:16px; margin:0; display:none; }
+        .conn-bar select {
+            height:26px; background:#111d21; color:#ccc;
+            border:1px solid #3a4a50; border-radius:4px; padding:0 6px;
+        }
+        .conn-bar button {
+            height:26px; padding:0 12px; background:transparent;
+            border:1px solid #03e9f4; color:#03e9f4;
+            border-radius:4px; cursor:pointer; transition:0.2s;
+        }
+        .conn-bar button:hover { background:#03e9f4; color:#050505; }
+
+        /* ── Layout ── */
+        .main-layout {
+            display: flex; gap: 14px; padding: 14px;
+            height: calc(100vh - 86px);
+            box-sizing: border-box;
+        }
+
+        /* ── Left Panel ── */
+        .left-panel {
+            width: 272px; flex-shrink: 0;
+            display: flex; flex-direction: column; gap: 10px;
+            overflow-y: auto; padding-right: 4px;
+        }
+
+        /* ── Cards ── */
+        .card {
+            background: rgba(12,20,24,0.93);
+            border: 1px solid #1e2e33; border-radius: 8px;
+            padding: 12px;
+        }
+        .card-title {
+            font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+            color: #555; border-bottom: 1px solid #1e2e33;
+            padding-bottom: 6px; margin-bottom: 10px;
+        }
+
+        /* ── Motor Selection ── */
+        .mg-row { display:flex; align-items:center; gap:3px; margin-bottom:5px; }
+        .mg-name { font-size:10px; color:#444; width:48px; flex-shrink:0; letter-spacing:1px; }
+        .mcb {
+            width:24px; height:21px; background:rgba(3,233,244,0.08);
+            border:1px solid #1e3a3e; border-radius:3px;
+            color:#03e9f4; font-size:10px; cursor:pointer;
+            display:flex; align-items:center; justify-content:center;
+            transition:0.15s; user-select:none;
+        }
+        .mcb.on { background:rgba(3,233,244,0.35); border-color:#03e9f4; box-shadow:0 0 5px rgba(3,233,244,0.4); }
+
+        /* ── Buttons ── */
+        .rec-btn {
+            flex:1; height:36px; border-radius:4px; border:2px solid;
+            font-size:13px; font-weight:bold; letter-spacing:2px;
+            cursor:pointer; background:transparent; transition:0.2s;
+        }
+        .btn-rec  { color:#ff4444; border-color:#ff4444; }
+        .btn-rec:hover, .btn-rec.active { background:#ff4444; color:#fff; box-shadow:0 0 14px #ff4444; }
+        .btn-stop { color:#666; border-color:#444; }
+        .btn-stop:hover { background:#444; color:#fff; }
+        .btn-play { color:#00D600; border-color:#00D600; }
+        .btn-play:hover, .btn-play.active { background:#00D600; color:#050505; box-shadow:0 0 14px #00D600; }
+
+        .ctrl-btn {
+            padding:4px 9px; border-radius:3px; border:1px solid #2a3a3e;
+            background:transparent; color:#777; cursor:pointer; font-size:11px;
+            transition:0.15s; margin:2px;
+        }
+        .ctrl-btn:hover  { border-color:#03e9f4; color:#03e9f4; }
+        .ctrl-btn.danger { color:#ff6666; border-color:#4a2020; }
+        .ctrl-btn.danger:hover { border-color:#ff4444; color:#ff4444; }
+        .ctrl-btn.ok { color:#03e9f4; border-color:#03e9f4; }
+
+        /* ── Inputs ── */
+        .ctrl-inp {
+            background:#0a1518; border:1px solid #1e3a3e; border-radius:3px;
+            color:#ddd; font-family:'Consolas',monospace; font-size:12px;
+            padding:4px 7px; box-sizing:border-box; width:100%;
+        }
+        .ctrl-inp:focus { border-color:#03e9f4; outline:none; }
+        .ctrl-inp.narrow { width:70px; }
+
+        .status-line {
+            font-family:'Consolas',monospace; font-size:12px; color:#555;
+            margin-top:4px; min-height:15px;
+        }
+        .status-ok  { color:#00D600; }
+        .status-err { color:#ff4444; }
+        .status-rec { color:#ff4444; animation: blink 1s step-start infinite; }
+        @keyframes blink { 50% { opacity:0; } }
+
+        /* ── Right Panel ── */
+        .right-panel {
+            flex:1; min-width:0;
+            display:flex; flex-direction:column; gap:10px;
+        }
+
+        /* ── Timeline ── */
+        .timeline-scroll {
+            display:flex; gap:5px; overflow-x:auto; align-items:center;
+            padding:8px; background:rgba(8,14,18,0.95);
+            border:1px solid #1e2e33; border-radius:6px; min-height:74px;
+        }
+        .timeline-scroll::-webkit-scrollbar { height:4px; }
+        .timeline-scroll::-webkit-scrollbar-track { background:#0a1518; }
+        .timeline-scroll::-webkit-scrollbar-thumb { background:#2a3a3e; border-radius:2px; }
+
+        .fc {
+            flex-shrink:0; width:60px; padding:6px 4px;
+            background:rgba(12,20,24,0.93); border:1px solid #1a2e33;
+            border-radius:4px; cursor:pointer; text-align:center;
+            transition:0.15s; user-select:none;
+        }
+        .fc:hover  { border-color:#03e9f4; }
+        .fc.sel    { background:rgba(3,233,244,0.12); border-color:#03e9f4; box-shadow:0 0 7px rgba(3,233,244,0.3); }
+        .fc.now    { background:rgba(0,214,0,0.12); border-color:#00D600; }
+        .fc-n      { font-size:11px; color:#03e9f4; font-family:'Consolas',monospace; }
+        .fc-t      { font-size:10px; color:#445; font-family:'Consolas',monospace; margin-top:2px; }
+        .tl-empty  { color:#2a3a3e; font-size:12px; letter-spacing:2px; padding:12px; }
+
+        /* ── Frame Editor ── */
+        .frame-editor-wrap {
+            flex:1; overflow:hidden;
+            background:rgba(8,14,18,0.95); border:1px solid #1e2e33;
+            border-radius:6px; display:flex; flex-direction:column; padding:12px;
+        }
+        .fe-sub { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:#555; }
+        .fe-label { font-family:'Consolas',monospace; font-size:11px; color:#445; margin-left:10px; }
+
+        .fe-table-wrap { flex:1; overflow-y:auto; margin-top:8px; }
+        .fe-table-wrap::-webkit-scrollbar { width:4px; }
+        .fe-table-wrap::-webkit-scrollbar-track { background:#0a1518; }
+        .fe-table-wrap::-webkit-scrollbar-thumb { background:#2a3a3e; border-radius:2px; }
+
+        .fe-hdr {
+            display:grid; grid-template-columns:52px 1fr 1fr;
+            gap:6px; padding:4px 8px;
+            font-size:10px; color:#444; letter-spacing:2px; text-transform:uppercase;
+            border-bottom:1px solid #1a2530; margin-bottom:4px;
+        }
+        .fe-row {
+            display:grid; grid-template-columns:52px 1fr 1fr;
+            gap:6px; align-items:center; padding:3px 8px; border-radius:3px;
+        }
+        .fe-row:nth-child(odd) { background:rgba(3,233,244,0.025); }
+        .fe-mid { font-family:'Consolas',monospace; font-size:12px; color:#03e9f4; }
+        .fe-inp {
+            background:#0a1518; border:1px solid #1a2e33; border-radius:3px;
+            color:#ccc; font-family:'Consolas',monospace; font-size:12px;
+            padding:3px 6px; width:100%; box-sizing:border-box;
+        }
+        .fe-inp:focus { border-color:#03e9f4; outline:none; }
+        .fe-empty { color:#2a3a3e; text-align:center; padding:40px; font-size:13px; letter-spacing:3px; }
+
+        .row-flex { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+        select.ctrl-sel {
+            background:#0a1518; border:1px solid #1e3a3e; border-radius:3px;
+            color:#888; font-size:12px; padding:3px 5px;
+        }
+    </style>
+</head>
+<body>
+
+<ul>
+    <li class="logo" style="width:226px;"><a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a></li>
+    <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+    <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+    <li><a target="_blank" class="navbarright" style="text-decoration:underline;color:#03e9f4;" href="RecordInterface.html">Record</a></li>
+    <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+    <li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
+    <li><a target="_blank" class="navbarright" href="MotorMonitor.html">Monitor</a></li>
+</ul>
+
+<div class="conn-bar">
+    <p id="connected">● Connected</p>
+    <select id="addressSelect">
+        <option value="172.17.121.10">172.17.121.10</option>
+        <option value="localhost">localhost</option>
+    </select>
+    <button onclick="enterAddress()">Enter Address</button>
+</div>
+
+<div class="main-layout">
+
+    <!-- ══ LEFT PANEL ══ -->
+    <div class="left-panel">
+
+        <!-- Motor Selection -->
+        <div class="card">
+            <div class="card-title">Motor Selection</div>
+            <div id="motorGrid"></div>
+            <div class="row-flex" style="margin-top:8px;">
+                <button class="ctrl-btn" onclick="selectAll()">All</button>
+                <button class="ctrl-btn danger" onclick="clearAll()">None</button>
+                <span class="status-line" id="selCount" style="margin:0;">0 sel</span>
+            </div>
+        </div>
+
+        <!-- Record Controls -->
+        <div class="card">
+            <div class="card-title">Record</div>
+            <div class="row-flex" style="margin-bottom:8px;">
+                <button class="rec-btn btn-rec"  id="btnRec"  onclick="startRec()">● REC</button>
+                <button class="rec-btn btn-stop" id="btnStop" onclick="stopRec()">■ STOP</button>
+            </div>
+            <div style="font-family:Consolas;font-size:14px;color:#03e9f4;text-align:center;" id="recState">IDLE</div>
+            <div class="status-line" style="text-align:center;" id="recStats">0:00.0 | F:0</div>
+
+            <div style="border-top:1px solid #1e2e33; margin-top:10px; padding-top:10px;">
+                <div class="row-flex">
+                    <button class="rec-btn btn-play" id="btnPlay" onclick="togglePlay()" style="height:32px; font-size:12px;">▶ PLAY</button>
+                    <select class="ctrl-sel" id="playSpeed">
+                        <option value="0.5">0.5x</option>
+                        <option value="1" selected>1x</option>
+                        <option value="2">2x</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timeline Edit -->
+        <div class="card">
+            <div class="card-title">Timeline Edit</div>
+            <div class="row-flex">
+                <button class="ctrl-btn" onclick="insertFrame()">+ Insert</button>
+                <button class="ctrl-btn" onclick="duplicateFrame()">⧉ Copy</button>
+                <button class="ctrl-btn danger" onclick="deleteFrame()">✕ Del</button>
+            </div>
+            <div class="row-flex" style="margin-top:6px;">
+                <span style="font-size:11px;color:#555;">t_ms:</span>
+                <input class="ctrl-inp narrow" id="frameTime" type="number" placeholder="---"
+                    onchange="setFrameTime(+this.value)">
+                <span style="font-size:11px;color:#555;">ms</span>
+            </div>
+            <div class="row-flex" style="margin-top:6px;">
+                <span style="font-size:11px;color:#555;">All spd:</span>
+                <input class="ctrl-inp narrow" id="bulkSpd" type="number" value="50">
+                <button class="ctrl-btn" onclick="applyBulkSpd()">Set</button>
+            </div>
+            <div class="row-flex" style="margin-top:6px;">
+                <button class="ctrl-btn" onclick="captureNow()">📸 Capture Now</button>
+            </div>
+        </div>
+
+        <!-- File -->
+        <div class="card">
+            <div class="card-title">File (.rec.json)</div>
+            <input class="ctrl-inp" id="recName" type="text" placeholder="recording_name"
+                value="recording" style="margin-bottom:6px;">
+            <div class="row-flex">
+                <button class="ctrl-btn ok" onclick="saveRec()">💾 Save</button>
+                <button class="ctrl-btn" onclick="loadRec()">📂 Load</button>
+            </div>
+            <div class="status-line" id="fileStatus">---</div>
+        </div>
+
+        <!-- Export -->
+        <div class="card">
+            <div class="card-title">Export → Sectors</div>
+            <div class="row-flex" style="margin-bottom:4px;">
+                <span style="font-size:11px;color:#555;">Base ID</span>
+                <span style="font-size:10px;color:#2a3a3e;">(≥ 1000, 為 MotionList ID)</span>
+            </div>
+            <input class="ctrl-inp" id="exportBase" type="number" min="1000" value="1000"
+                style="margin-bottom:6px;" oninput="updateExportPreview()">
+            <div class="row-flex" style="margin-bottom:4px;">
+                <span style="font-size:11px;color:#555;">預設速度</span>
+                <span style="font-size:10px;color:#2a3a3e;">(vel=0 時使用)</span>
+            </div>
+            <input class="ctrl-inp" id="exportSpd" type="number" value="50"
+                style="margin-bottom:6px;">
+            <div class="status-line" id="exportPreview">---</div>
+            <button class="ctrl-btn ok" onclick="exportSectors()"
+                style="width:100%;margin-top:4px;padding:6px;">⚡ Export</button>
+            <div class="status-line" id="exportStatus">---</div>
+        </div>
+
+    </div>
+
+    <!-- ══ RIGHT PANEL ══ -->
+    <div class="right-panel">
+
+        <!-- Timeline -->
+        <div class="card" style="padding:10px;">
+            <div class="row-flex" style="margin-bottom:8px;">
+                <span class="fe-sub">Timeline</span>
+                <span class="fe-label" id="tlInfo">0 frames</span>
+            </div>
+            <div class="timeline-scroll" id="timeline">
+                <div class="tl-empty">NO FRAMES</div>
+            </div>
+        </div>
+
+        <!-- Frame Editor -->
+        <div class="frame-editor-wrap">
+            <div class="row-flex">
+                <span class="fe-sub">Frame Editor</span>
+                <span class="fe-label" id="feLabel">— no frame selected —</span>
+            </div>
+            <div class="fe-table-wrap">
+                <div id="frameEditor"><div class="fe-empty">SELECT A FRAME TO EDIT</div></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+// ════════════════════════════════════════
+//  Constants
+// ════════════════════════════════════════
+const NUM_MOTORS = 27;
+const SAMPLE_MS  = 50;
+const GROUPS = [
+    { name:'L.HAND', ids:[1,2,3,4,5,6,7]      },
+    { name:'R.HAND', ids:[8,9,10,11,12,13,14]  },
+    { name:'WAIST',  ids:[15]                  },
+    { name:'L.LEG',  ids:[16,17,18,19,20,21]   },
+    { name:'R.LEG',  ids:[22,23,24,25,26,27]   },
+];
+
+// ════════════════════════════════════════
+//  State
+// ════════════════════════════════════════
+let curPos = {};
+let curVel = {};
+let selMotors = new Set([...Array(NUM_MOTORS)].map((_,i) => i+1));
+
+let recording    = false;
+let recFrames    = [];
+let recStart     = null;
+let recTimer     = null;
+
+let playing      = false;
+let playAbort    = false;
+let playingIdx   = -1;
+
+let selFrame     = null;
+
+// ROS publishers
+var ros = null, myAddress = '172.17.121.10';
+var pubPlay, pubSave, pubLoadReq, pubExport;
+
+// ════════════════════════════════════════
+//  Motor Selection UI
+// ════════════════════════════════════════
+function buildMotorGrid() {
+    const grid = document.getElementById('motorGrid');
+    grid.innerHTML = '';
+    GROUPS.forEach(g => {
+        const row = document.createElement('div');
+        row.className = 'mg-row';
+        const lbl = document.createElement('span');
+        lbl.className = 'mg-name';
+        lbl.textContent = g.name;
+        row.appendChild(lbl);
+        g.ids.forEach(id => {
+            const btn = document.createElement('div');
+            btn.className = 'mcb' + (selMotors.has(id) ? ' on' : '');
+            btn.id = `mcb${id}`;
+            btn.textContent = id;
+            btn.onclick = () => toggleMotor(id);
+            row.appendChild(btn);
+        });
+        grid.appendChild(row);
+    });
+    refreshSelCount();
+}
+
+function toggleMotor(id) {
+    selMotors.has(id) ? selMotors.delete(id) : selMotors.add(id);
+    const el = document.getElementById(`mcb${id}`);
+    if (el) el.classList.toggle('on', selMotors.has(id));
+    refreshSelCount();
+}
+function selectAll()  { for(let i=1;i<=NUM_MOTORS;i++) selMotors.add(i);   buildMotorGrid(); }
+function clearAll()   { selMotors.clear(); buildMotorGrid(); }
+function refreshSelCount() {
+    document.getElementById('selCount').textContent = `${selMotors.size} sel`;
+}
+
+// ════════════════════════════════════════
+//  Recording
+// ════════════════════════════════════════
+function startRec() {
+    if (recording) return;
+    if (selMotors.size === 0) { alert('請先選取至少一顆馬達'); return; }
+    recFrames = [];
+    selFrame  = null;
+    recStart  = Date.now();
+    recording = true;
+    document.getElementById('btnRec').classList.add('active');
+    document.getElementById('recState').textContent = 'RECORDING';
+    document.getElementById('recState').className = 'status-rec';
+    recTimer = setInterval(captureFrame, SAMPLE_MS);
+    renderTimeline();
+}
+
+function captureFrame() {
+    if (!recording) return;
+    const t = Date.now() - recStart;
+    const frame = { t_ms: t, motors: {} };
+    selMotors.forEach(id => {
+        frame.motors[id] = {
+            pos: Math.round(curPos[id] ?? 2048),
+            vel: Math.max(0, Math.round(Math.abs(curVel[id] ?? 0)))
+        };
+    });
+    recFrames.push(frame);
+    renderTimeline();
+    refreshRecStats();
+}
+
+function stopRec() {
+    if (!recording) return;
+    clearInterval(recTimer);
+    recording = false;
+    document.getElementById('btnRec').classList.remove('active');
+    document.getElementById('recState').textContent = 'IDLE';
+    document.getElementById('recState').className = '';
+    document.getElementById('recState').style.color = '#03e9f4';
+    refreshRecStats();
+}
+
+function refreshRecStats() {
+    const ms = recording ? (Date.now() - recStart) : (recFrames.length > 0 ? recFrames[recFrames.length-1].t_ms : 0);
+    const m  = Math.floor(ms / 60000);
+    const s  = ((ms % 60000) / 1000).toFixed(1).padStart(4, '0');
+    document.getElementById('recStats').textContent = `${m}:${s} | F:${recFrames.length}`;
+    document.getElementById('tlInfo').textContent = `${recFrames.length} frames`;
+    updateExportPreview();
+}
+
+// ════════════════════════════════════════
+//  Playback
+// ════════════════════════════════════════
+async function togglePlay() {
+    if (playing) { playAbort = true; return; }
+    if (recFrames.length === 0) { alert('沒有幀可以播放'); return; }
+    playing   = true;
+    playAbort = false;
+    document.getElementById('btnPlay').classList.add('active');
+    document.getElementById('btnPlay').textContent = '■ STOP';
+    const spd = parseFloat(document.getElementById('playSpeed').value) || 1;
+
+    for (let i = 0; i < recFrames.length; i++) {
+        if (playAbort) break;
+        playingIdx = i;
+        selectFrameIdx(i, false);
+        sendFrameToRobot(recFrames[i]);
+        let delay = SAMPLE_MS;
+        if (i < recFrames.length - 1) delay = recFrames[i+1].t_ms - recFrames[i].t_ms;
+        await sleep(Math.max(50, delay / spd));
+    }
+
+    playing    = false;
+    playingIdx = -1;
+    document.getElementById('btnPlay').classList.remove('active');
+    document.getElementById('btnPlay').textContent = '▶ PLAY';
+    renderTimeline();
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function sendFrameToRobot(frame) {
+    if (!pubPlay) return;
+    pubPlay.publish({ data: JSON.stringify({
+        num_motors: NUM_MOTORS,
+        selected:   [...selMotors],
+        motors:     frame.motors
+    })});
+}
+
+// ════════════════════════════════════════
+//  Timeline
+// ════════════════════════════════════════
+function renderTimeline() {
+    const tl = document.getElementById('timeline');
+    if (recFrames.length === 0) {
+        tl.innerHTML = '<div class="tl-empty">NO FRAMES</div>';
+        return;
+    }
+    tl.innerHTML = '';
+    recFrames.forEach((f, i) => {
+        const d = document.createElement('div');
+        d.className = 'fc' + (i === selFrame ? ' sel' : '') + (i === playingIdx ? ' now' : '');
+        d.innerHTML = `<div class="fc-n">F${i}</div><div class="fc-t">${f.t_ms}ms</div>`;
+        d.onclick = () => selectFrameIdx(i, true);
+        tl.appendChild(d);
+    });
+    document.getElementById('tlInfo').textContent = `${recFrames.length} frames`;
+}
+
+function selectFrameIdx(idx, scroll = true) {
+    selFrame = idx;
+    renderTimeline();
+    renderFrameEditor();
+    const f = recFrames[idx];
+    if (f) document.getElementById('frameTime').value = f.t_ms;
+    if (scroll) {
+        const cards = document.getElementById('timeline').querySelectorAll('.fc');
+        if (cards[idx]) cards[idx].scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+    }
+}
+
+// ════════════════════════════════════════
+//  Frame Editor
+// ════════════════════════════════════════
+function renderFrameEditor() {
+    const editor = document.getElementById('frameEditor');
+    const label  = document.getElementById('feLabel');
+    if (selFrame === null || !recFrames[selFrame]) {
+        editor.innerHTML = '<div class="fe-empty">SELECT A FRAME TO EDIT</div>';
+        label.textContent = '— no frame selected —';
+        return;
+    }
+    const frame = recFrames[selFrame];
+    label.textContent = `Frame ${selFrame}  |  t = ${frame.t_ms} ms`;
+
+    const ids = Object.keys(frame.motors).map(Number).sort((a,b) => a-b);
+    let html = `<div class="fe-hdr"><span>Motor</span><span>Position</span><span>Speed</span></div>`;
+    ids.forEach(id => {
+        const m = frame.motors[id];
+        html += `<div class="fe-row">
+            <span class="fe-mid">M${id}</span>
+            <input class="fe-inp" type="number" value="${m.pos}"
+                onchange="setMotor(${selFrame},${id},'pos',+this.value)">
+            <input class="fe-inp" type="number" value="${m.vel}"
+                onchange="setMotor(${selFrame},${id},'vel',+this.value)">
+        </div>`;
+    });
+    editor.innerHTML = html;
+}
+
+function setMotor(fi, id, field, val) {
+    if (recFrames[fi] && recFrames[fi].motors[id] !== undefined)
+        recFrames[fi].motors[id][field] = val;
+}
+
+// ════════════════════════════════════════
+//  Timeline Edit Operations
+// ════════════════════════════════════════
+function insertFrame() {
+    if (selFrame === null) return;
+    const src = recFrames[selFrame];
+    const nf  = { t_ms: src.t_ms, motors: JSON.parse(JSON.stringify(src.motors)) };
+    recFrames.splice(selFrame + 1, 0, nf);
+    selFrame++;
+    renderTimeline();
+    renderFrameEditor();
+}
+
+function duplicateFrame() { insertFrame(); }
+
+function deleteFrame() {
+    if (selFrame === null || recFrames.length === 0) return;
+    recFrames.splice(selFrame, 1);
+    if (selFrame >= recFrames.length) selFrame = recFrames.length - 1;
+    if (recFrames.length === 0) selFrame = null;
+    renderTimeline();
+    renderFrameEditor();
+    refreshRecStats();
+}
+
+function setFrameTime(val) {
+    if (selFrame === null || isNaN(val)) return;
+    recFrames[selFrame].t_ms = val;
+    renderTimeline();
+}
+
+function applyBulkSpd() {
+    if (selFrame === null) return;
+    const spd = parseInt(document.getElementById('bulkSpd').value) || 50;
+    Object.values(recFrames[selFrame].motors).forEach(m => { m.vel = spd; });
+    renderFrameEditor();
+}
+
+function captureNow() {
+    if (selMotors.size === 0) { alert('請先選取馬達'); return; }
+    const lastT = recFrames.length > 0 ? recFrames[recFrames.length-1].t_ms + SAMPLE_MS : 0;
+    const frame = { t_ms: lastT, motors: {} };
+    selMotors.forEach(id => {
+        frame.motors[id] = {
+            pos: Math.round(curPos[id] ?? 2048),
+            vel: Math.max(0, Math.round(Math.abs(curVel[id] ?? 0)))
+        };
+    });
+    recFrames.push(frame);
+    selFrame = recFrames.length - 1;
+    renderTimeline();
+    renderFrameEditor();
+    refreshRecStats();
+}
+
+// ════════════════════════════════════════
+//  Save / Load
+// ════════════════════════════════════════
+function saveRec() {
+    if (!pubSave) { alert('尚未連線'); return; }
+    const name = document.getElementById('recName').value.trim() || 'recording';
+    pubSave.publish({ data: JSON.stringify({
+        name,
+        sample_ms:       SAMPLE_MS,
+        selected_motors: [...selMotors],
+        frames:          recFrames
+    })});
+    document.getElementById('fileStatus').textContent = `儲存中 ${name}.rec.json...`;
+    document.getElementById('fileStatus').className = 'status-line';
+}
+
+function loadRec() {
+    if (!pubLoadReq) { alert('尚未連線'); return; }
+    const name = document.getElementById('recName').value.trim() || 'recording';
+    pubLoadReq.publish({ data: name });
+    document.getElementById('fileStatus').textContent = `讀取中 ${name}.rec.json...`;
+}
+
+function onLoaded(jsonStr) {
+    try {
+        const data = JSON.parse(jsonStr);
+        if (data.error) {
+            document.getElementById('fileStatus').textContent = `錯誤: ${data.error}`;
+            document.getElementById('fileStatus').className = 'status-line status-err';
+            return;
+        }
+        recFrames = data.frames || [];
+        if (data.selected_motors) {
+            selMotors = new Set(data.selected_motors.map(Number));
+            buildMotorGrid();
+        }
+        selFrame = recFrames.length > 0 ? 0 : null;
+        renderTimeline();
+        renderFrameEditor();
+        refreshRecStats();
+        document.getElementById('fileStatus').textContent = `已載入 ${recFrames.length} 幀`;
+        document.getElementById('fileStatus').className = 'status-line status-ok';
+    } catch(e) {
+        document.getElementById('fileStatus').textContent = `解析錯誤: ${e.message}`;
+        document.getElementById('fileStatus').className = 'status-line status-err';
+    }
+}
+
+// ════════════════════════════════════════
+//  Export
+// ════════════════════════════════════════
+function updateExportPreview() {
+    const baseId = parseInt(document.getElementById('exportBase').value);
+    const el = document.getElementById('exportPreview');
+    if (isNaN(baseId) || baseId < 1000) {
+        el.textContent = 'Base ID 須 ≥ 1000';
+        el.className = 'status-line status-err';
+        return;
+    }
+    const n = recFrames.length;
+    if (n === 0) { el.textContent = '---'; el.className = 'status-line'; return; }
+    el.textContent = `List:${baseId}  幀:${baseId+1}~${baseId+n}`;
+    el.className = 'status-line';
+}
+
+function exportSectors() {
+    if (!pubExport) { alert('尚未連線'); return; }
+    if (recFrames.length === 0) { alert('沒有幀可以 Export'); return; }
+    const baseId = parseInt(document.getElementById('exportBase').value);
+    if (isNaN(baseId) || baseId < 1000) { alert('Base ID 須 ≥ 1000'); return; }
+    const defSpd = parseInt(document.getElementById('exportSpd').value) || 50;
+    pubExport.publish({ data: JSON.stringify({
+        base_id:         baseId,
+        default_speed:   defSpd,
+        num_motors:      NUM_MOTORS,
+        selected_motors: [...selMotors],
+        sample_ms:       SAMPLE_MS,
+        frames:          recFrames,
+        name:            document.getElementById('recName').value.trim() || 'recording'
+    })});
+    document.getElementById('exportStatus').textContent = 'Export 中...';
+    document.getElementById('exportStatus').className = 'status-line';
+}
+
+function onResult(jsonStr) {
+    try {
+        const res = JSON.parse(jsonStr);
+        if (res.save_ok) {
+            document.getElementById('fileStatus').textContent = '已儲存 ✓';
+            document.getElementById('fileStatus').className = 'status-line status-ok';
+            return;
+        }
+        const el = document.getElementById('exportStatus');
+        if (res.error) {
+            el.textContent = `錯誤: ${res.error}`;
+            el.className = 'status-line status-err';
+        } else if (res.status === 'ok') {
+            const last = res.frame_ids[res.frame_ids.length - 1];
+            el.textContent = `完成 ✓  List=${res.motion_list_id}  幀=${res.frame_ids[0]}~${last}`;
+            el.className = 'status-line status-ok';
+        }
+    } catch(e) {}
+}
+
+// ════════════════════════════════════════
+//  ROS
+// ════════════════════════════════════════
+function enterAddress() {
+    const sel = document.getElementById('addressSelect');
+    if (sel) myAddress = sel.value;
+    connectRos();
+}
+
+function connectRos() {
+    if (ros) { try { ros.close(); } catch(e){} }
+    ros = new ROSLIB.Ros({ url: `ws://${myAddress}:9090` });
+    ros.on('connection', () => {
+        document.getElementById('connected').style.display = 'inline';
+        document.body.style.backgroundImage = "url('./picture/Background.jpg')";
+        setupRos();
+    });
+    ros.on('error', () => {
+        document.getElementById('connected').style.display = 'none';
+        document.body.style.backgroundImage = "url('./picture/red_filter_image.jpg')";
+    });
+    ros.on('close', () => {
+        document.getElementById('connected').style.display = 'none';
+        document.body.style.backgroundImage = "url('./picture/red_filter_image.jpg')";
+    });
+}
+
+function setupRos() {
+    new ROSLIB.Topic({ ros, name:'/joint_states',    messageType:'sensor_msgs/msg/JointState' })
+        .subscribe(msg => msg.name.forEach((n,i) => { curPos[parseInt(n)] = msg.position[i]; }));
+
+    new ROSLIB.Topic({ ros, name:'/joint_velocities', messageType:'sensor_msgs/msg/JointState' })
+        .subscribe(msg => msg.name.forEach((n,i) => { curVel[parseInt(n)] = msg.velocity[i]; }));
+
+    new ROSLIB.Topic({ ros, name:'/package/RecordLoadResponse', messageType:'std_msgs/msg/String' })
+        .subscribe(msg => onLoaded(msg.data));
+
+    new ROSLIB.Topic({ ros, name:'/package/RecordExportResult', messageType:'std_msgs/msg/String' })
+        .subscribe(msg => onResult(msg.data));
+
+    pubPlay    = new ROSLIB.Topic({ ros, name:'/package/RecordPlayFrame',  messageType:'std_msgs/msg/String' });
+    pubSave    = new ROSLIB.Topic({ ros, name:'/package/RecordSave',        messageType:'std_msgs/msg/String' });
+    pubLoadReq = new ROSLIB.Topic({ ros, name:'/package/RecordLoadRequest', messageType:'std_msgs/msg/String' });
+    pubExport  = new ROSLIB.Topic({ ros, name:'/package/RecordExport',      messageType:'std_msgs/msg/String' });
+}
+
+// ════════════════════════════════════════
+//  Init
+// ════════════════════════════════════════
+window.onload = function() {
+    buildMotorGrid();
+    renderTimeline();
+    updateExportPreview();
+    try { connectRos(); } catch(e) {}
+};
+</script>
+</body>
+</html>

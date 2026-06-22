@@ -12,7 +12,7 @@ MESH_DIR  = HOME / "AD/meshes"
 OUTPUT    = HOME / "ros2_adult/hurocup_interface/RobotViewer.html"
 STAND_INI = HOME / "ros2_adult/src/strategy/strategy/Parameter/stand.ini"
 
-THREEJS   = HOME / "ros2_kid/hurocup_interface/js/three.min.js"
+THREEJS   = HOME / "ros2_adult/hurocup_interface/js/three.min.js"
 EE2_JS    = HOME / "ros2_adult/hurocup_interface/js/roslib/eventemitter2.min.js"
 ROSLIB_JS = HOME / "ros2_adult/hurocup_interface/js/roslib/roslib.min.js"
 

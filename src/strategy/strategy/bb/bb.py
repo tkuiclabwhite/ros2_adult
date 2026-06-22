@@ -15,6 +15,7 @@ import cv2
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from ik_solve import (pixel_world_to_ik_target, solve_ik, q_to_ticks,
+                      world_to_target, fk, to_isaac,
                       CHANNELS, JOINT_NAMES, HAND_TICK)
 from geometry_msgs.msg import Point
 
@@ -589,6 +590,7 @@ class BasketBall(API):
 
             elif self.step == 'catch_ball' :
                 self.catch_ball()
+                
             elif self.step == 'end' :
                 self.end()
             elif self.step == 'find_basket':
@@ -647,7 +649,7 @@ class BasketBall(API):
 
         elif self.step != 'begin' :
             self.sendHeadMotor(1, 2048, 30)
-            self.sendHeadMotor(2, 2048, 30)
+            self.sendHeadMotor(2, 2770, 30)
             self.target.initial()
             self.motor.initial()
             self.initial()
@@ -662,6 +664,77 @@ class BasketBall(API):
             self.get_logger().debug(f'-------------------reset and stoping-------------------------')
             self.get_logger().info(f'主策略指撥關閉 -> 機器人回復初始狀態')
 
+
+    def catch(self):
+        """掃描固定高度不同位置的抓取點，印出各點 Rforarm2 姿態後移動手臂。"""
+        # ---- 可調參數 ----
+        CATCH_HEIGHT_M  = 0.74      # 抓取點離地高度 (m)，可自行修改
+        Z_CONSTRAINT    = 'rforarm2_z_up'   # 'rforarm2_z_up' / 'rforarm2_z_down' / None
+        MOVE_ARM        = True      # False = 只印姿態不動手臂
+        STEP_DELAY      = 2.0       # 每個位置等待秒數
+
+        # (ball_front_of_cam, ball_right_of_cam) 單位: m
+        TEST_POSITIONS = [
+            (0.30,  0.00),
+            (0.40,  0.00),
+            (0.50,  0.00),
+            (0.40, -0.10),   # 偏左 10 cm
+            (0.40, +0.10),   # 偏右 10 cm
+        ]
+
+        for front, right in TEST_POSITIONS:
+            target = world_to_target(
+                ball_h=CATCH_HEIGHT_M,
+                ball_front_of_cam=front,
+                ball_right_of_cam=right,
+            )
+            self.get_logger().info(
+                f'[catch] ---- front={front:.2f}m  right={right:+.2f}m  '
+                f'target=({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}) '
+                f'constraint={Z_CONSTRAINT} ----'
+            )
+            try:
+                q = solve_ik(target, constraint=Z_CONSTRAINT)
+                ticks = q_to_ticks(q)
+                g, R2, _, _ = fk(q)
+                pos_err  = np.linalg.norm(g - target)
+                z_world  = R2[:, 2]   # Rforarm2 Z 軸在世界座標系的方向
+
+                t_isaac = to_isaac(target)
+                g_isaac = to_isaac(g)
+                self.get_logger().info(
+                    f'[catch] IK目標   = ({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}) m (base_link)'
+                    f'  Isaac=({t_isaac[0]:.3f}, {t_isaac[1]:.3f}, {t_isaac[2]:.3f})'
+                )
+                self.get_logger().info(
+                    f'[catch] 實際抓取點= ({g[0]:.3f}, {g[1]:.3f}, {g[2]:.3f}) m (base_link)'
+                    f'  Isaac=({g_isaac[0]:.3f}, {g_isaac[1]:.3f}, {g_isaac[2]:.3f})'
+                    f'  誤差={pos_err*100:.1f} cm'
+                )
+                self.get_logger().info(
+                    f'[catch] Rforarm2-Z(世界) = [{z_world[0]:+.3f}, {z_world[1]:+.3f}, {z_world[2]:+.3f}]'
+                )
+                for ch, name, theta, tick in zip(CHANNELS, JOINT_NAMES, q, ticks):
+                    self.get_logger().info(
+                        f'[catch]   ch{ch:<2d} {name:14s}  θ={theta:+.4f} rad  tick={tick}'
+                    )
+                self.get_logger().info(
+                    f'[catch]   ch14 RhandJoint  (passthrough)  tick={HAND_TICK}'
+                )
+
+                ok = all(0 <= t <= 4095 for t in ticks)
+                self.get_logger().info(f'[catch] tick 全在範圍內: {ok}')
+
+                if MOVE_ARM and ok:
+                    for ch, tick in zip(CHANNELS, ticks):
+                        self.SingleAbsolutePosition(ch, int(tick), 5)
+                    self.SingleAbsolutePosition(14, HAND_TICK, 5)
+                    time.sleep(STEP_DELAY)
+                elif not ok:
+                    self.get_logger().warning('[catch] tick 超出範圍，跳過此點')
+
+            except Exception as e:
+                self.get_logger().warning(f'[catch] IK 求解失敗: {e}')
 
     def begin(self):
         ####################################### switch #######################################
@@ -878,39 +951,71 @@ class BasketBall(API):
                 ik_target = pixel_world_to_ik_target(
                     ball_world_x_cm=ball_world_x,
                     ball_world_y_cm=ball_world_y,
-                    ball_h_m=0.74,
+                    ball_h_m=0.8,
                 )
-
-                pos_msg = Point(x=float(ball_world_x),
-                                    y=float(ball_world_y),
-                                    z=74.0)
-                self.object_position_pub.publish(pos_msg)
+                # pos_msg = Point(x=float(ball_world_x),
+                #                 y=float(ball_world_y),
+                #                 z=74.0)
+                # self.object_position_pub.publish(pos_msg)
                 
                 # 球太靠近身體時，硬性要求 ch14 朝 +Z 會跟手臂幾何衝突，犧牲 XY 精準度
                 # (實測 Y<25cm 誤差可達 10cm 以上，Y>=25cm 大多 <5cm)，所以只在夠遠時才套用
-                # constraint = 'hand_axis_z' if ball_world_y >= 25.0 else None
+                constraint = 'hand_axis_z'
                 # self.get_logger().info(
                 #     f'[IK] ball_world_y={ball_world_y:.2f}  constraint={constraint}'
                 # )
-                # q = solve_ik(ik_target, constraint=constraint)
+                q = solve_ik(ik_target, constraint=constraint)
                 
-                q = solve_ik(ik_target)
+                # q = solve_ik(ik_target)
                 ticks = q_to_ticks(q)
+                g_ik, _, _, _ = fk(q)
+                ik_err = np.linalg.norm(g_ik - ik_target)
+                ik_t_isaac = to_isaac(ik_target)
+                g_ik_isaac = to_isaac(g_ik)
+                self.get_logger().info(
+                    f'[IK] IK目標    = ({ik_target[0]:.3f}, {ik_target[1]:.3f}, {ik_target[2]:.3f}) m (base_link)'
+                    f'  Isaac=({ik_t_isaac[0]:.3f}, {ik_t_isaac[1]:.3f}, {ik_t_isaac[2]:.3f})'
+                )
+                self.get_logger().info(
+                    f'[IK] 實際抓取點= ({g_ik[0]:.3f}, {g_ik[1]:.3f}, {g_ik[2]:.3f}) m (base_link)'
+                    f'  Isaac=({g_ik_isaac[0]:.3f}, {g_ik_isaac[1]:.3f}, {g_ik_isaac[2]:.3f})'
+                    f'  誤差={ik_err*100:.1f} cm'
+                )
                 for ch, name, theta, tick in zip(CHANNELS, JOINT_NAMES, q, ticks):
                     self.SingleAbsolutePosition(ch, int(tick), 5)
-                    # self.get_logger().info(
-                    #     f'ch{ch:<2d}tick={tick}'
-                    # )
+                    # time.sleep(0.01)
                     self.get_logger().info(
                         f'[IK] ch{ch:<2d} {name:14s}  θ={theta:+.4f} rad  tick={tick}'
                     )
                 self.get_logger().info(f'[IK] ch14 RhandJoint  (passthrough)  tick={HAND_TICK}')
                 ok = all(0 <= t <= 4095 for t in ticks)
                 self.get_logger().info(f'[IK] 所有 tick 在範圍內: {ok}')
+                time.sleep(10)
+                self.sendBodySector(7)
+                time.sleep(5)
+                ik_target = pixel_world_to_ik_target(
+                    ball_world_x_cm=ball_world_x,
+                    ball_world_y_cm=ball_world_y,
+                    ball_h_m=0.7,
+                )
+                constraint = 'hand_axis_z'
+                q = solve_ik(ik_target, constraint=constraint)
+                ticks = q_to_ticks(q)
+                g_ik, _, _, _ = fk(q)
+                ik_err = np.linalg.norm(g_ik - ik_target)
+                ik_t_isaac = to_isaac(ik_target)
+                g_ik_isaac = to_isaac(g_ik)
+                for ch, name, theta, tick in zip(CHANNELS, JOINT_NAMES, q, ticks):
+                    self.SingleAbsolutePosition(ch, int(tick), 5)
+                    # time.sleep(0.01)
+                    self.get_logger().info(
+                        f'[IK] ch{ch:<2d} {name:14s}  θ={theta:+.4f} rad  tick={tick}'
+                    )
 
             except Exception as e:
                 self.get_logger().warning(f'[PixelToWorld/IK] 失敗: {e}')
             self.step = 'end'
+            # time.sleep(5)
 
         # if FIX == True:
         #     self.get_logger().info(f'夾球修正')

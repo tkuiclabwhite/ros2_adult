@@ -96,6 +96,14 @@ class MotionNode(Node):
         self._orig_eml_ref = None
         self._ml_step_captures = None
 
+        # Record mode
+        self.record_load_resp_pub  = self.create_publisher(String, '/package/RecordLoadResponse', 10)
+        self.record_result_pub     = self.create_publisher(String, '/package/RecordExportResult', 10)
+        self.create_subscription(String, '/package/RecordPlayFrame',  self.cb_record_play,   10)
+        self.create_subscription(String, '/package/RecordSave',       self.cb_record_save,   10)
+        self.create_subscription(String, '/package/RecordLoadRequest',self.cb_record_load,   10)
+        self.create_subscription(String, '/package/RecordExport',     self.cb_record_export, 10)
+
         self.history_state_pub = self.create_publisher(Int16MultiArray, '/package/HistoryState', 10)
         self.undo_status_pub   = self.create_publisher(String, '/package/UndoRedoStatus', 10)
         self.history_info_pub  = self.create_publisher(String, '/package/HistoryInfo', 10)
@@ -899,6 +907,127 @@ class MotionNode(Node):
         reset_msg = Bool()
         reset_msg.data = True
         self.anchor_reset_pub.publish(reset_msg)
+
+    # ==========================================================
+    # Record Mode
+    # ==========================================================
+    def cb_record_play(self, msg):
+        try:
+            p = json.loads(msg.data)
+            num_motors  = p.get('num_motors', 27)
+            selected    = set(int(x) for x in p.get('selected', []))
+            motors_data = p.get('motors', {})
+            data = []
+            for mid in range(1, num_motors + 1):
+                key = str(mid)
+                if mid in selected and key in motors_data:
+                    m   = motors_data[key]
+                    spd = int(m.get('vel', 50))
+                    if spd <= 0: spd = 50
+                    data.extend([spd, int(m['pos'])])
+                else:
+                    data.extend([0, -1])
+            self.execute_pose(data, 'ABSOLUTE', False)
+        except Exception as e:
+            self.get_logger().error(f'[RecordPlay] {e}')
+
+    def cb_record_save(self, msg):
+        try:
+            payload = json.loads(msg.data)
+            name    = payload.get('name', 'recording').strip()
+            folder  = os.path.join(os.path.expanduser('~'),
+                                   'ros2_adult/src/strategy/strategy',
+                                   self.location_folder, 'Parameter')
+            os.makedirs(folder, exist_ok=True)
+            path = os.path.join(folder, f'{name}.rec.json')
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            resp      = String()
+            resp.data = json.dumps({'save_ok': True, 'path': path})
+            self.record_result_pub.publish(resp)
+            self.get_logger().info(f'[RecordSave] {path}')
+        except Exception as e:
+            self.get_logger().error(f'[RecordSave] {e}')
+
+    def cb_record_load(self, msg):
+        try:
+            name   = msg.data.strip()
+            folder = os.path.join(os.path.expanduser('~'),
+                                  'ros2_adult/src/strategy/strategy',
+                                  self.location_folder, 'Parameter')
+            path   = os.path.join(folder, f'{name}.rec.json')
+            resp   = String()
+            if not os.path.exists(path):
+                resp.data = json.dumps({'error': f'{name}.rec.json 不存在'})
+            else:
+                with open(path, 'r', encoding='utf-8') as f:
+                    resp.data = f.read()
+            self.record_load_resp_pub.publish(resp)
+            self.get_logger().info(f'[RecordLoad] {path}')
+        except Exception as e:
+            self.get_logger().error(f'[RecordLoad] {e}')
+
+    def cb_record_export(self, msg):
+        try:
+            p          = json.loads(msg.data)
+            base_id    = int(p['base_id'])
+            def_spd    = int(p.get('default_speed', 50))
+            num_motors = int(p.get('num_motors', 27))
+            selected   = set(int(x) for x in p.get('selected_motors', []))
+            frames     = p.get('frames', [])
+            resp       = String()
+
+            if base_id < 1000:
+                resp.data = json.dumps({'error': 'base_id 須 ≥ 1000'})
+                self.record_result_pub.publish(resp)
+                return
+
+            all_ids   = [base_id] + [base_id + 1 + i for i in range(len(frames))]
+            conflicts = [i for i in all_ids if str(i) in self.saved_sectors]
+            if conflicts:
+                resp.data = json.dumps({'error': f'ID 衝突: {conflicts}'})
+                self.record_result_pub.publish(resp)
+                return
+
+            sector_dir = os.path.join(os.path.expanduser('~'),
+                                      'ros2_adult/src/strategy/strategy',
+                                      self.location_folder, 'Parameter', 'sector')
+            os.makedirs(sector_dir, exist_ok=True)
+
+            ml_data   = []
+            frame_ids = []
+            for i, frame in enumerate(frames):
+                sector_id   = base_id + 1 + i
+                motors_data = frame.get('motors', {})
+                data = []
+                for mid in range(1, num_motors + 1):
+                    key = str(mid)
+                    if mid in selected and key in motors_data:
+                        m   = motors_data[key]
+                        spd = int(m.get('vel', def_spd))
+                        if spd <= 0: spd = def_spd
+                        data.extend([spd, int(m['pos'])])
+                    else:
+                        data.extend([0, -1])
+
+                self.saved_sectors[str(sector_id)] = {'opcode': 242, 'data': data}
+                self.save_sector_to_disk(str(sector_id), 242, data)
+
+                delay = int(frames[i+1]['t_ms'] - frame['t_ms']) if i < len(frames)-1 else 200
+                ml_data.extend([sector_id, delay])
+                frame_ids.append(sector_id)
+
+            self.saved_sectors[str(base_id)] = {'opcode': 244, 'data': ml_data}
+            self.save_sector_to_disk(str(base_id), 244, ml_data)
+
+            resp.data = json.dumps({'status': 'ok', 'motion_list_id': base_id, 'frame_ids': frame_ids})
+            self.record_result_pub.publish(resp)
+            self.get_logger().info(f'[RecordExport] base={base_id}, {len(frames)} 幀')
+        except Exception as e:
+            self.get_logger().error(f'[RecordExport] {e}')
+            resp      = String()
+            resp.data = json.dumps({'error': str(e)})
+            self.record_result_pub.publish(resp)
 
 def main(args=None):
     rclpy.init(args=args)
