@@ -87,6 +87,7 @@ class MotionNode(Node):
 
         # --- Undo / Redo ---
         self._undo_speed = 50
+        self._special_undo_speeds = {16:3478,17:3478,18:3478,19:3478,22:3478,23:3478,24:3478,25:3478}  # {motor_id: speed}，特殊馬達的 undo 速度
         self._max_history = 20
         self._history_stack = []   # entries: {'state': {motor_id: pos}, 'label': str}
         self._future_stack = []
@@ -804,11 +805,14 @@ class MotionNode(Node):
                 data = step['data']
                 reverse_data = []
                 for i in range(len(data) // 2):
-                    reverse_data.extend([self._undo_speed, -data[i * 2 + 1]])
+                    reverse_data.extend([self._get_undo_speed(i + 1), -data[i * 2 + 1]])
                 self._orig_ep_ref(reverse_data, 'RELATIVE', False)
             else:                      # Absolute：還原到該步執行前的刻度
                 self._restore_state(step['pre_state'])
             time.sleep(max(0.05, step['delay_ms'] / 1000.0))
+
+    def _get_undo_speed(self, motor_id):
+        return self._special_undo_speeds.get(motor_id, self._undo_speed)
 
     def _publish_history_state(self):
         msg = Int16MultiArray()
@@ -844,7 +848,7 @@ class MotionNode(Node):
             data = prev_entry['exec_data']
             reverse_data = []
             for i in range(len(data) // 2):
-                reverse_data.extend([self._undo_speed, -data[i * 2 + 1]])
+                reverse_data.extend([self._get_undo_speed(i + 1), -data[i * 2 + 1]])
             self._orig_ep_ref(reverse_data, 'RELATIVE', False)
         else:
             self._restore_state(prev_entry['state'])
@@ -899,9 +903,9 @@ class MotionNode(Node):
             self.get_logger().warn("[Restore] Snapshot is empty, nothing to restore.")
             return
         if speeds:
-            target_joints = {mid: (pos, speeds.get(mid, self._undo_speed)) for mid, pos in snapshot.items()}
+            target_joints = {mid: (pos, speeds.get(mid, self._get_undo_speed(mid))) for mid, pos in snapshot.items()}
         else:
-            target_joints = {mid: (pos, self._undo_speed) for mid, pos in snapshot.items()}
+            target_joints = {mid: (pos, self._get_undo_speed(mid)) for mid, pos in snapshot.items()}
         self.publish_command(target_joints)
         self.last_goals.update(snapshot)
         reset_msg = Bool()
@@ -922,8 +926,7 @@ class MotionNode(Node):
                 key = str(mid)
                 if mid in selected and key in motors_data:
                     m   = motors_data[key]
-                    spd = int(m.get('vel', 50))
-                    if spd <= 0: spd = 50
+                    spd = max(50, int(m.get('vel', 50)))
                     data.extend([spd, int(m['pos'])])
                 else:
                     data.extend([0, -1])
@@ -1004,8 +1007,7 @@ class MotionNode(Node):
                     key = str(mid)
                     if mid in selected and key in motors_data:
                         m   = motors_data[key]
-                        spd = int(m.get('vel', def_spd))
-                        if spd <= 0: spd = def_spd
+                        spd = max(def_spd, int(m.get('vel', def_spd)))
                         data.extend([spd, int(m['pos'])])
                     else:
                         data.extend([0, -1])
