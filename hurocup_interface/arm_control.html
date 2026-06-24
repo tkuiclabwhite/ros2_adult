@@ -7,15 +7,16 @@
 
   <link rel="stylesheet" type="text/css" href="./css/style.css">
 
+  <script src="./js/config.js"></script>
   <script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
   <script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
   <script type="text/javascript">
 
     var connectFlag = false;
     var checkConnectionInterval = null;
-    var myAddress = '172.17.121.10';
+    var myAddress = window.ROBOT_CONFIG.ip;
 
-    var ros = new ROSLIB.Ros({ url: 'ws://172.17.121.10:9090' });
+    var ros = new ROSLIB.Ros({ url: 'ws://' + window.ROBOT_CONFIG.ip + ':9090' });
 
     ros.on('connection', function () {
       connectFlag = true;
@@ -433,7 +434,6 @@
       <tr>
         <td>
           <select style="height:25px; margin-right:5px;" id="addressSelect">
-            <option value="172.17.121.10">172.17.121.10</option>
             <option value="localhost">localhost</option>
           </select>
         </td>

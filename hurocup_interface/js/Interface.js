@@ -1,5 +1,5 @@
 var ros = new ROSLIB.Ros({
-  url: "ws://172.17.121.10:9090"
+  url: "ws://" + window.ROBOT_CONFIG.ip + ":9090"
 });
 ros.on('connection', function () {
   console.log('Connection made!');
@@ -143,7 +143,7 @@ var SendPackageCallBack = null;
 var ExecuteCallBack = null;
 
 var connectFlag = false;
-var myAddress = "172.17.121.10";
+var myAddress = window.ROBOT_CONFIG.ip;
 
 var executeSubscribeFlag = false;
 var standSubscribeFlag = false;

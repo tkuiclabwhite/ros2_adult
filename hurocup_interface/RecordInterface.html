@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <link rel="SHORTCUT ICON" href="./picture/icon.png">
     <title>Record Interface</title>
+    <script src="./js/config.js"></script>
     <script src="./js/roslib/eventemitter2.min.js"></script>
     <script src="./js/roslib/roslib.min.js"></script>
     <link rel="stylesheet" href="./css/style.css">
@@ -204,7 +205,6 @@
 <div class="conn-bar">
     <p id="connected">● Connected</p>
     <select id="addressSelect">
-        <option value="172.17.121.10">172.17.121.10</option>
         <option value="localhost">localhost</option>
     </select>
     <button onclick="enterAddress()">Enter Address</button>
@@ -368,7 +368,7 @@ let playingIdx   = -1;
 let selFrame     = null;
 
 // ROS publishers
-var ros = null, myAddress = '172.17.121.10';
+var ros = null, myAddress = window.ROBOT_CONFIG.ip;
 var pubPlay, pubSave, pubLoadReq, pubExport;
 
 // ════════════════════════════════════════

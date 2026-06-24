@@ -18,6 +18,8 @@ from ik_solve import (pixel_world_to_ik_target, solve_ik, q_to_ticks,
                       world_to_target, fk, to_isaac,
                       CHANNELS, JOINT_NAMES, HAND_TICK)
 from geometry_msgs.msg import Point
+# === 新增:ray-cast 法(精度升級,座標系已對齊舊 homography)===
+from .ball_to_world import PixelToWorldRaycast
 
 
 # 2025.4.17
@@ -543,6 +545,15 @@ class BasketBall(API):
             self.get_logger().info("[PixelToWorld] 單應矩陣載入成功")
         except Exception as e:
             self.get_logger().warning(f"[PixelToWorld] 無法載入 homography.npz: {e}")
+        # === 新增:並行載入 ray-cast mapper(對比用)===
+        # ball_height_cm = 球心離地高度,與舊法的 ball_radius_cm=6.5 對應
+        _cam_npz = __file__.replace("bb.py", "camera_params.npz")
+        self.mapper_new = None
+        try:
+            self.mapper_new = PixelToWorldRaycast.load(_cam_npz, ball_height_cm=6.5)
+            self.get_logger().info("[PixelToWorldRaycast] ray-cast 標定載入成功")
+        except Exception as e:
+            self.get_logger().warning(f"[PixelToWorldRaycast] 無法載入 camera_params.npz: {e}")
         self.object_position_pub = self.create_publisher(Point, '/object_position', 10)
         self.create_timer(0.2, self.main)
         
@@ -567,7 +578,7 @@ class BasketBall(API):
         #self.get_logger().info(f"orange_count={self.target.color_mask_subject_orange}, ball_size={self.target.ball_size}")
    
   ##############???????
-        # self.is_start = True
+        self.is_start = True
         if  self.is_start: #api.send.Web
             self.get_logger().info(f'step = {self.step}')
             self.get_logger().info(f'ball_size = {self.target.ball_size}')
@@ -947,6 +958,21 @@ class BasketBall(API):
                 self.get_logger().info(
                     f'[PixelToWorld] 球世界座標: X={ball_world_x:.2f}, Y={ball_world_y:.2f}'
                 )
+
+                # === 對比:並行算 ray-cast 座標,印出來比對(IK 仍用舊座標)===
+                if self.mapper_new is not None:
+                    try:
+                        nx, ny = self.mapper_new.bbox_to_world(
+                            self.target.ball_x_min, self.target.ball_y_min,
+                            self.target.ball_x_max, self.target.ball_y_max
+                        )
+                        self.get_logger().info(
+                            f'[對比] 舊homography=({ball_world_x:.1f},{ball_world_y:.1f})  '
+                            f'新raycast=({nx:.1f},{ny:.1f})  '
+                            f'差=({nx-ball_world_x:+.1f},{ny-ball_world_y:+.1f})cm'
+                        )
+                    except Exception as e:
+                        self.get_logger().warning(f'[對比] ray-cast 計算失敗: {e}')
 
                 ik_target = pixel_world_to_ik_target(
                     ball_world_x_cm=ball_world_x,

@@ -69,12 +69,13 @@
             text-shadow: 0 0 8px rgba(0, 214, 0, 0.5);
         }
 		</style>
+	<script src="./js/config.js"></script>
 	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
 	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
 	<script type="text/javascript">
 		var wasOnline = true;
 		var ros = new ROSLIB.Ros({
-		url: "ws://172.17.121.10:9090"
+		url: "ws://" + window.ROBOT_CONFIG.ip + ":9090"
 		});
 
 		function checkConnection() {
@@ -274,7 +275,7 @@
 		var SensorPackage_Subscriber = null;
 
 		var connectFlag = false;
-		var myAddress = "172.17.121.10";
+		var myAddress = window.ROBOT_CONFIG.ip;
 		
 		var Thetavaluetmp = 0;
 		var Xvaluetmp = 0;
@@ -564,22 +565,14 @@
 					document.getElementById("lccosc_lockrange").value = res.t_dsp;
 					document.getElementById("lccnow_stand_height").value = res.stand_height;
 					document.getElementById("lccnow_com_height").value = res.com_height;
-					document.getElementById("lcclift_height").value = res.lift_height;
+					document.getElementById("lccbase_lift_z").value = res.board_high;
+					document.getElementById("lccClearance").value = res.clearance;
 					document.getElementById("lccimukp").value = res.imukp;
 					document.getElementById("lccimukd").value = res.imukd;
 					document.getElementById("lcctarget_pitch").value = res.target_pitch;
 					document.getElementById("lcctarget_roll").value = res.target_roll;
 					document.getElementById("lccyaw_kp").value = res.yaw_kp;
 					document.getElementById("lccmax_correction").value = res.max_correction;
-					document.getElementById("lccpitch_deadband").value = res.pitch_deadband;
-					document.getElementById("lccroll_deadband").value = res.roll_deadband;
-					document.getElementById("lcchip_reflex_kp").value = res.hip_reflex_kp;
-					document.getElementById("lcchip_reflex_kd").value = res.hip_reflex_kd;
-					document.getElementById("lccknee_reflex_kp").value = res.knee_reflex_kp;
-					document.getElementById("lccknee_reflex_kd").value = res.knee_reflex_kd;
-					document.getElementById("lccankle_reflex_kp").value = res.ankle_reflex_kp;
-					document.getElementById("lccankle_reflex_kd").value = res.ankle_reflex_kd;
-					document.getElementById("lccreflex_max_deg").value = res.reflex_max_deg;
 				});
 			}
 		}
@@ -612,9 +605,9 @@
 					mode: s_type,
 					period_t: getVal(prefix + "period_t", 360),
 					com_y_swing: getVal(prefix + "com_y_swing", 0),
-					width_size: getVal(prefix + "width_size", 4.5),
+					width_size: getVal(prefix + "width_size", 0),
 					t_dsp: getVal(prefix + "osc_lockrange", 0),
-					lift_height: getVal(prefix + "base_default_z", 2.5),
+					lift_height: getVal(prefix + "base_default_z", 0),
 					stand_height: getVal(prefix + "now_stand_height", 0),
 					com_height: getVal(prefix + "now_com_height", 0),
 					board_high: getVal(prefix + "base_lift_z", 0),
@@ -628,26 +621,18 @@
 					mode: s_type,
 					period_t: getVal("lccperiod_t", 360),
 					com_y_swing: getVal("lcccom_y_swing", 0),
-					width_size: getVal("lccwidth_size", 4.5),
+					width_size: getVal("lccwidth_size", 0),
 					t_dsp: getVal("lccosc_lockrange", 0),
 					stand_height: getVal("lccnow_stand_height", 0),
 					com_height: getVal("lccnow_com_height", 0),
-					lift_height: getVal("lcclift_height", 2.5),
+					board_high: getVal("lccbase_lift_z", 0),
+					clearance: getVal("lccClearance", 3.0),
 					imukp: getVal("lccimukp", 0),
 					imukd: getVal("lccimukd", 0),
 					target_pitch: getVal("lcctarget_pitch", 0),
 					target_roll: getVal("lcctarget_roll", 0),
 					yaw_kp: getVal("lccyaw_kp", 0),
-					max_correction: getVal("lccmax_correction", 0),
-					pitch_deadband: getVal("lccpitch_deadband", 3.0),
-					roll_deadband: getVal("lccroll_deadband", 5.0),
-					hip_reflex_kp: getVal("lcchip_reflex_kp", 0),
-					hip_reflex_kd: getVal("lcchip_reflex_kd", 0),
-					knee_reflex_kp: getVal("lccknee_reflex_kp", 0),
-					knee_reflex_kd: getVal("lccknee_reflex_kd", 0),
-					ankle_reflex_kp: getVal("lccankle_reflex_kp", 0),
-					ankle_reflex_kd: getVal("lccankle_reflex_kd", 0),
-					reflex_max_deg: getVal("lccreflex_max_deg", 15.0)
+					max_correction: getVal("lccmax_correction", 0)
 				});
 				web_src_parameter_Topic.publish(lcc_msg_to_send);
 			}
@@ -696,24 +681,16 @@
 					"width_size":     getVal("lccwidth_size"),
 					"period_t":       getVal("lccperiod_t"),
 					"Tdsp":           getVal("lccosc_lockrange"),
+					"Board_High":     getVal("lccbase_lift_z"),
 					"STAND_HEIGHT":   getVal("lccnow_stand_height"),
 					"COM_HEIGHT":     getVal("lccnow_com_height"),
-					"lift_height":    getVal("lcclift_height"),
+					"Clearance":      getVal("lccClearance"),
 					"imukp":          getVal("lccimukp"),
 					"imukd":          getVal("lccimukd"),
 					"target_pitch":   getVal("lcctarget_pitch"),
 					"target_roll":    getVal("lcctarget_roll"),
 					"yaw_kp":         getVal("lccyaw_kp"),
-					"max_correction": getVal("lccmax_correction"),
-					"pitch_deadband": getVal("lccpitch_deadband"),
-					"roll_deadband":  getVal("lccroll_deadband"),
-					"hip_reflex_kp":   getVal("lcchip_reflex_kp"),
-					"hip_reflex_kd":   getVal("lcchip_reflex_kd"),
-					"knee_reflex_kp":  getVal("lccknee_reflex_kp"),
-					"knee_reflex_kd":  getVal("lccknee_reflex_kd"),
-					"ankle_reflex_kp": getVal("lccankle_reflex_kp"),
-					"ankle_reflex_kd": getVal("lccankle_reflex_kd"),
-					"reflex_max_deg":  getVal("lccreflex_max_deg")
+					"max_correction": getVal("lccmax_correction")
 				};
 			}
 
@@ -813,6 +790,7 @@
 			switch (statetype) {
 				case 1: document.getElementById("luClearance").value = clearance_tmp; break;
 				case 2: document.getElementById("ldClearance").value = clearance_tmp; break;
+				case 3: document.getElementById("lccClearance").value = clearance_tmp; break;
 			}
 		}
 		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
@@ -910,7 +888,6 @@
 				<tr>
 					<td>
 						<select style="height:25px; margin-right: 5px;" id="addressSelect">
-							<option value="172.17.121.10">172.17.121.10</option>
 							<option value="localhost">localhost</option>
 						</select>
 					</td>
@@ -1159,8 +1136,12 @@
 						<td><input type="text" name="lccosc_lockrange" id="lccosc_lockrange" value="0" style="width: 140px" onchange="changeosc_lockrange_value(this.value)"></td>
 					</tr>
 					<tr>
-						<td>lift_height</td>
-						<td><input type="text" name="lcclift_height" id="lcclift_height" value="0" style="width: 140px"></td>
+						<td>Clearance</td>
+						<td><input type="text" name="lccClearance" id="lccClearance" value="0" style="width: 140px" onchange="changeClearance(this.value)"></td>
+					</tr>
+					<tr>
+						<td>Board_High</td>
+						<td><input type="text" name="lccbase_lift_z" id="lccbase_lift_z" value="0" style="width: 140px" onchange="changebase_lift_z_value(this.value)"></td>
 					</tr>
 					<tr>
 						<td>STAND_HEIGHT</td>
@@ -1193,42 +1174,6 @@
 					<tr>
 						<td>max_correction</td>
 						<td><input type="text" name="lccmax_correction" id="lccmax_correction" value="0" style="width: 140px"></td>
-					</tr>
-					<tr>
-						<td>pitch_deadband</td>
-						<td><input type="text" name="lccpitch_deadband" id="lccpitch_deadband" value="0" style="width: 140px"></td>
-					</tr>
-					<tr>
-						<td>roll_deadband</td>
-						<td><input type="text" name="lccroll_deadband" id="lccroll_deadband" value="0" style="width: 140px"></td>
-					</tr>
-					<tr>
-						<td>hip_reflex_kp</td>
-						<td><input type="text" name="lcchip_reflex_kp" id="lcchip_reflex_kp" value="0" style="width: 140px"></td>
-					</tr>
-					<tr>
-						<td>hip_reflex_kd</td>
-						<td><input type="text" name="lcchip_reflex_kd" id="lcchip_reflex_kd" value="0" style="width: 140px"></td>
-					</tr>
-					<tr>
-						<td>knee_reflex_kp</td>
-						<td><input type="text" name="lccknee_reflex_kp" id="lccknee_reflex_kp" value="0" style="width: 140px"></td>
-					</tr>
-					<tr>
-						<td>knee_reflex_kd</td>
-						<td><input type="text" name="lccknee_reflex_kd" id="lccknee_reflex_kd" value="0" style="width: 140px"></td>
-					</tr>
-					<tr>
-						<td>ankle_reflex_kp</td>
-						<td><input type="text" name="lccankle_reflex_kp" id="lccankle_reflex_kp" value="0" style="width: 140px"></td>
-					</tr>
-					<tr>
-						<td>ankle_reflex_kd</td>
-						<td><input type="text" name="lccankle_reflex_kd" id="lccankle_reflex_kd" value="0" style="width: 140px"></td>
-					</tr>
-					<tr>
-						<td>reflex_max_deg</td>
-						<td><input type="text" name="lccreflex_max_deg" id="lccreflex_max_deg" value="15" style="width: 140px"></td>
 					</tr>
 				</table>
 				<br />

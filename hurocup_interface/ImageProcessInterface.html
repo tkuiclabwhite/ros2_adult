@@ -9,6 +9,7 @@
 	<link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
 
 	<!-- JavaScript References -->
+	<script src="./js/config.js"></script>
 	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
 	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
 	<script type="text/javascript" type="text/javascript">
@@ -16,7 +17,7 @@
 		var wasOnline = true;
 		var checkConnectionInterval = null;
 		var ros = new ROSLIB.Ros({
-		url: "ws://172.17.121.10:9090"
+		url: "ws://" + window.ROBOT_CONFIG.ip + ":9090"
 		});
 
 		function checkConnection() {
@@ -280,8 +281,7 @@
 
 		//-----
 		var connectFlag = false;
-		var myAddress = "172.17.121.10";
-		// var myAddress = "0.0.0.0";
+		var myAddress = window.ROBOT_CONFIG.ip;
 
 		var B_SetupCamera_Flag = true;
 		var B_Start_Flag = true;
@@ -1157,6 +1157,8 @@
 
 <script>
 	window.addEventListener('DOMContentLoaded', function () {
+		document.getElementById('orign_image').src = 'http://' + window.ROBOT_CONFIG.ip + ':8080/stream?topic=/zoom_in';
+		document.getElementById('color_image').src = 'http://' + window.ROBOT_CONFIG.ip + ':8080/stream?topic=/processed_image';
 		let loc = window.currentStrategy || "";
 		console.log('Raw loaded strategy:', loc);
 		
@@ -1220,10 +1222,7 @@
 				<tr>
 					<td>
 						<select style="height:25px; margin-right: 5px;" id="addressSelect">
-							<!-- <option value="172.17.121.10">172.17.121.10</option> -->
-							<option value="172.17.121.10">172.17.121.10</option>
 							<option value="localhost">localhost</option>
-
 						</select>
 					</td>
 					<td>
@@ -1264,7 +1263,7 @@
 				<img
 					id="orign_image"
 					style="width:320px; height:240px; display:inline-block;"
-					src="http://172.17.121.10:8080/stream?topic=/zoom_in"					
+					src=""
 				/>
 				<!-- src="http://0.0.0.0:8080/stream?topic=/zed/zed_node/right/image_rect_color&image_transport=compressed"					 -->
 
@@ -1273,13 +1272,13 @@
 
 
 			<!-- <div id="div_color_image">
-				<img id="color_image" style="-webkit-user-select: none; display:inline;" src="http://172.17.121.10:8080/stream?topic=/processed_image&image_transport=compressed">
+				<img id="color_image" style="-webkit-user-select: none; display:inline;" src="">
 			</div> -->
 			<div id="div_color_image">
-				<img 
-					id="color_image" 
-					style="width:320px; height:240px; display:inline-block;" 
-					src="http://172.17.121.10:8080/stream?topic=/processed_image&image_transport=compressed"
+				<img
+					id="color_image"
+					style="width:320px; height:240px; display:inline-block;"
+					src=""
 					alt="Processed Image Stream"
 				/>
 			</div>
