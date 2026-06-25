@@ -448,6 +448,13 @@ def main():
                 # 下發目標角度
                 if baseline_ang:
                     rel_cmd = calc_rel_gp_from_ang(ang_now, baseline_ang)
+                    
+                    # 上下樓梯 (LC) 專用：髖 roll (17/23) 跟腳踝 roll (20/21/26/27) 支撐方向相反，
+                    # 只在 mode 1/2 反轉這兩顆，其餘馬達與一般走路/SR_Continuous 不受影響
+                    if current_mode in (1, 2):
+                        for mid in (17, 23):
+                            if mid in rel_cmd:
+                                rel_cmd[mid] = -rel_cmd[mid]
                     gp_abs = {}
                     for mid in LEG_IDS:
                         base = baseline_ticks.get(mid, DEFAULT_TICKS)
