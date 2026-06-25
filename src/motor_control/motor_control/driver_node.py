@@ -122,6 +122,9 @@ class DynamixelDriver(Node):
                     self._setup_single_indirect_address(ph, pk, mid)
                     self.get_logger().info(f"ID {mid:02d} 初始化成功 ({'P-Series' if is_p_series else 'X-Series'})")
                     break
+        total = len(self.id_port_map)
+        self.get_logger().info(f"硬體初始化完成，共連接 {total}/{len(ALL_TARGET_IDS)} 顆馬達。")
+
 
     def _setup_single_indirect_address(self, ph, pk, mid):
         """設定間接位址映射：將 Velocity 與 Goal Position 映射到 Indirect Data 區塊"""

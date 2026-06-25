@@ -11,17 +11,17 @@ from strategy.API import API
 # HEAD_HORIZONTAL  (ID 1)：2048 = 正中央，> 2048 = 左轉，< 2048 = 右轉
 # HEAD_VERTICAL (ID 2)：2048 = 正中央，> 2048 = 往下看，< 2048 = 往上看
 PAN_CENTER  = 2048
-TILT_SEARCH = 2746   # 往下看地面球的角度
-PAN_MIN,  PAN_MAX  = 1024, 3072
-TILT_MIN, TILT_MAX = 2048, 3072
+TILT_SEARCH = 2750   # 往下看地面球的角度
+PAN_MIN,  PAN_MAX  = 1024, 3096
+TILT_MIN, TILT_MAX = 1450, 2900
 HEAD_TRACK_GAIN = 0.15   # 頭部追蹤增益（越大越靈敏）
 X_FOV_DEG = 64.5          # 水平視角（度）
 Y_FOV_DEG = 40.0          # 垂直視角（度）
 
 # ── 步態速度參數 ───────────────────────────────────────────────────────────────
 # 正 x = 前進，正 y = 左平移，正 theta = 左旋轉
-FWD_FAST  =  2500   # 快速前進
-FWD_MED   =  1000   # 中速前進
+FWD_FAST  =  5000   # 快速前進
+FWD_MED   =  3000   # 中速前進
 FWD_SLOW  =   400   # 慢速前進
 FWD_STOP  =     0   # 停止
 FWD_BACK  =  -800   # 後退
@@ -36,58 +36,80 @@ ROT_R     =  -4     # 右旋轉
 
 # ── 狀態轉換閾值 ───────────────────────────────────────────────────────────────
 BALL_STABLE_FRAMES  = 5      # 連續偵測到球幾幀才確認球已找到
-BALL_APPROACH1_SIZE = 1500   # 第一次接近的停止 球像素面積
-BALL_CLOSE_SIZE     = 4500   # 	APF 導航的停止 球像素面積
+BALL_APPROACH1_SIZE = 2500   # 第一次接近的停止 球像素面積
+BALL_CLOSE_SIZE     = 2500   # 	APF 導航的停止 球像素面積
 BALL_ALIGN_X_TOL    = 25     # 水平誤差容忍值（像素）：SECOND_SEARCH_AND_ALIGN 對準
+BALL_KICK_X_TOL     = 40     # 水平誤差容忍值（像素）：WEAK_KICK 前置中檢查
+PAN_CENTER_TOL      = 150    # 頭部 pan 偏移容忍值（馬達單位）：超過此值視為頭未正
 BALL_ALIGN_FRAMES   = 4      # 連續對準幾幀才進入 FINAL_SHOT
+BALL_LOST_FRAMES    = 5      # 連續失蹤幾幀才退回搜尋
 
 # ── 障礙物迴避調整參數 ─────────────────────────────────────────────────────────
 BLUE_SIDE_THRESH    = 600    # 側欄藍色面積超過此值才開始閃避
 BLUE_CENTER_THRESH  = 1500   # 中欄藍色面積超過此值才減速
 
+# ── IMU 對準參數（SECOND_SEARCH_AND_ALIGN 繞球對準用）────────────────────────────
+# yaw > 0 = 機器人向左偏，< 0 = 向右偏（相對於開場歸零時的方向）
+# ORBIT_ROT / ORBIT_TRANS 的正負號請實測後確認
+YAW_TOL     =  5.0   # yaw 誤差容忍值（度），在此範圍內視為對準球門
+CY_TARGET   = 180    # 射門準備距離對應的球畫面 y（待實測調整，0~240）
+CY_TOL      =  20    # cy 誤差容忍值（像素）
+ORBIT_ROT   =   2    # 繞球旋轉速度（ROT 單位，待實測）
+ORBIT_TRANS = 300    # 繞球平移速度（TRANS 單位，待實測）
+
+# ── 顏色索引（對應 API.COLORS 陣列順序）──────────────────────────────────────────
+_COLOR_IDX = {
+    'Orange': 0, 'Yellow': 1, 'Blue': 2,
+    'Green':  3, 'Black':  4, 'Red':  5, 'White': 6,
+}
+
 # ── 限制掃描象限對應表 ─────────────────────────────────────────────────────────
 # 鍵值：(start_side, ball_relative_pos)
 # 對應：(pan_lo, pan_hi, tilt)
-BALL_COLOR        = 'yellow'                    # 球的顏色'Orange', 'Yellow', 'Blue',
+BALL_COLOR        = 'Yellow'                    # 球的顏色'Orange', 'Yellow', 'Blue',
                                                         #'Green', 'Black', 'Red', 'White',
-START_SIDE        = 'left'                      # 機器人在場上的起始位置（'left' / 'center' / 'right'）
-BALL_RELATIVE_POS = 'front'                     # 球相對於機器人的方向（'left' / 'front' / 'right'）
-START_STATE = 0   # 測試用：從第幾個狀態開始（0~5）
+START_SIDE        = 'center'                      # 機器人在場上的起始位置（'left' / 'center' / 'right'）
+BALL_RELATIVE_POS = 'left'                     # 球相對於機器人的方向（'left' / 'front' / 'right'）
+START_STATE = 1   # 測試用：從第幾個狀態開始（0~5）
+STOP_STATE  = 2  # 測試用：執行完此狀態後停步收尾（-1 = 不提前停止）
 
 # ── 原地步態校正量 ─────────────────────────────────────────────────────────────
-STAY_X     = 2200   # 原地步態 X 校正（加在所有 sendContinuousValue 的 x 上）
+STAY_X     = -1800   # 原地步態 X 校正（加在所有 sendContinuousValue 的 x 上）
 STAY_Y     = 0      # 原地步態 Y 校正
-STAY_THETA = 0      # 原地步態 Theta 校正
+STAY_THETA = 2      # 原地步態 Theta 校正
 
 # ── 站姿微調 ────────────────────────────────────────────────────────────────────
-STAND_CORRECT_ATK    = False   # 是否在比賽開始時執行站姿微調
-STAND_CORRECT_SECTOR = 102     # 站姿微調 sector 編號
+STAND_CORRECT_ATK    = True   # 是否在比賽開始時執行站姿微調
+STAND_CORRECT_SECTOR = 201     # 站姿微調 sector 編號
 
 # 狀態編號對照表
 _STATE_NAMES = [
     'INIT_DIRECTIONAL_SEARCH', #0
-    'APPROACH_BALL_1',         #1 
-    'WEAK_KICK',               #2 
-    'VISUAL_GUIDED_APPROACH',  #3
-    'SECOND_SEARCH_AND_ALIGN', #4
-    'FINAL_SHOT',              #5 
+    'APPROACH_BALL_1',         #1
+    'ALIGN_TO_GOAL',           #2
+    'WEAK_KICK',               #3
+    'VISUAL_GUIDED_APPROACH',  #4
+    'SECOND_SEARCH_AND_ALIGN', #5
+    'FINAL_SHOT',              #6
 ]
 _STATE_DESCS = [
     '在限制象限內掃頭，找到球後前進',
-    '走向球，保持球在畫面中央，距離夠近後輕踢',
+    '走向球，保持球在畫面中央，距離夠近後停步',
+    '到位後繞球修正 yaw，確認朝向球門方向',
     '輕踢第一腳，將球推入射門準備區',
     'APF 人工勢場導航，繞過藍色守門員往球靠近',
-    '低頭重新鎖定球，慢速橫向對準準備射門',
+    '低頭重新鎖定球，慢速對準準備射門',
     '依球的位置選腳，全力射門',
 ]
 # 各狀態對應的 ANSI 前景色（亮色系）
 _STATE_COLORS = [
     '\033[96m',   # 0 INIT_DIRECTIONAL_SEARCH  — 亮青色
     '\033[92m',   # 1 APPROACH_BALL_1           — 亮綠色
-    '\033[93m',   # 2 WEAK_KICK                 — 亮黃色
-    '\033[95m',   # 3 VISUAL_GUIDED_APPROACH    — 亮洋紅
-    '\033[94m',   # 4 SECOND_SEARCH_AND_ALIGN   — 亮藍色
-    '\033[91m',   # 5 FINAL_SHOT                — 亮紅色
+    '\033[97m',   # 2 ALIGN_TO_GOAL             — 亮白色
+    '\033[93m',   # 3 WEAK_KICK                 — 亮黃色
+    '\033[95m',   # 4 VISUAL_GUIDED_APPROACH    — 亮洋紅
+    '\033[94m',   # 5 SECOND_SEARCH_AND_ALIGN   — 亮藍色
+    '\033[91m',   # 6 FINAL_SHOT                — 亮紅色
 ]
 SCAN_MAP = {
     ('left',   'left'):  (2048, 3072, TILT_SEARCH),
@@ -122,6 +144,7 @@ class PenaltyKickAtk(API):
         self._state        = 'INIT_DIRECTIONAL_SEARCH'
         self._stable_count = 0   # 連續偵測到球的幀數計數
         self._align_count  = 0   # 連續對準的幀數計數
+        self._lost_count   = 0   # 連續失蹤幀數計數
         self._stance_done  = False   # 本次 is_start=True 後是否已執行站姿調整
 
         # 步態旗標
@@ -162,6 +185,7 @@ class PenaltyKickAtk(API):
         self._state        = _STATE_NAMES[START_STATE]
         self._stable_count = 0
         self._align_count  = 0
+        self._lost_count   = 0
         self._walk_active  = False
         self._stance_done  = False
 
@@ -170,7 +194,7 @@ class PenaltyKickAtk(API):
         self.sendHeadMotor(2, self._tilt, 30)
 
         # 從特定狀態跳入時的前置初始化
-        if START_STATE == 4:   # SECOND_SEARCH_AND_ALIGN
+        if _STATE_NAMES[START_STATE] == 'SECOND_SEARCH_AND_ALIGN':
             self._tilt = TILT_MAX - 150   # 直接往下看找球
             self.sendHeadMotor(2, self._tilt, 30)
 
@@ -182,17 +206,20 @@ class PenaltyKickAtk(API):
     # ────────────────────────────────────────────────────── 視覺輔助函式 ────────
 
     def _get_ball(self):
-        """回傳最大黃色物件的 (cx, cy, area)，若無則回傳 None。"""
-        objs = self.get_objects(BALL_COLOR)
-        if not objs:
+        """回傳面積最大的球色物件 (cx, cy, area)，若無則回傳 None。"""
+        idx = _COLOR_IDX[BALL_COLOR]
+        best_i    = None
+        best_size = 100   # 最小面積門檻
+        for i in range(self.color_counts[idx]):
+            if self.object_sizes[idx][i] > best_size:
+                best_size = self.object_sizes[idx][i]
+                best_i = i
+        if best_i is None:
             self._disp_ball = None
             return None
-        best = max(objs, key=lambda o: o['area'])
-        if best['area'] < 100:
-            self._disp_ball = None
-            return None
-        cx, cy = best['centroid']
-        result = float(cx), float(cy), float(best['area'])
+        cx = (self.object_x_max[idx][best_i] + self.object_x_min[idx][best_i]) // 2
+        cy = (self.object_y_max[idx][best_i] + self.object_y_min[idx][best_i]) // 2
+        result = float(cx), float(cy), float(self.object_sizes[idx][best_i])
         self._disp_ball = result
         return result
 
@@ -201,18 +228,18 @@ class PenaltyKickAtk(API):
         將藍色障礙物依畫面 x 位置分為左、中、右三欄，各欄寬約 107px。
         回傳 (blue_left, blue_center, blue_right)，單位為像素面積總和。
         """
-        objs  = self.get_objects('blue')
+        idx   = _COLOR_IDX['Blue']
         left  = center = right = 0.0
         col_w = 320 / 3.0
-        for o in objs:
-            cx   = o['centroid'][0]
-            area = float(o['area'])
+        for i in range(self.color_counts[idx]):
+            size = float(self.object_sizes[idx][i])
+            cx   = (self.object_x_max[idx][i] + self.object_x_min[idx][i]) // 2
             if cx < col_w:
-                left   += area
+                left   += size
             elif cx < col_w * 2:
-                center += area
+                center += size
             else:
-                right  += area
+                right  += size
         self._disp_blue = left, center, right
         return left, center, right
 
@@ -350,26 +377,76 @@ class PenaltyKickAtk(API):
         ball = self._get_ball()
 
         if ball is None:
-            # 短暫失去球，回到搜尋狀態
-            self._walk(FWD_STOP, TRANS_S, ROT_S)
-            self._stable_count = 0
-            self._state = 'INIT_DIRECTIONAL_SEARCH'
+            self._lost_count += 1
+            if self._lost_count >= BALL_LOST_FRAMES:
+                self._walk(FWD_STOP, TRANS_S, ROT_S)
+                self._lost_count  = 0
+                self._stable_count = 0
+                self._state = 'INIT_DIRECTIONAL_SEARCH'
             return
 
+        self._lost_count = 0
         cx, cy, area = ball
         self._head_track(cx, cy)
         self._start_walk()   # 確保步態引擎已啟動（從此狀態跳入時需要）
 
-        # 橫向修正：讓球保持在畫面水平中心
         x_err = cx - 160
-        y_cmd = -x_err * (abs(TRANS_R) / 160)
 
-        if area < BALL_APPROACH1_SIZE:
-            self._walk(FWD_MED, int(y_cmd), ROT_S)
+        # 旋轉修正：依頭部 pan 偏移量讓身體轉向球，頭才能回到中心
+        # pan > PAN_CENTER = 頭朝左 = 球在左 → 身體左轉（theta 正）
+        pan_err   = self._pan - PAN_CENTER
+        theta_cmd = pan_err * (abs(ROT_L) / (PAN_MAX - PAN_CENTER)) * 3
+        theta_cmd = max(ROT_R * 2, min(ROT_L * 2, theta_cmd))
+
+        # 橫向微調：輔助細部置中
+        y_cmd = -x_err * (abs(TRANS_R) / 160) * 4.0
+
+        # 前進速度：頭偏越大 x 越小，頭未正時不往前
+        pan_abs_err = abs(pan_err)
+        x_cmd = int(FWD_MED * max(0.0, 1.0 - pan_abs_err / PAN_CENTER_TOL))
+
+        if area < BALL_APPROACH1_SIZE or abs(x_err) > BALL_KICK_X_TOL or pan_abs_err > PAN_CENTER_TOL:
+            self._walk(x_cmd, int(y_cmd), theta_cmd)
         else:
             self._stop_walk()
-            self._disp_last_event = '已到位 → WEAK_KICK'
-            self._state = 'WEAK_KICK'
+            self._disp_last_event = '已到位且置中 → ALIGN_TO_GOAL'
+            self._state = 'ALIGN_TO_GOAL'
+
+    def _handle_align_to_goal(self):
+        """
+        狀態 2 — ALIGN_TO_GOAL（對準球門）
+        到位後原地繞球修正 yaw，確認機器人朝向球門後才進入 WEAK_KICK。
+        連續對準 BALL_ALIGN_FRAMES 幀才轉移，避免瞬間誤判。
+        """
+        ball = self._get_ball()
+
+        if ball is None:
+            self._align_count = 0
+            self._disp_last_event = '失去球，退回 APPROACH_BALL_1'
+            self._state = 'APPROACH_BALL_1'
+            self._start_walk()
+            return
+
+        cx, cy, _ = ball
+        self._head_track(cx, cy)
+        self._start_walk()
+
+        yaw = self.imu_rpy[2]
+
+        if abs(yaw) > YAW_TOL:
+            rot_dir = -1 if yaw > 0 else 1
+            self._walk(FWD_STOP, int(-rot_dir * ORBIT_TRANS), rot_dir * ORBIT_ROT)
+            self._disp_last_event = f'yaw 修正中 {yaw:.1f}° → 目標 ±{YAW_TOL}°'
+            self._align_count = 0
+        else:
+            self._walk(FWD_STOP, TRANS_S, ROT_S)
+            self._align_count += 1
+            self._disp_last_event = f'yaw 對準 {yaw:.1f}°  [{self._align_count}/{BALL_ALIGN_FRAMES}]'
+            if self._align_count >= BALL_ALIGN_FRAMES:
+                self._stop_walk()
+                self._align_count = 0
+                self._disp_last_event = '對準球門完成 → WEAK_KICK'
+                self._state = 'WEAK_KICK'
 
     def _handle_weak_kick(self):
         """
@@ -438,13 +515,15 @@ class PenaltyKickAtk(API):
         """
         狀態 5 — SECOND_SEARCH_AND_ALIGN（第二次搜尋與對準）
         往下看重新鎖定被推進射門準備區的球。
-        慢速接近並橫向對準，準備最後射門。
-        連續對準 BALL_ALIGN_FRAMES 幀後進入 FINAL_SHOT。
+        對準順序：
+          1. IMU yaw 修正（繞球旋轉平移，讓機器人面向球門方向）
+          2. cy 距離修正（前後調整到射門準備距離）
+          3. cx 橫向微調（讓球在畫面正中央）
+        三者都在容忍範圍內後計入對準幀數，達標後進入 FINAL_SHOT。
         """
         ball = self._get_ball()
 
         if ball is None:
-            # 繼續往下傾斜頭部尋找球
             self._tilt = min(TILT_MAX, self._tilt + 15)
             self.sendHeadMotor(2, self._tilt, 20)
             self._align_count = 0
@@ -454,13 +533,35 @@ class PenaltyKickAtk(API):
         self._head_track(cx, cy)
         self._start_walk()
 
-        # 橫向修正
+        yaw   = self.imu_rpy[2]
         x_err = cx - 160
+        cy_err = cy - CY_TARGET
+
+        # 優先 1：yaw 對準（繞球旋轉平移）
+        # yaw > 0 = 機器人向左偏 → 需右轉（theta 負）並左移（y 正）
+        # yaw < 0 = 機器人向右偏 → 需左轉（theta 正）並右移（y 負）
+        # ORBIT_ROT / ORBIT_TRANS 正負號請實測確認
+        if abs(yaw) > YAW_TOL:
+            rot_dir = -1 if yaw > 0 else 1
+            self._walk(FWD_STOP, int(-rot_dir * ORBIT_TRANS), rot_dir * ORBIT_ROT)
+            self._disp_last_event = f'yaw 修正中 {yaw:.1f}° → 目標 ±{YAW_TOL}°'
+            self._align_count = 0
+            return
+
+        # 優先 2：前後距離修正（cy）
+        # cy 太小 = 球在畫面上方 = 距離太遠 → 前進
+        # cy 太大 = 球在畫面下方 = 距離太近 → 後退
+        if abs(cy_err) > CY_TOL:
+            x_cmd = FWD_SLOW if cy_err < 0 else -FWD_SLOW
+            self._walk(x_cmd, 0, ROT_S)
+            self._disp_last_event = f'距離修正中 cy={cy:.0f} → 目標 {CY_TARGET}±{CY_TOL}'
+            self._align_count = 0
+            return
+
+        # 優先 3：橫向微調（cx）
         y_cmd = -x_err * (abs(TRANS_R) / 160)
+        self._walk(FWD_STOP, int(y_cmd), ROT_S)
 
-        self._walk(FWD_SLOW, int(y_cmd), ROT_S)
-
-        # 水平誤差在容忍範圍內且球夠大，才計入對準幀數
         if abs(x_err) < BALL_ALIGN_X_TOL and area > BALL_APPROACH1_SIZE:
             self._align_count += 1
         else:
@@ -563,6 +664,20 @@ class PenaltyKickAtk(API):
         stable_bar = _bar(self._stable_count, BALL_STABLE_FRAMES)
         align_bar  = _bar(self._align_count,  BALL_ALIGN_FRAMES, '\033[94m')
 
+        # ── IMU yaw（依誤差上色）─────────────────────────────────────────────
+        yaw = self.imu_rpy[2]
+        yaw_col = '\033[91m' if abs(yaw) > YAW_TOL else '\033[92m'
+        yaw_str = f'{yaw_col}{yaw:.1f}°{R}  \033[90m容忍 ±{YAW_TOL}°{R}'
+
+        # ── cy 目標距離（依誤差上色）─────────────────────────────────────────
+        if self._disp_ball:
+            cy_val = self._disp_ball[1]
+            cy_err = abs(cy_val - CY_TARGET)
+            cy_col = '\033[91m' if cy_err > CY_TOL else '\033[92m'
+            cy_str = f'{cy_col}{cy_val:.0f}px{R}  \033[90m目標 {CY_TARGET}±{CY_TOL}{R}'
+        else:
+            cy_str = f'{D}—{R}'
+
         # ── 分隔線 ────────────────────────────────────────────────────────────
         SEP  = f'\033[2;33m{"─" * 40}{R}'
         def sec(title):
@@ -593,6 +708,10 @@ class PenaltyKickAtk(API):
             f'  Pan   : \033[36m{self._pan}{R}\n'
             f'  Tilt  : \033[36m{self._tilt}{R}\n'
             f'{SEP}\n'
+            f'{sec("IMU 對準（Shooting Zone 用）")}\n'
+            f'  Yaw   : {yaw_str}\n'
+            f'  cy    : {cy_str}\n'
+            f'{SEP}\n'
             f'{sec("步態")}\n'
             f'  步態引擎 : {walk_eng}\n'
             f'  步態指令 : {walk_cmd_str}\n'
@@ -600,6 +719,7 @@ class PenaltyKickAtk(API):
             f'{sec("計數器")}\n'
             f'  stable  [{stable_bar}]\n'
             f'  align   [{align_bar}]\n'
+            f'  lost    \033[90m{self._lost_count}/{BALL_LOST_FRAMES}{R}\n'
             f'{SEP}\n'
         )
         sys.stdout.flush()
@@ -648,6 +768,8 @@ class PenaltyKickAtk(API):
                 self._handle_init_directional_search()
             case 'APPROACH_BALL_1':
                 self._handle_approach_ball_1()
+            case 'ALIGN_TO_GOAL':
+                self._handle_align_to_goal()
             case 'WEAK_KICK':
                 self._handle_weak_kick()
             case 'VISUAL_GUIDED_APPROACH':
@@ -658,6 +780,15 @@ class PenaltyKickAtk(API):
                 self._handle_final_shot()
             case 'FINISH':
                 pass
+
+        # ── STOP_STATE 提早結束檢查 ──────────────────────────────────────────────
+        if STOP_STATE >= 0 and self._state in _STATE_NAMES:
+            if _STATE_NAMES.index(self._state) > STOP_STATE:
+                self._disp_last_event = f'STOP_STATE={STOP_STATE} 已達，停步收尾'
+                if self._walk_active:
+                    self._stop_walk()
+                self.sendBodySector(29)
+                self._state = 'FINISH'
 
 
 def main(args=None):

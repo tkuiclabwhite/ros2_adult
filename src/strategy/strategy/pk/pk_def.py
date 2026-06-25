@@ -12,21 +12,21 @@ X_RATIO             = 64.5   # 水平視角（度）
 Y_RATIO             = 40.0   # 垂直視角（度）
 
 HEAD_HORIZONTAL     = 2048   # 水平初始位置（馬達絕對值）
-HEAD_VERTICAL       = 2746   # 垂直初始位置（往下看）
+HEAD_VERTICAL       = 2900   # 垂直初始位置（往下看）
 
-MAX_HEAD_HORIZONTAL = 2648   # 左邊界（pan 較大）
-MIN_HEAD_HORIZONTAL = 1448   # 右邊界（pan 較小）
-MAX_HEAD_VERTICAL   = 2596   # 下邊界（tilt 較大，> 2048 = 往下看）
-MIN_HEAD_VERTICAL   = 2348   # 上邊界（tilt 較小，< 2048 = 往上看）
+MAX_HEAD_HORIZONTAL = 2648   # 左邊界（HORIZONTAL 較大）
+MIN_HEAD_HORIZONTAL = 1448   # 右邊界（HORIZONTAL 較小）
+MAX_HEAD_VERTICAL   = 2900   # 下邊界（VERTICAL 較大，> 2048 = 往下看）
+MIN_HEAD_VERTICAL   = 2700   # 上邊界（VERTICAL 較小，< 2048 = 往上看）
 
 # ── 守門判定參數 ───────────────────────────────────────────────────────────────
-BALL_INCOMING_SIZE = 2080   # 球飛來的像素面積門檻
+BALL_INCOMING_SIZE = 1000   # 球飛來的像素面積門檻
 BALL_COUNT_DEFEND  = 5      # 觸發守門動作的累積幀數
 
 # ── 測試用起始狀態 ─────────────────────────────────────────────────────────────
 START_STATE = 0   # 從第幾個狀態開始（0~4）
 
-BALL_COLOR        = 'Orange'                    # 球的顏色'Orange', 'Yellow', 'Blue',
+BALL_COLOR        = 'Yellow'                    # 球的顏色'Orange', 'Yellow', 'Blue',
                                                         #'Green', 'Black', 'Red', 'White',
 # ── 狀態名稱、描述與顯示顏色 ────────────────────────────────────────────────────
 _STATE_NAMES = [
@@ -35,6 +35,7 @@ _STATE_NAMES = [
     'CONFIRMING',   # 2 球飛來，累積幀數
     'DEFENDING',    # 3 執行撲球
     'RESETTING',    # 4 動作後等待復位
+    'FINISH',       # 5 動作完成，等待比賽結束
 ]
 _STATE_DESCS = [
     '掃頭尋找橘色球',
@@ -42,6 +43,7 @@ _STATE_DESCS = [
     '球飛來中，累積確認幀數準備撲球',
     '執行守門撲球動作（blocking）',
     '動作結束，等球離開後回到搜尋',
+    '撲球完成，等待比賽結束',
 ]
 _STATE_COLORS = [
     '\033[96m',   # 0 SEARCHING  — 亮青色
@@ -49,6 +51,7 @@ _STATE_COLORS = [
     '\033[93m',   # 2 CONFIRMING — 亮黃色
     '\033[91m',   # 3 DEFENDING  — 亮紅色
     '\033[95m',   # 4 RESETTING  — 亮洋紅
+    '\033[90m',   # 5 FINISH     — 亮黑色
 ]
 
 
@@ -244,32 +247,30 @@ class PenaltyKickDef(API):
             self._state = 'DEFENDING'
 
     def _handle_defending(self):
-        """DEFENDING — 執行守門撲球動作（blocking），完成後進入 RESETTING。"""
+        """DEFENDING — 執行守門撲球動作（blocking），完成後停止。"""
         self._disp_last_event = '執行撲球動作'
-        self.sendBodySector(500)   # TODO: 替換為正確的撲球 sector 編號
-        time.sleep(3.0)
+        self.sendBodySector(67)
+        time.sleep(26)
         self._check_count = 0
-        self._disp_last_event = '撲球完成 → RESETTING'
-        self._state = 'RESETTING'
+        self._disp_last_event = '撲球完成 → FINISH'
+        self._state = 'FINISH'
 
     def _handle_resetting(self):
-        """RESETTING — 等球離開視野（或縮小），執行復位動作後回到 SEARCHING。"""
+        """RESETTING — 保留備用，目前流程不會進入此狀態。"""
         self.ball.update()
         self._disp_ball_size = self.ball.target_size
 
         if not self.ball.get_target or self.ball.target_size <= BALL_INCOMING_SIZE:
-            self._disp_last_event = '球已離開 → 執行復位'
-            self.sendBodySector(29)
-            time.sleep(2.0)
             self._init_state()
             self._disp_last_event = '復位完成 → SEARCHING'
             self._state = 'SEARCHING'
 
     def _handle_stopped(self):
-        """比賽未開始或中斷：重置所有狀態。"""
+        """比賽未開始或中斷：重置所有狀態並站直。"""
         self.ball.update()
         self._disp_ball_size = self.ball.target_size
         self._disp_ball_cx   = self.ball.center.x
+        self.sendBodySector(29)
         self._init_state()
 
     # ──────────────────────────────────────────────────────────────── 顯示 ──
@@ -364,6 +365,8 @@ class PenaltyKickDef(API):
                 self._handle_defending()
             case 'RESETTING':
                 self._handle_resetting()
+            case 'FINISH':
+                pass
 
 
 def main(args=None):
