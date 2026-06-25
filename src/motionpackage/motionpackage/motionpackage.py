@@ -756,12 +756,9 @@ class MotionNode(Node):
             if mode == "RELATIVE":
                 if raw_val == 0:
                     continue  # delta=0 不發指令，也不更新 last_goals
-                # adult: 優先讀真實回授位置
-                if mid in self.current_joints:
-                    base_pos = self.current_joints[mid]
-                else:
-                    base_pos = self.last_goals.get(mid, 2048)
-                    self.get_logger().warn(f"[Execute Pose] Motor {mid} no feedback, using last goal/default.")
+                # 統一用 last_goals 當 base，避免感測器回授誤差累積；
+                # last_goals 在每次 execute_pose 後即時更新，motion list 內多步也能正確接續
+                base_pos = self.last_goals.get(mid, self.current_joints.get(mid, 2048))
                 final_target = base_pos + raw_val
             else:
                 final_target = raw_val

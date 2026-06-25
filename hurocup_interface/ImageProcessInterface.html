@@ -1019,27 +1019,22 @@
 			CameraId_msg.data = Number(document.getElementById("Camera_Select").value);
 			CameraId_Topic.publish(CameraId_msg);
 		}
-// ==== 定義控制 is_start 的 Topic (對應 API.py 的 /package/dioarray) ====
-		var Dio_Topic = new ROSLIB.Topic({
+// ==== 定義控制 is_start 的 Topic (由 switch.py 訂閱，避免與 GPIO 衝突) ====
+		var WebIsStart_Topic = new ROSLIB.Topic({
 			ros: ros,
-			name: '/package/dioarray',
-			messageType: 'tku_msgs/msg/Dio'
-		});
-
-		var Dio_msg = new ROSLIB.Message({
-			strategy: false, // 這個欄位就是對應到 python 的 msg.strategy
-			data: 0
+			name: '/web/is_start',
+			messageType: 'std_msgs/Bool'
 		});
 
 		// ==== 控制 is_start 變數的 Start / Stop 功能 ====
 		function sendIsStartSignal(is_start_flag) {
-			Dio_msg.strategy = is_start_flag;
-			Dio_Topic.publish(Dio_msg);
-			
+			var msg = new ROSLIB.Message({ data: is_start_flag });
+			WebIsStart_Topic.publish(msg);
+
 			if(is_start_flag) {
-				console.log("模擬實體開關開啟，發送 START (True) 至 /package/dioarray");
+				console.log("Web override: 發送 START (True) 至 /web/is_start");
 			} else {
-				console.log("模擬實體開關關閉，發送 STOP (False) 至 /package/dioarray");
+				console.log("Web override: 發送 STOP (False) 至 /web/is_start");
 			}
 		}
 	</script>

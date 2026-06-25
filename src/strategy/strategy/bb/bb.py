@@ -977,7 +977,7 @@ class BasketBall(API):
                 ik_target = pixel_world_to_ik_target(
                     ball_world_x_cm=ball_world_x,
                     ball_world_y_cm=ball_world_y,
-                    ball_h_m=0.8,
+                    ball_h_m=0.75,
                 )
                 # pos_msg = Point(x=float(ball_world_x),
                 #                 y=float(ball_world_y),
@@ -1019,24 +1019,24 @@ class BasketBall(API):
                 time.sleep(10)
                 self.sendBodySector(7)
                 time.sleep(5)
-                ik_target = pixel_world_to_ik_target(
-                    ball_world_x_cm=ball_world_x,
-                    ball_world_y_cm=ball_world_y,
-                    ball_h_m=0.7,
-                )
-                constraint = 'hand_axis_z'
-                q = solve_ik(ik_target, constraint=constraint)
-                ticks = q_to_ticks(q)
-                g_ik, _, _, _ = fk(q)
-                ik_err = np.linalg.norm(g_ik - ik_target)
-                ik_t_isaac = to_isaac(ik_target)
-                g_ik_isaac = to_isaac(g_ik)
-                for ch, name, theta, tick in zip(CHANNELS, JOINT_NAMES, q, ticks):
-                    self.SingleAbsolutePosition(ch, int(tick), 5)
-                    # time.sleep(0.01)
-                    self.get_logger().info(
-                        f'[IK] ch{ch:<2d} {name:14s}  θ={theta:+.4f} rad  tick={tick}'
-                    )
+                # ik_target = pixel_world_to_ik_target(
+                #     ball_world_x_cm=ball_world_x,
+                #     ball_world_y_cm=ball_world_y,
+                #     ball_h_m=0.7,
+                # )
+                # constraint = 'hand_axis_z'
+                # q = solve_ik(ik_target, constraint=constraint)
+                # ticks = q_to_ticks(q)
+                # g_ik, _, _, _ = fk(q)
+                # ik_err = np.linalg.norm(g_ik - ik_target)
+                # ik_t_isaac = to_isaac(ik_target)
+                # g_ik_isaac = to_isaac(g_ik)
+                # for ch, name, theta, tick in zip(CHANNELS, JOINT_NAMES, q, ticks):
+                #     self.SingleAbsolutePosition(ch, int(tick), 5)
+                #     # time.sleep(0.01)
+                #     self.get_logger().info(
+                #         f'[IK] ch{ch:<2d} {name:14s}  θ={theta:+.4f} rad  tick={tick}'
+                #     )
 
             except Exception as e:
                 self.get_logger().warning(f'[PixelToWorld/IK] 失敗: {e}')

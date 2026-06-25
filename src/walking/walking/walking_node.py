@@ -463,8 +463,9 @@ def main():
             # 分支 B: 落地模式
             # ==========================================================
             elif landing_mode:
-                if baseline_ticks:
-                    node.publish_command(baseline_ticks)
+                # if baseline_ticks:
+                #     leg_ticks = {mid: baseline_ticks[mid] for mid in LEG_IDS if mid in baseline_ticks}
+                #     node.publish_command(leg_ticks)
                 landing_counter += 1
                 if landing_counter >= LANDING_LIMIT:
                     print(f"[state] Landing finished. Restored Baseline.")

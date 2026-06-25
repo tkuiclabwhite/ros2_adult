@@ -181,31 +181,51 @@ class DynamixelDriver(Node):
             if mid in self.id_port_map:
                 _, _, ph, is_p = self.id_port_map[mid]
                 t_addr = ADDR_P_TORQUE_ENABLE if is_p else ADDR_X_TORQUE_ENABLE
-                
-                # 執行寫入
-                res, error = pk.write1ByteTxRx(ph, mid, t_addr, state)
-                
-                if res != COMM_SUCCESS:
-                    self.get_logger().error(f"ID {mid} Torque 狀態切換失敗: {pk.getTxRxResult(res)}")
-                else:
-                    self.get_logger().info(f"ID {mid} Torque 狀態已切換至 {state}")
-                    
-                    # 只有在「開啟」扭力後，才需要檢查 Indirect Address 並對齊位置
-                    if state == 1:
-                        # 檢查 Indirect Address 是否跑掉 (XM/XH 系列有時會因為掉電重設)
-                        base_idx = ADDR_P_INDIRECT_WRITE_START if is_p else ADDR_X_INDIRECT_WRITE_START
-                        expected = ADDR_P_PROFILE_VELOCITY if is_p else ADDR_X_PROFILE_VELOCITY
-                        val, result, _ = pk.read2ByteTxRx(ph, mid, base_idx)
-                        
-                        if result != COMM_SUCCESS or val != expected:
-                            self._setup_single_indirect_address(ph, pk, mid)
-                        
-                        # 對齊目標位置到當前位置，防止馬達開扭力後「暴衝」回舊目標
+
+                if state == 0:
+                    # 關閉扭力：直接寫入
+                    res, _ = pk.write1ByteTxRx(ph, mid, t_addr, 0)
+                    if res != COMM_SUCCESS:
+                        self.get_logger().error(f"ID {mid} Torque OFF 失敗: {pk.getTxRxResult(res)}")
+                    else:
+                        self.get_logger().info(f"ID {mid} Torque 狀態已切換至 0")
+
+                elif state == 1:
+                    # 開啟扭力：正確順序 = 先對齊 Goal Position → 再開 torque，避免暴衝
+                    # 步驟 1：直接從硬體讀取最新位置
+                    # （joint_data['present'] 是上一輪 read 的值，可能落後 50ms，若使用者
+                    #   剛移動手臂就立刻開扭力，會用到舊位置導致馬達暴衝回錯誤目標）
+                    r_addr = ADDR_P_PRESENT_POSITION if is_p else ADDR_X_PRESENT_POSITION
+                    fresh_pos, rr, _ = pk.read4ByteTxRx(ph, mid, r_addr)
+                    if rr == COMM_SUCCESS:
+                        if fresh_pos > 0x7FFFFFFF:
+                            fresh_pos -= 4294967296
+                    else:
                         with self.data_lock:
-                            self.joint_data[mid]['goal'] = self.joint_data[mid]['present']
-                        
-                        # (選擇性) 如果關閉後又重設了 Indirect，必須重新開扭力
-                        pk.write1ByteTxRx(ph, mid, t_addr, 1)
+                            fresh_pos = self.joint_data[mid]['present']
+
+                    # 步驟 2：更新 data struct（goal 和 present 都對齊到最新位置）
+                    with self.data_lock:
+                        self.joint_data[mid]['present'] = fresh_pos
+                        self.joint_data[mid]['goal'] = fresh_pos
+
+                    # 步驟 3：先把 Goal Position 寫進馬達暫存器（此時扭力仍 OFF，馬達不動）
+                    g_addr = ADDR_P_GOAL_POSITION if is_p else ADDR_X_GOAL_POSITION
+                    pk.write4ByteTxRx(ph, mid, g_addr, fresh_pos & 0xFFFFFFFF)
+
+                    # 步驟 4：檢查 Indirect Address（掉電後可能重設）
+                    base_idx = ADDR_P_INDIRECT_WRITE_START if is_p else ADDR_X_INDIRECT_WRITE_START
+                    expected = ADDR_P_PROFILE_VELOCITY if is_p else ADDR_X_PROFILE_VELOCITY
+                    val, result, _ = pk.read2ByteTxRx(ph, mid, base_idx)
+                    if result != COMM_SUCCESS or val != expected:
+                        self._setup_single_indirect_address(ph, pk, mid)
+
+                    # 步驟 5：最後才開扭力（馬達 Goal Position 已是正確值，不會暴衝）
+                    res, _ = pk.write1ByteTxRx(ph, mid, t_addr, 1)
+                    if res != COMM_SUCCESS:
+                        self.get_logger().error(f"ID {mid} Torque ON 失敗: {pk.getTxRxResult(res)}")
+                    else:
+                        self.get_logger().info(f"ID {mid} Torque 狀態已切換至 1")
 
         # --- 1. 並列讀取 (保持不變) ---
         active_ports = list(set(ph for _, _, ph, _ in self.id_port_map.values()))
@@ -318,4 +338,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-

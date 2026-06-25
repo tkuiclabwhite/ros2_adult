@@ -130,8 +130,8 @@ def compute_leg_ik(Lx, Ly, Lz, Lt, Rx, Ry, Rz, Rt, rotate_body_l_=0.0, flag_=0):
         return [theta_0, theta_1, theta_2, theta_knee, theta_4, theta_5]
 
     # 計算左右腳
-    left_leg = solve_single_leg(Lx, Ly, Lz, Lt, is_left=True)
-    right_leg = solve_single_leg(Rx, Ry, Rz, Rt, is_left=False)
+    left_leg = solve_single_leg(-Lx, -Ly, Lz, Lt, is_left=True)
+    right_leg = solve_single_leg(-Rx, -Ry, Rz, Rt, is_left=False)
     
     return left_leg + right_leg
 
