@@ -306,6 +306,34 @@ class PenaltyKickDef(API):
 
         confirm_bar = _bar(self._check_count, BALL_COUNT_DEFEND)
 
+        # ── 下一步進入條件（動態，綠=已滿足 紅=未滿足）──────────────────────────
+        def _cv(ok, txt):
+            return f'\033[92m{txt}{R}' if ok else f'\033[91m{txt}{R}'
+
+        bsz = self._disp_ball_size
+
+        if self._state == 'SEARCHING':
+            ok = bsz > 0
+            next_cond = _cv(ok, '偵測到球')
+        elif self._state == 'TRACKING':
+            ok = bsz > BALL_INCOMING_SIZE
+            next_cond = _cv(ok, f'area>{BALL_INCOMING_SIZE}') + f'  \033[90m(現在={bsz}){R}'
+        elif self._state == 'CONFIRMING':
+            ok = self._check_count >= BALL_COUNT_DEFEND
+            next_cond = (
+                f'check_count≥{BALL_COUNT_DEFEND} '
+                + _cv(ok, f'[{self._check_count}]')
+            )
+        elif self._state == 'DEFENDING':
+            next_cond = f'{D}動作執行完成後自動結束{R}'
+        elif self._state == 'RESETTING':
+            ok = bsz <= BALL_INCOMING_SIZE
+            next_cond = _cv(ok, f'area≤{BALL_INCOMING_SIZE}') + f'  \033[90m(現在={bsz}){R}'
+        elif self._state == 'FINISH':
+            next_cond = f'{D}—{R}'
+        else:
+            next_cond = f'{D}—{R}'
+
         SEP = f'\033[2;33m{"─" * 40}{R}'
         def sec(title):
             return f'{B}\033[33m▌ {title}{R}'
@@ -318,6 +346,7 @@ class PenaltyKickDef(API):
             f'{sec("目前狀態")}\n'
             f'  {state_col}{B}[{state_idx_str}] {state_name}{R}\n'
             f'  {D}{state_desc}{R}\n'
+            f'  \033[33m進入條件 : {next_cond}\n'
             f'  \033[96m最後事件 : {self._disp_last_event}{R}\n'
             f'{SEP}\n'
             f'{sec("視覺資訊")}\n'
