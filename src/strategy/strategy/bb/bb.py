@@ -794,15 +794,16 @@ class BasketBall(API):
             time.sleep(1)
         
         else:
-            self.sendHeadMotor(2, 2800,10)
-            time.sleep(1)
+            # self.sendHeadMotor(2, 2700,10)
+            # time.sleep(1)
             self.get_logger().info(f'ball_x_center = {self.target.ball_x_center}')
             self.get_logger().info(f'ball_y_center = {self.target.ball_y_center}')
+            self.get_logger().info(f'ball_size = {self.target.ball_size}')
             # self.get_logger().info(f'ball_x_width = {self.target.ball_x_width}')
             # self.get_logger().info(f'ball_y_width = {self.target.ball_y_width}')
 
-            if self.mapper is not None and self.target.ball_size > 0:
-                self.step = 'waist_fix'
+            # if self.mapper is not None and self.target.ball_size > 0:
+                # self.step = 'waist_fix'
             #     try:
             #         ball_world_x, ball_world_y = self.mapper.bbox_to_world(
             #             self.target.ball_x_min, self.target.ball_y_min,
@@ -977,7 +978,7 @@ class BasketBall(API):
                 ik_target = pixel_world_to_ik_target(
                     ball_world_x_cm=ball_world_x,
                     ball_world_y_cm=ball_world_y,
-                    ball_h_m=0.75,
+                    ball_h_m=0.72,
                 )
                 # pos_msg = Point(x=float(ball_world_x),
                 #                 y=float(ball_world_y),
@@ -1040,8 +1041,8 @@ class BasketBall(API):
 
             except Exception as e:
                 self.get_logger().warning(f'[PixelToWorld/IK] 失敗: {e}')
-            self.step = 'end'
-            # time.sleep(5)
+            # self.step = 'end'
+            time.sleep(3)
 
         # if FIX == True:
         #     self.get_logger().info(f'夾球修正')
