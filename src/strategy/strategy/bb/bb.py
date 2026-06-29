@@ -802,8 +802,8 @@ class BasketBall(API):
             # self.get_logger().info(f'ball_x_width = {self.target.ball_x_width}')
             # self.get_logger().info(f'ball_y_width = {self.target.ball_y_width}')
 
-            # if self.mapper is not None and self.target.ball_size > 0:
-                # self.step = 'waist_fix'
+            if self.mapper is not None and self.target.ball_size > 0:
+                self.step = 'waist_fix'
             #     try:
             #         ball_world_x, ball_world_y = self.mapper.bbox_to_world(
             #             self.target.ball_x_min, self.target.ball_y_min,
@@ -1018,8 +1018,8 @@ class BasketBall(API):
                 ok = all(0 <= t <= 4095 for t in ticks)
                 self.get_logger().info(f'[IK] 所有 tick 在範圍內: {ok}')
                 time.sleep(10)
-                self.sendBodySector(7)
-                time.sleep(5)
+                # self.sendBodySector(7)
+                # time.sleep(5)
                 # ik_target = pixel_world_to_ik_target(
                 #     ball_world_x_cm=ball_world_x,
                 #     ball_world_y_cm=ball_world_y,
@@ -1041,7 +1041,7 @@ class BasketBall(API):
 
             except Exception as e:
                 self.get_logger().warning(f'[PixelToWorld/IK] 失敗: {e}')
-            # self.step = 'end'
+            self.step = 'end'
             time.sleep(3)
 
         # if FIX == True:
