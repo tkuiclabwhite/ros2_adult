@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from launch import LaunchDescription
-from launch.actions import GroupAction
+from launch.actions import ExecuteProcess, GroupAction
 from launch_ros.actions import Node
 
 # 把本目錄加進 sys.path 以匯入 camera_config.py
@@ -114,9 +114,40 @@ def generate_launch_description():
         output='screen',
     )
 
+    # # ================================================================
+    # # 4) 手臂 IK
+    # # ================================================================
+    # arm_ik_node = Node(
+    #     package='arm',
+    #     executable='arm_ik',
+    #     name='arm_ik_node',
+    #     output='screen',
+    #     parameters=[{'arm_speed': 100}],
+    # )
+
+    # ================================================================
+    # 5) 熱點裝置管理：網頁伺服器 + API
+    # ================================================================
+    http_server = ExecuteProcess(
+        cmd=['python3', '-m', 'http.server', '9999'],
+        cwd='/home/iclab/ros2_adult/hurocup_interface',
+        output='screen',
+    )
+
+    # sudo：讀 NetworkManager 租約檔、執行 iptables 都需要 root。
+    # 對應的 NOPASSWD 規則設定在機器人的 /etc/sudoers.d/hotspot_api。
+    hotspot_api = ExecuteProcess(
+        cmd=['sudo', 'python3', os.path.join(dir_path, 'hotspot_api.py')],
+        output='screen',
+    )
+
     actions =  camera_nodes + \
-              [driver_node, walking_node, motion_node, web_bridge_node, imu_node,switch_node] + \
-              [image_node, web_video, rosbridge_node]
+              [driver_node, walking_node, motion_node, web_bridge_node, imu_node, switch_node] + \
+              [image_node, web_video, rosbridge_node,http_server, hotspot_api] 
+    # actions =  camera_nodes + \
+    #           [driver_node, walking_node, motion_node, web_bridge_node] + \
+    #           [image_node, web_video, rosbridge_node] + \
+    #           [http_server, hotspot_api]
 
 
     ld = LaunchDescription()

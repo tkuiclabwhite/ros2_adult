@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 #coding=utf-8
 import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
 from strategy.API import API
 from tku_msgs.msg import Dio
 import rclpy
@@ -14,12 +12,6 @@ import numpy as np
 import cv2
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-from ik_solve import (pixel_world_to_ik_target, solve_ik, q_to_ticks,
-                      world_to_target, fk, to_isaac,
-                      CHANNELS, JOINT_NAMES, HAND_TICK)
-from geometry_msgs.msg import Point
-# === 新增:ray-cast 法(精度升級,座標系已對齊舊 homography)===
-from .ball_to_world import PixelToWorldRaycast
 
 
 # 2025.4.17
@@ -59,32 +51,6 @@ VALUEE = 55
 #api.send = api.sendmessage()
 
 
-class PixelToWorld:
-    """載入單應矩陣，執行像素 -> 世界座標轉換。即時階段用這個。"""
-
-    def __init__(self, H):
-        self.H = np.asarray(H, dtype=np.float64)
-
-    @classmethod
-    def load(cls, path):
-        data = np.load(path)
-        return cls(data["H"])
-
-    def transform(self, u, v):
-        pt = np.array([u, v, 1.0], dtype=np.float64)
-        w = self.H @ pt
-        if abs(w[2]) < 1e-12:
-            raise ValueError("齊次座標 w' 趨近 0")
-        return float(w[0] / w[2]), float(w[1] / w[2])
-
-    def bbox_to_world(self, x1, y1, x2, y2, ball_radius_cm=6.5):
-        u = (x1 + x2) / 2.0
-        v = (y1 + y2) / 2.0          # 改:用 bbox 中心,不要 max
-        Xg, Yg = self.transform(u, v)
-        k = (105.0 - ball_radius_cm) / 105.0   # 球心抬高的視差修正
-        return Xg * k, Yg * k
-
-
 class TargetLocation():
     def __init__(self,api_instance):
         self.initial()
@@ -106,8 +72,6 @@ class TargetLocation():
         self.basket_y_min = 0
         self.basket_y_max = 0
         self.basket_length = 0 #增加 
-        self.ball_x_center = 0
-        self.ball_y_center = 0
 
         # self.color_counts = [] 
         # self.get_object_cx = [[]] 
@@ -135,31 +99,25 @@ class TargetLocation():
                
     def ball_parameter(self):   #利用色模建籃球
     
-        self.color_mask_subject_orange = self.api.color_counts[2]
+        self.color_mask_subject_orange = self.api.color_counts[0]
 
         self.ball_x = 0
         self.ball_y = 0
         self.ball_size = 0
         for j in range (self.color_mask_subject_orange):   #將所有看到的橘色物件編號
-            cx = (self.api.object_x_max[2][j] + self.api.object_x_min[2][j]) // 2
-            cy = (self.api.object_y_max[2][j] + self.api.object_y_min[2][j]) // 2
-            if 310 > cx > 10 and 230 > cy   > 10 and self.api.object_sizes [2][j] > 200:
+            cx = (self.api.object_x_max[0][j] + self.api.object_x_min[0][j]) // 2
+            cy = (self.api.object_y_max[0][j] + self.api.object_y_min[0][j]) // 2
+            if 310 > cx > 10 and 230 > cy   > 10 and self.api.object_sizes [0][j] > 200:
     
-                if  self.api.object_sizes [2][j] > self.ball_size: #用大小過濾物件 #?????900待測試
+                if  self.api.object_sizes [0][j] > self.ball_size: #用大小過濾物件 #?????900待測試
                     self.ball_x =  cx
                     self.ball_y =  cy 
-                    self.ball_size = self.api.object_sizes [2][j]
-                    self.ball_x_min = self.api.object_x_min[2][j]
-                    self.ball_y_min = self.api.object_y_min[2][j]
-                    self.ball_x_max = self.api.object_x_max[2][j]
-                    self.ball_y_max = self.api.object_y_max[2][j]
-
-                    self.ball_x_center = (self.ball_x_max + self.ball_x_min) / 2
-                    self.ball_y_center = (self.ball_y_max + self.ball_y_min) / 2
-
-                    self.ball_x_width = self.ball_x_max - self.ball_x_min
-                    self.ball_y_width = self.ball_y_max - self.ball_y_min
-
+                    self.ball_size = self.api.object_sizes [0][j]
+                    self.ball_x_min = self.api.object_x_min[0][j] 
+                    self.ball_y_min = self.api.object_y_min[0][j] 
+                    self.ball_x_max = self.api.object_x_max[0][j] 
+                    self.ball_y_max = self.api.object_y_max[0][j]
+    
     def basket_parameter(self): #利用色模建籃框
         
         self.color_mask_subject_red = self.api.color_counts[5]
@@ -241,15 +199,14 @@ class MotorMove():
         def draw(self):
             self.target.ball_parameter()
             self.target.basket_parameter()
-            self.api.drawImageFunction(1, 2, 58, 260, 72, 207, 255, 0, 255)
-            self.api.drawImageFunction(2, 1, 160, 160, 0, 240, 255, 0, 255)
-            # self.api.drawImageFunction(2, 1, 160, 160, 0, 240, 255, 255, 255)
+            # self.api.drawImageFunction(1, 1, 160, 160, 0, 240, 255, 255, 255) 
             # self.api.drawImageFunction(2, 1, 0, 320, 120, 120, 255, 255, 255)
-            self.api.drawImageFunction(3, 1, self.target.ball_x_center , self.target.ball_x_center , self.target.ball_y_center , self.target.ball_y_center, 255, 0, 255, 3)
-            # self.api.drawImageFunction(4, 2, self.target.basket_x_min , self.target.basket_x_max , self.target.basket_y_max , self.target.basket_y_min, 255, 120, 255)
+            self.api.drawImageFunction(3, 2, self.target.ball_x_min , self.target.ball_x_max , self.target.ball_y_max , self.target.ball_y_min, 255, 0, 255)
+            self.api.drawImageFunction(4, 2, self.target.basket_x_min , self.target.basket_x_max , self.target.basket_y_max , self.target.basket_y_min, 255, 120, 255)
             # api.send.drawImageFunction(5, 1, api.send.yolo_XMin, api.send.yolo_XMax, api.send.yolo_YMin, api.send.yolo_YMax, 0, 255, 0)
-            # self.api.drawImageFunction(6,3,160,100,240,0,255,0,0,1)
-            # self.api.drawImageFunction(7,3,160,140,240,0,255,0,0,1)
+            self.api.drawImageFunction(6,3,160,100,240,0,255,0,0,1)
+            self.api.drawImageFunction(7,3,160,140,240,0,255,0,0,1)
+            self.api.drawImageFunction(8,3,160,120,240,0,255,0,0,1)
     
         def move_head(self, ID, Position,head_max_x, head_max_y, Speed):  #把相對頭部變化變絕對(call 2048就變2048)
             self.api.sendHeadMotor(ID,Position,Speed)
@@ -538,23 +495,6 @@ class BasketBall(API):
         self.sw = 0
         self.target = TargetLocation(self) #新加上的
         self.motor = MotorMove(self)#新加上的
-        _npz_path = __file__.replace("bb.py", "homography.npz")
-        self.mapper = None
-        try:
-            self.mapper = PixelToWorld.load(_npz_path)
-            self.get_logger().info("[PixelToWorld] 單應矩陣載入成功")
-        except Exception as e:
-            self.get_logger().warning(f"[PixelToWorld] 無法載入 homography.npz: {e}")
-        # === 新增:並行載入 ray-cast mapper(對比用)===
-        # ball_height_cm = 球心離地高度,與舊法的 ball_radius_cm=6.5 對應
-        _cam_npz = __file__.replace("bb.py", "camera_params.npz")
-        self.mapper_new = None
-        try:
-            self.mapper_new = PixelToWorldRaycast.load(_cam_npz, ball_height_cm=6.5)
-            self.get_logger().info("[PixelToWorldRaycast] ray-cast 標定載入成功")
-        except Exception as e:
-            self.get_logger().warning(f"[PixelToWorldRaycast] 無法載入 camera_params.npz: {e}")
-        self.object_position_pub = self.create_publisher(Point, '/object_position', 10)
         self.create_timer(0.2, self.main)
         
 
@@ -578,7 +518,7 @@ class BasketBall(API):
         #self.get_logger().info(f"orange_count={self.target.color_mask_subject_orange}, ball_size={self.target.ball_size}")
    
   ##############???????
-        self.is_start = True
+        # self.is_start = True
         if  self.is_start: #api.send.Web
             self.get_logger().info(f'step = {self.step}')
             self.get_logger().info(f'ball_size = {self.target.ball_size}')
@@ -600,10 +540,8 @@ class BasketBall(API):
                 self.waist_fix()
 
             elif self.step == 'catch_ball' :
-                self.catch_ball()
-                
-            elif self.step == 'end' :
-                self.end()
+                self.catch_ball() 
+            
             elif self.step == 'find_basket':
                 self.find_basket()
 
@@ -660,92 +598,21 @@ class BasketBall(API):
 
         elif self.step != 'begin' :
             self.sendHeadMotor(1, 2048, 30)
-            self.sendHeadMotor(2, 2770, 30)
+            self.sendHeadMotor(2, 2048, 30)
             self.target.initial()
             self.motor.initial()
             self.initial()
             time.sleep(0.05)
             self.motor.bodyauto_close(0)
             time.sleep(1)
-            # self.sendBodySector(50)
+            self.sendBodySector(50)
             time.sleep(6)
-            # self.sendBodySector(29)
+            self.sendBodySector(29)
             time.sleep(0.05)
             self.step = 'begin'
             self.get_logger().debug(f'-------------------reset and stoping-------------------------')
             self.get_logger().info(f'主策略指撥關閉 -> 機器人回復初始狀態')
 
-
-    def catch(self):
-        """掃描固定高度不同位置的抓取點，印出各點 Rforarm2 姿態後移動手臂。"""
-        # ---- 可調參數 ----
-        CATCH_HEIGHT_M  = 0.74      # 抓取點離地高度 (m)，可自行修改
-        Z_CONSTRAINT    = 'rforarm2_z_up'   # 'rforarm2_z_up' / 'rforarm2_z_down' / None
-        MOVE_ARM        = True      # False = 只印姿態不動手臂
-        STEP_DELAY      = 2.0       # 每個位置等待秒數
-
-        # (ball_front_of_cam, ball_right_of_cam) 單位: m
-        TEST_POSITIONS = [
-            (0.30,  0.00),
-            (0.40,  0.00),
-            (0.50,  0.00),
-            (0.40, -0.10),   # 偏左 10 cm
-            (0.40, +0.10),   # 偏右 10 cm
-        ]
-
-        for front, right in TEST_POSITIONS:
-            target = world_to_target(
-                ball_h=CATCH_HEIGHT_M,
-                ball_front_of_cam=front,
-                ball_right_of_cam=right,
-            )
-            self.get_logger().info(
-                f'[catch] ---- front={front:.2f}m  right={right:+.2f}m  '
-                f'target=({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}) '
-                f'constraint={Z_CONSTRAINT} ----'
-            )
-            try:
-                q = solve_ik(target, constraint=Z_CONSTRAINT)
-                ticks = q_to_ticks(q)
-                g, R2, _, _ = fk(q)
-                pos_err  = np.linalg.norm(g - target)
-                z_world  = R2[:, 2]   # Rforarm2 Z 軸在世界座標系的方向
-
-                t_isaac = to_isaac(target)
-                g_isaac = to_isaac(g)
-                self.get_logger().info(
-                    f'[catch] IK目標   = ({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}) m (base_link)'
-                    f'  Isaac=({t_isaac[0]:.3f}, {t_isaac[1]:.3f}, {t_isaac[2]:.3f})'
-                )
-                self.get_logger().info(
-                    f'[catch] 實際抓取點= ({g[0]:.3f}, {g[1]:.3f}, {g[2]:.3f}) m (base_link)'
-                    f'  Isaac=({g_isaac[0]:.3f}, {g_isaac[1]:.3f}, {g_isaac[2]:.3f})'
-                    f'  誤差={pos_err*100:.1f} cm'
-                )
-                self.get_logger().info(
-                    f'[catch] Rforarm2-Z(世界) = [{z_world[0]:+.3f}, {z_world[1]:+.3f}, {z_world[2]:+.3f}]'
-                )
-                for ch, name, theta, tick in zip(CHANNELS, JOINT_NAMES, q, ticks):
-                    self.get_logger().info(
-                        f'[catch]   ch{ch:<2d} {name:14s}  θ={theta:+.4f} rad  tick={tick}'
-                    )
-                self.get_logger().info(
-                    f'[catch]   ch14 RhandJoint  (passthrough)  tick={HAND_TICK}'
-                )
-
-                ok = all(0 <= t <= 4095 for t in ticks)
-                self.get_logger().info(f'[catch] tick 全在範圍內: {ok}')
-
-                if MOVE_ARM and ok:
-                    for ch, tick in zip(CHANNELS, ticks):
-                        self.SingleAbsolutePosition(ch, int(tick), 5)
-                    self.SingleAbsolutePosition(14, HAND_TICK, 5)
-                    time.sleep(STEP_DELAY)
-                elif not ok:
-                    self.get_logger().warning('[catch] tick 超出範圍，跳過此點')
-
-            except Exception as e:
-                self.get_logger().warning(f'[catch] IK 求解失敗: {e}')
 
     def begin(self):
         ####################################### switch #######################################
@@ -773,10 +640,10 @@ class BasketBall(API):
 
         #self.api.sendBodySector(6)      ############步態調整############
         #time.sleep(0.05)
-        # self.sendBodySector(26) 
-        # time.sleep(2)
+        self.sendBodySector(26) 
+        time.sleep(2)
         # self.sendBodySector(1) 
-        # time.sleep(0.05)   
+        time.sleep(0.05)   
 
 
         self.step = 'find_ball'
@@ -789,82 +656,40 @@ class BasketBall(API):
         if self.head_y_down_adjust:
             time.sleep(1)
             self.get_logger().debug(f'頭部抬起尋框')
-            # self.motor.move_head(2,1700,1250,880,50)                
+            self.motor.move_head(2,1700,1250,880,50)                
             self.head_y_down_adjust = True
             time.sleep(1)
         
         else:
-            # self.sendHeadMotor(2, 2700,10)
-            # time.sleep(1)
-            self.get_logger().info(f'ball_x_center = {self.target.ball_x_center}')
-            self.get_logger().info(f'ball_y_center = {self.target.ball_y_center}')
-            self.get_logger().info(f'ball_size = {self.target.ball_size}')
-            # self.get_logger().info(f'ball_x_width = {self.target.ball_x_width}')
-            # self.get_logger().info(f'ball_y_width = {self.target.ball_y_width}')
+            if self.target.ball_size <= 350:   # 球在視野中太小
+                self.get_logger().info(f'球在視野中太小 -> 大範圍尋球')
+                # motor.view_search_left(2428, 1668, 1800, 1200, 40, 0.05)
+                # self.motor.move_head(2, 1700, 880, 880, 50)   # 先抬頭到 1700
+                time.sleep(0.5)
+                self.motor.view_search(2700, 1678, 2600, 2300, 120, 0.05)
+                self.target.ball_parameter() 
 
-            if self.mapper is not None and self.target.ball_size > 0:
-                self.step = 'waist_fix'
-            #     try:
-            #         ball_world_x, ball_world_y = self.mapper.bbox_to_world(
-            #             self.target.ball_x_min, self.target.ball_y_min,
-            #             self.target.ball_x_max, self.target.ball_y_max
-            #         )
-            #         self.get_logger().info(
-            #             f'[PixelToWorld] 球世界座標: X={ball_world_x:.2f}, Y={ball_world_y:.2f}'
-            #         )
+            elif self.target.ball_size > 350:   # 球在視野中夠大
 
-            #         ik_target = pixel_world_to_ik_target(
-            #             ball_world_x_cm=ball_world_x,
-            #             ball_world_y_cm=ball_world_y,
-            #             ball_h_m=0.74,
-            #         )
-            #         q = solve_ik(ik_target)
-            #         ticks = q_to_ticks(q)
-            #         for ch, name, theta, tick in zip(CHANNELS, JOINT_NAMES, q, ticks):
-            #             self.SingleAbsolutePosition(ch, int(tick), 10)
-            #             # self.get_logger().info(
-            #             #     f'ch{ch:<2d}tick={tick}'
-            #             # )
-            #             # self.get_logger().info(
-            #             #     f'[IK] ch{ch:<2d} {name:14s}  θ={theta:+.4f} rad  tick={tick}'
-            #             # )
-            #         self.get_logger().info(f'[IK] ch14 RhandJoint  (passthrough)  tick={HAND_TICK}')
-            #         ok = all(0 <= t <= 4095 for t in ticks)
-            #         self.get_logger().info(f'[IK] 所有 tick 在範圍內: {ok}')
+                if abs(self.target.ball_x - 160) > 25  or abs(self.target.ball_y - 120) > 25:  # 讓球在畫面中心
+                    self.get_logger().info(f'球在視野中夠大 -> 鎖定球')
+                    self.target.ball_parameter()
+                    self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 65) 
+                    time.sleep(0.1)
 
-            #     except Exception as e:
-            #         self.get_logger().warning(f'[PixelToWorld/IK] 失敗: {e}')
-            
-
-            # if self.target.ball_size <= 350:   # 球在視野中太小
-            #     self.get_logger().info(f'球在視野中太小 -> 大範圍尋球')
-            #     # motor.view_search_left(2428, 1668, 1800, 1200, 40, 0.05)
-            #     # self.motor.move_head(2, 1700, 880, 880, 50)   # 先抬頭到 1700
-            #     time.sleep(0.5)
-            #     self.motor.view_search(2700, 1678, 2600, 2300, 120, 0.05)
-            #     self.target.ball_parameter() 
-
-            # elif self.target.ball_size > 350:   # 球在視野中夠大
-
-            #     if abs(self.target.ball_x - 160) > 25  or abs(self.target.ball_y - 120) > 25:  # 讓球在畫面中心
-            #         self.get_logger().info(f'球在視野中夠大 -> 鎖定球')
-            #         self.target.ball_parameter()
-            #         self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 65) 
-            #         time.sleep(0.1)
-
-            #     # elif (CATCH_BALL_LINE[1] <= self.motor.head_vertical <= CATCH_BALL_LINE[2]) and (abs(self.motor.head_horizon-2030) <= 2000):
-            #     else:
-            #         self.get_logger().info(f'到達夾球範圍 STOP!!, self.head_vertical = {self.motor.head_vertical}')                
-            #         time.sleep(0.05)
-            #         self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 50) 
-            #         self.get_logger().debug(f'到達可move_head夾球位置')
-            #         self.get_logger().info(f'蹲下準備夾球')
-            #         time.sleep(1)
+                # elif (CATCH_BALL_LINE[1] <= self.motor.head_vertical <= CATCH_BALL_LINE[2]) and (abs(self.motor.head_horizon-2030) <= 2000):
+                else:
+                    self.get_logger().info(f'到達夾球範圍 STOP!!, self.head_vertical = {self.motor.head_vertical}')                
+                    time.sleep(0.05)
+                    self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 50) 
+                    self.get_logger().debug(f'到達可move_head夾球位置')
+                    self.get_logger().info(f'蹲下準備夾球')
+                    time.sleep(1)
                     
-            #         self.motor.reg = 2030 - self.motor.head_horizon
-            #         self.motor.search_num = 0
-            #         self.motor.directly = True
-            #         self.step = 'waist_fix'
+                    self.motor.reg = 2030 - self.motor.head_horizon
+                    self.motor.search_num = 0
+                    self.motor.directly = True
+                    self.step = 'waist_fix'
 
                 # else: 
 
@@ -890,223 +715,123 @@ class BasketBall(API):
 
     
     def walk_to_ball(self):
-        self.step = 'waist_fix'
+        self.target.ball_parameter()   
+        self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 60)
+        self.get_logger().info(f"head_vertical = {self.motor.head_vertical}")
 
-        # self.target.ball_parameter()   
-        # self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 60)
-        # self.get_logger().info(f"head_vertical = {self.motor.head_vertical}")
-
-        # if (CATCH_BALL_LINE[1] <= self.motor.head_vertical <= CATCH_BALL_LINE[0]) and (abs(self.motor.head_horizon-2030) <= 110):  # 到達夾球位置
-        #     self.motor.bodyauto_close(0) # 步態停止
-        #     self.get_logger().info(f'到達夾球範圍 STOP!!, self.head_vertical = {self.motor.head_vertical}')                
-        #     time.sleep(0.05)
-        #     self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 40) 
-        #     self.get_logger().debug(f'到達可夾球位置')
-        #     self.get_logger().info(f'蹲下準備夾球')
-        #     time.sleep(1)
+        if (CATCH_BALL_LINE[1] <= self.motor.head_vertical <= CATCH_BALL_LINE[0]) and (abs(self.motor.head_horizon-2030) <= 110):  # 到達夾球位置
+            self.motor.bodyauto_close(0) # 步態停止
+            self.get_logger().info(f'到達夾球範圍 STOP!!, self.head_vertical = {self.motor.head_vertical}')                
+            time.sleep(0.05)
+            self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 40) 
+            self.get_logger().debug(f'到達可夾球位置')
+            self.get_logger().info(f'蹲下準備夾球')
+            time.sleep(1)
             
             
-        #     self.get_logger().info(f'頭往右轉')
-        #     self.motor.move_head(1, 1820, 880, 880, 50)
-        #     time.sleep(2) 
-        #     self.step = 'waist_fix'
+            self.get_logger().info(f'頭往右轉')
+            self.motor.move_head(1, 1820, 880, 880, 50)
+            time.sleep(2) 
+            self.step = 'waist_fix'
 
-        # else:
-        #     self.target.ball_parameter()
-        #     self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 35) 
+        else:
+            self.target.ball_parameter()
+            self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 35) 
 
-        #     if abs(self.motor.head_horizon-2030) > 100:
-        #         self.get_logger().debug(f'頭部馬達水平刻度偏差 -> 步態影響')
-        #         self.get_logger().info(f'rotate調整')
-        #         self.motor.body_trace_rotate(30)
+            if abs(self.motor.head_horizon-2030) > 100:
+                self.get_logger().debug(f'頭部馬達水平刻度偏差 -> 步態影響')
+                self.get_logger().info(f'rotate調整')
+                self.motor.body_trace_rotate(30)
 
-        #     else:
-        #         self.get_logger().debug(f'頭部馬達垂直刻度與抓球角度差太多')
-        #         self.get_logger().info(f'straight調整')
-        #         self.motor.ball_trace_straight(CATCH_BALL_LINE[0], CATCH_BALL_LINE[1], CATCH_BALL_LINE[2])        
+            else:
+                self.get_logger().debug(f'頭部馬達垂直刻度與抓球角度差太多')
+                self.get_logger().info(f'straight調整')
+                self.motor.ball_trace_straight(CATCH_BALL_LINE[0], CATCH_BALL_LINE[1], CATCH_BALL_LINE[2])        
 
 
     def waist_fix(self):
-        self.step = 'catch_ball'
-
-        # self.target.ball_parameter()
-        # self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 60)
-        # if abs(self.target.ball_x - 160) > 1  or abs(self.target.ball_y - 120) > 1:  # 讓球在畫面中心
-        #     self.get_logger().info(f'球在視野中夠大 -> 鎖定球')
-        #     self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 100) 
-        #     self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
-        #     #time.sleep(0.05)
+        self.target.ball_parameter()
+        self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 60)
+        if abs(self.target.ball_x - 160) > 1  or abs(self.target.ball_y - 120) > 1:  # 讓球在畫面中心
+            self.get_logger().info(f'球在視野中夠大 -> 鎖定球')
+            self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 100) 
+            self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
+            #time.sleep(0.05)
             
-        # else:
-        #     if abs(self.motor.head_horizon - 1780) > 5: 
-        #         self.get_logger().info(f'球不在視野中間 -> 貓頭鷹修腰')
-        #         # self.get_logger().info(f"motor.head_horizon = {motor.head_horizon}")
-        #         self.motor.Owl_Rotate(1780)
-        #     else :
-        #         self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
-        #         self.get_logger().info(f'球水平位置在中間')
-        #         self.step = 'catch_ball'
+        else:
+            if abs(self.motor.head_horizon - 1780) > 5: 
+                self.get_logger().info(f'球不在視野中間 -> 貓頭鷹修腰')
+                # self.get_logger().info(f"motor.head_horizon = {motor.head_horizon}")
+                self.motor.Owl_Rotate(1780)
+            else :
+                self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
+                self.get_logger().info(f'球水平位置在中間')
+                self.step = 'catch_ball'
 
     
     def catch_ball(self):
         self.get_logger().info(f"target.ball_size = {self.target.ball_size}")
-        if self.mapper is not None and self.target.ball_size > 0:
-            try:
-                ball_world_x, ball_world_y = self.mapper.bbox_to_world(
-                    self.target.ball_x_min, self.target.ball_y_min,
-                    self.target.ball_x_max, self.target.ball_y_max
-                )
-                self.get_logger().info(
-                    f'[PixelToWorld] 球世界座標: X={ball_world_x:.2f}, Y={ball_world_y:.2f}'
-                )
 
-                # === 對比:並行算 ray-cast 座標,印出來比對(IK 仍用舊座標)===
-                if self.mapper_new is not None:
-                    try:
-                        nx, ny = self.mapper_new.bbox_to_world(
-                            self.target.ball_x_min, self.target.ball_y_min,
-                            self.target.ball_x_max, self.target.ball_y_max
-                        )
-                        self.get_logger().info(
-                            f'[對比] 舊homography=({ball_world_x:.1f},{ball_world_y:.1f})  '
-                            f'新raycast=({nx:.1f},{ny:.1f})  '
-                            f'差=({nx-ball_world_x:+.1f},{ny-ball_world_y:+.1f})cm'
-                        )
-                    except Exception as e:
-                        self.get_logger().warning(f'[對比] ray-cast 計算失敗: {e}')
-
-                ik_target = pixel_world_to_ik_target(
-                    ball_world_x_cm=ball_world_x,
-                    ball_world_y_cm=ball_world_y,
-                    ball_h_m=0.72,
-                )
-                # pos_msg = Point(x=float(ball_world_x),
-                #                 y=float(ball_world_y),
-                #                 z=74.0)
-                # self.object_position_pub.publish(pos_msg)
-                
-                # 球太靠近身體時，硬性要求 ch14 朝 +Z 會跟手臂幾何衝突，犧牲 XY 精準度
-                # (實測 Y<25cm 誤差可達 10cm 以上，Y>=25cm 大多 <5cm)，所以只在夠遠時才套用
-                constraint = 'hand_axis_z'
-                # self.get_logger().info(
-                #     f'[IK] ball_world_y={ball_world_y:.2f}  constraint={constraint}'
-                # )
-                q = solve_ik(ik_target, constraint=constraint)
-                
-                # q = solve_ik(ik_target)
-                ticks = q_to_ticks(q)
-                g_ik, _, _, _ = fk(q)
-                ik_err = np.linalg.norm(g_ik - ik_target)
-                ik_t_isaac = to_isaac(ik_target)
-                g_ik_isaac = to_isaac(g_ik)
-                self.get_logger().info(
-                    f'[IK] IK目標    = ({ik_target[0]:.3f}, {ik_target[1]:.3f}, {ik_target[2]:.3f}) m (base_link)'
-                    f'  Isaac=({ik_t_isaac[0]:.3f}, {ik_t_isaac[1]:.3f}, {ik_t_isaac[2]:.3f})'
-                )
-                self.get_logger().info(
-                    f'[IK] 實際抓取點= ({g_ik[0]:.3f}, {g_ik[1]:.3f}, {g_ik[2]:.3f}) m (base_link)'
-                    f'  Isaac=({g_ik_isaac[0]:.3f}, {g_ik_isaac[1]:.3f}, {g_ik_isaac[2]:.3f})'
-                    f'  誤差={ik_err*100:.1f} cm'
-                )
-                for ch, name, theta, tick in zip(CHANNELS, JOINT_NAMES, q, ticks):
-                    self.SingleAbsolutePosition(ch, int(tick), 5)
-                    # time.sleep(0.01)
-                    self.get_logger().info(
-                        f'[IK] ch{ch:<2d} {name:14s}  θ={theta:+.4f} rad  tick={tick}'
-                    )
-                self.get_logger().info(f'[IK] ch14 RhandJoint  (passthrough)  tick={HAND_TICK}')
-                ok = all(0 <= t <= 4095 for t in ticks)
-                self.get_logger().info(f'[IK] 所有 tick 在範圍內: {ok}')
-                time.sleep(10)
-                # self.sendBodySector(7)
-                # time.sleep(5)
-                # ik_target = pixel_world_to_ik_target(
-                #     ball_world_x_cm=ball_world_x,
-                #     ball_world_y_cm=ball_world_y,
-                #     ball_h_m=0.7,
-                # )
-                # constraint = 'hand_axis_z'
-                # q = solve_ik(ik_target, constraint=constraint)
-                # ticks = q_to_ticks(q)
-                # g_ik, _, _, _ = fk(q)
-                # ik_err = np.linalg.norm(g_ik - ik_target)
-                # ik_t_isaac = to_isaac(ik_target)
-                # g_ik_isaac = to_isaac(g_ik)
-                # for ch, name, theta, tick in zip(CHANNELS, JOINT_NAMES, q, ticks):
-                #     self.SingleAbsolutePosition(ch, int(tick), 5)
-                #     # time.sleep(0.01)
-                #     self.get_logger().info(
-                #         f'[IK] ch{ch:<2d} {name:14s}  θ={theta:+.4f} rad  tick={tick}'
-                #     )
-
-            except Exception as e:
-                self.get_logger().warning(f'[PixelToWorld/IK] 失敗: {e}')
-            self.step = 'end'
+        if FIX == True:
+            self.get_logger().info(f'夾球修正')
+            # self.sendBodySector(333)
+            # time.sleep(1)
+            # self.get_logger().info(f'正常夾球動作')
+            # self.sendBodySector(687)
+            self.sendBodySector(11) 
+            time.sleep(5) 
+            self.sendBodySector(12) 
+            time.sleep(3)
+            self.sendBodySector(13) 
+            time.sleep(3)
+            self.sendBodySector(14) 
+            time.sleep(3)
+            self.sendBodySector(15) 
+            time.sleep(3)
+            self.sendBodySector(18) 
             time.sleep(3)
 
-        # if FIX == True:
-        #     self.get_logger().info(f'夾球修正')
-        #     # self.sendBodySector(333)
-        #     # time.sleep(1)
-        #     # self.get_logger().info(f'正常夾球動作')
-        #     # self.sendBodySector(687)
-        #     self.sendBodySector(11) 
-        #     time.sleep(5) 
-        #     self.sendBodySector(12) 
-        #     time.sleep(3)
-        #     self.sendBodySector(13) 
-        #     time.sleep(3)
-        #     self.sendBodySector(14) 
-        #     time.sleep(3)
-        #     self.sendBodySector(15) 
-        #     time.sleep(3)
-        #     self.sendBodySector(18) 
-        #     time.sleep(3)
-
-        # else:
-        #     self.get_logger().info(f'正常夾球動作')
-        #     self.sendBodySector(11) 
-        #     time.sleep(5) 
-        #     self.sendBodySector(12) 
-        #     time.sleep(3)
-        #     self.sendBodySector(13) 
-        #     time.sleep(3)
-        #     self.sendBodySector(14) 
-        #     time.sleep(3)
-        #     self.sendBodySector(15) 
-        #     time.sleep(3)
-        #     self.sendBodySector(18) 
-        #     time.sleep(3)
+        else:
+            self.get_logger().info(f'正常夾球動作')
+            self.sendBodySector(11) 
+            time.sleep(5) 
+            self.sendBodySector(12) 
+            time.sleep(3)
+            self.sendBodySector(13) 
+            time.sleep(3)
+            self.sendBodySector(14) 
+            time.sleep(3)
+            self.sendBodySector(15) 
+            time.sleep(3)
+            self.sendBodySector(18) 
+            time.sleep(3)
             
             
-        # self.get_logger().info(f'腰部回正')
-        # self.motor.waist_rotate(2048,30)
-        # time.sleep(0.5) 
+        self.get_logger().info(f'腰部回正')
+        self.motor.waist_rotate(2048,30)
+        time.sleep(0.5) 
 
-        # if FIX:
-        #     self.get_logger().info(f'根據各自夾球動作回復站姿')
-        #     # self.sendBodySector(444)
-        #     # time.sleep(1)
-        #     self.get_logger().info(f'回復站姿')
-        #     self.sendBodySector(29) 
-        #     time.sleep(0.5)
-        #     self.sendBodySector(26) 
-        #     time.sleep(0.5)
+        if FIX:
+            self.get_logger().info(f'根據各自夾球動作回復站姿')
+            # self.sendBodySector(444)
+            # time.sleep(1)
+            self.get_logger().info(f'回復站姿')
+            self.sendBodySector(29) 
+            time.sleep(0.5)
+            self.sendBodySector(26) 
+            time.sleep(0.5)
             
 
-        # else:
-        #     self.get_logger().info(f'回復站姿')
-        #     self.sendBodySector(29) 
-        #     time.sleep(0.5)
-        #     self.sendBodySector(26) 
-        #     time.sleep(0.5)
+        else:
+            self.get_logger().info(f'回復站姿')
+            self.sendBodySector(29) 
+            time.sleep(0.5)
+            self.sendBodySector(26) 
+            time.sleep(0.5)
            
 
-        # self.step = 'find_basket'  
+        self.step = 'find_basket'  
 
-    def end(self):
-        print("123")
-        time.sleep(10)
 
     def find_basket(self):
         self.target.basket_parameter()
@@ -1156,9 +881,9 @@ class BasketBall(API):
                         self.target.basket_parameter()
                         time.sleep(2)
                         self.get_logger().info(f'五分球動作預備')
-                        # self.sendBodySector(50)
+                        self.sendBodySector(50)
                         time.sleep(3)  
-                        # self.sendBodySector(51)
+                        self.sendBodySector(51)
                         time.sleep(6)    
                         self.get_logger().debug(f'頭部調整') 
                         self.get_logger().debug(f'頭部水平旋轉調整')                                              
@@ -1345,9 +1070,9 @@ class BasketBall(API):
                         self.target.basket_parameter()
                         time.sleep(2)
                         self.get_logger().info(f'5分球預備動作')
-                        # self.sendBodySector(50)
+                        self.sendBodySector(50)
                         time.sleep(3)  
-                        # self.sendBodySector(51)
+                        self.sendBodySector(51)
                         time.sleep(6)  
                         self.get_logger().info(f'頭部調整') 
                         self.get_logger().info(f'頭部水平旋轉調整')                                            
@@ -1392,10 +1117,10 @@ class BasketBall(API):
                             # self.api.sendBodySector(5) 
                             # time.sleep(0.05) 
                             self.get_logger().info(f'開爪')
-                            # self.sendBodySector(23)
+                            self.sendBodySector(23)
                             time.sleep(3)
                             self.get_logger().info(f'投籃')
-                            # self.sendBodySector(24)
+                            self.sendBodySector(24)
                             # self.api.sendBodySector(5503)
                             time.sleep(2)
                             self.get_logger().info(f'motor.throw_strength  = {self.motor.throw_strength}')
@@ -1403,6 +1128,10 @@ class BasketBall(API):
                     
                 else:
                     self.get_logger().debug(f'框不在視野中 -> 五分球不會發生拉')
+
+    
+
+
 
 def main(args=None):
     rclpy.init(args=args)

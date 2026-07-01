@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>熱點裝置管理</title>
+<style>
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 16px;
+    background: #0b0f0d;
+    color: #e6e6e6;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+  }
+
+  h1 {
+    font-size: 20px;
+    margin: 0 0 12px;
+    color: #00fa9a;
+  }
+
+  #status-card {
+    background: #121815;
+    border: 1px solid #1f2b26;
+    border-left: 6px solid #555;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+
+  #status-card.active { border-left-color: #00fa9a; }
+  #status-card.inactive { border-left-color: #e05555; }
+
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 15px;
+    padding: 3px 0;
+  }
+
+  .status-row span:first-child { color: #999; }
+
+  #refresh-info {
+    font-size: 12px;
+    color: #666;
+    text-align: right;
+    margin-bottom: 10px;
+  }
+
+  #device-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .device-card {
+    background: #121815;
+    border: 1px solid #1f2b26;
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .device-card.blocked {
+    background: #1a1a1a;
+    border-color: #333;
+    color: #888;
+  }
+
+  .device-info { flex: 1; min-width: 0; }
+
+  .device-hostname {
+    font-size: 17px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 4px;
+    word-break: break-all;
+  }
+
+  .device-card.blocked .device-hostname { color: #999; }
+
+  .device-detail {
+    font-size: 13px;
+    color: #999;
+    line-height: 1.5;
+  }
+
+  .device-card.blocked .device-detail { color: #666; }
+
+  .badge-blocked {
+    display: inline-block;
+    font-size: 11px;
+    background: #4a1f1f;
+    color: #ff8a8a;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 6px;
+  }
+
+  .kick-btn {
+    flex-shrink: 0;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    background: #b23b3b;
+    min-width: 76px;
+  }
+
+  .kick-btn:active { opacity: 0.7; }
+
+  .unkick-btn {
+    background: #2a6b52;
+  }
+
+  #empty-msg {
+    text-align: center;
+    color: #666;
+    padding: 30px 0;
+    font-size: 14px;
+  }
+
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    background: #1f2b26;
+    color: #e6e6e6;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+    border: 1px solid #00fa9a;
+  }
+
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+  <h1>熱點裝置管理</h1>
+
+  <div id="status-card">
+    <div class="status-row"><span>SSID</span><span id="status-ssid">--</span></div>
+    <div class="status-row"><span>IP</span><span id="status-ip">--</span></div>
+    <div class="status-row"><span>狀態</span><span id="status-active">--</span></div>
+  </div>
+
+  <div id="refresh-info">每 5 秒自動更新</div>
+
+  <div id="device-list"></div>
+  <div id="empty-msg" style="display:none;">目前沒有連線裝置</div>
+
+  <div id="toast"></div>
+
+<script>
+  const API_BASE = 'http://' + window.location.hostname + ':5050';
+  let toastTimer = null;
+
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+  }
+
+  async function loadHotspotStatus() {
+    try {
+      const res = await fetch(API_BASE + '/hotspot_status');
+      const data = await res.json();
+      document.getElementById('status-ssid').textContent = data.ssid;
+      document.getElementById('status-ip').textContent = data.ip;
+      const activeEl = document.getElementById('status-active');
+      activeEl.textContent = data.active ? '運作中' : '未運作';
+      const card = document.getElementById('status-card');
+      card.className = data.active ? 'active' : 'inactive';
+    } catch (e) {
+      document.getElementById('status-active').textContent = '無法連線';
+    }
+  }
+
+  function renderDevices(devices) {
+    const list = document.getElementById('device-list');
+    const emptyMsg = document.getElementById('empty-msg');
+    list.innerHTML = '';
+
+    if (!devices.length) {
+      emptyMsg.style.display = 'block';
+      return;
+    }
+    emptyMsg.style.display = 'none';
+
+    devices.forEach(dev => {
+      const card = document.createElement('div');
+      card.className = 'device-card' + (dev.blocked ? ' blocked' : '');
+
+      const info = document.createElement('div');
+      info.className = 'device-info';
+      info.innerHTML = `
+        <div class="device-hostname">${escapeHtml(dev.hostname || '(未知裝置)')}${dev.blocked ? '<span class="badge-blocked">已封鎖</span>' : ''}</div>
+        <div class="device-detail">IP: ${escapeHtml(dev.ip)}</div>
+        <div class="device-detail">MAC: ${escapeHtml(dev.mac)}</div>
+        <div class="device-detail">連線時間: ${escapeHtml(dev.since)}</div>
+      `;
+
+      const btn = document.createElement('button');
+      if (dev.blocked) {
+        btn.className = 'kick-btn unkick-btn';
+        btn.textContent = '解除';
+        btn.onclick = () => unkickDevice(dev.mac);
+      } else {
+        btn.className = 'kick-btn';
+        btn.textContent = '踢除';
+        btn.onclick = () => kickDevice(dev.mac);
+      }
+
+      card.appendChild(info);
+      card.appendChild(btn);
+      list.appendChild(card);
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  async function loadDevices() {
+    try {
+      const res = await fetch(API_BASE + '/devices');
+      const devices = await res.json();
+      renderDevices(devices);
+    } catch (e) {
+      // 連不到 API 時保留目前畫面，不清空清單
+    }
+  }
+
+  async function kickDevice(mac) {
+    try {
+      const res = await fetch(API_BASE + '/kick', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mac }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('已踢除裝置');
+      } else {
+        showToast('踢除失敗: ' + (data.error || ''));
+      }
+    } catch (e) {
+      showToast('無法連線至 API');
+    }
+    loadDevices();
+  }
+
+  async function unkickDevice(mac) {
+    try {
+      const res = await fetch(API_BASE + '/kick/' + encodeURIComponent(mac), {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('已解除封鎖');
+      } else {
+        showToast('解除失敗: ' + (data.error || ''));
+      }
+    } catch (e) {
+      showToast('無法連線至 API');
+    }
+    loadDevices();
+  }
+
+  function refreshAll() {
+    loadHotspotStatus();
+    loadDevices();
+  }
+
+  refreshAll();
+  setInterval(refreshAll, 5000);
+</script>
+
+</body>
+</html>
