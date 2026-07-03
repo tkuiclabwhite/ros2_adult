@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+<title>Mobile Joystick</title>
+<link rel="stylesheet" type="text/css" href="./css/style.css">
+<style>
+  :root {
+    --joy-size: clamp(120px, min(38vw, 42vh), 200px);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+    color: #eee;
+  }
+
+  /* ---------- 狀態列 ---------- */
+  #statusBar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px;
+    background: rgba(0, 0, 0, 0.75);
+    border-bottom: 1px solid #1f2b26;
+    z-index: 50;
+    font-size: 13px;
+  }
+
+  #statusBar .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #e05555;
+    display: inline-block;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  #statusBar .dot.online { background: #00fa9a; }
+
+  #strategyName {
+    color: #00fa9a;
+    font-weight: 600;
+  }
+
+  /* ---------- 相機畫面 ---------- */
+  #cameraWrap {
+    position: fixed;
+    top: 34px; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0a0a0a;
+    z-index: 1;
+  }
+
+  #cameraImg {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  #cameraToggleBtn {
+    position: fixed;
+    top: 42px; right: 10px;
+    z-index: 40;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: rgba(20, 20, 20, 0.85);
+    color: #eee;
+    font-size: 13px;
+  }
+
+  #cameraToggleBtn:active { opacity: 0.7; }
+
+  /* ---------- 開啟步態（常用，移到主畫面）+ 目前步長顯示 ---------- */
+  #topLeftBar {
+    position: fixed;
+    top: 42px; left: 10px;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #generateMainBtn {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: rgba(20, 20, 20, 0.85);
+    color: #eee;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  #generateMainBtn.on {
+    background: rgba(31, 122, 77, 0.9);
+    border-color: #00fa9a;
+    color: #fff;
+  }
+
+  #generateMainBtn:active { opacity: 0.7; }
+
+  #stepReadout {
+    font-size: 11px;
+    color: #ccc;
+    background: rgba(20, 20, 20, 0.85);
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 8px 10px;
+    white-space: nowrap;
+  }
+
+  /* ---------- 頭部 Horizontal / Vertical 滑條 ---------- */
+  #horizSliderWrap {
+    position: fixed;
+    top: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(60vw, 260px);
+    z-index: 25;
+    background: rgba(10, 14, 12, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 5px 10px 8px;
+  }
+
+  /* 右側，切換鏡頭／急停的左邊，右搖桿上方。
+     #vertSliderWrap 的 width/height 就是最終畫面上看到的大小（正常定位，
+     不受旋轉影響）；裡面的 #vertSliderInner 用「置中再旋轉」的方式做成直的，
+     跟 horizontal 共用同一套 .head-slider 樣式，長相完全一致。 */
+  #vertSliderWrap {
+    position: fixed;
+    bottom: calc(16px + var(--joy-size) + 20px);
+    right: 80px;
+    z-index: 25;
+    width: 40px;
+    height: 110px;
+    background: rgba(10, 14, 12, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+  }
+
+  #vertSliderInner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 110px;
+    transform: translate(-50%, -50%) rotate(-90deg);
+    padding: 0 8px;
+  }
+
+  .head-slider-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #ccc;
+    margin-bottom: 3px;
+  }
+
+  .head-slider-label .val {
+    color: #00fa9a;
+    font-weight: 600;
+  }
+
+  input[type="range"].head-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #333;
+    outline: none;
+    margin: 4px 0;
+  }
+
+  input[type="range"].head-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: #333;
+  }
+
+  input[type="range"].head-slider::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: #333;
+  }
+
+  input[type="range"].head-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    margin-top: -8px;
+    border-radius: 50%;
+    background: #00fa9a;
+    border: 2px solid #0b0f0d;
+    box-shadow: 0 0 6px rgba(0, 250, 154, 0.7);
+  }
+
+  input[type="range"].head-slider::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #00fa9a;
+    border: 2px solid #0b0f0d;
+    box-shadow: 0 0 6px rgba(0, 250, 154, 0.7);
+  }
+
+
+  /* ---------- 搖桿 ---------- */
+  .joystick-base {
+    position: fixed;
+    bottom: 16px;
+    width: var(--joy-size);
+    height: var(--joy-size);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    z-index: 30;
+  }
+
+  #leftJoy { left: 16px; }
+  #rightJoy { right: 16px; }
+
+  #lockJoyBtn {
+    position: fixed;
+    top: 100px; left: 10px;
+    z-index: 30;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: rgba(20, 20, 20, 0.85);
+    color: #eee;
+    font-size: 13px;
+  }
+
+  #lockJoyBtn.on {
+    background: rgba(200, 140, 0, 0.9);
+    border-color: #ffb300;
+    color: #fff;
+  }
+
+  #lockJoyBtn:active { opacity: 0.7; }
+
+  .joystick-knob {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: calc(var(--joy-size) * 0.42);
+    height: calc(var(--joy-size) * 0.42);
+    margin-left: calc(var(--joy-size) * -0.21);
+    margin-top: calc(var(--joy-size) * -0.21);
+    border-radius: 50%;
+    background: rgba(0, 250, 154, 0.45);
+    border: 2px solid #00fa9a;
+    pointer-events: none;
+  }
+
+  .joystick-label {
+    position: absolute;
+    bottom: -20px;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 12px;
+    color: #999;
+  }
+
+  /* ---------- 急停 ---------- */
+  #estopBtn {
+    position: fixed;
+    top: calc(50% - 60px); right: 8px;
+    transform: translateY(-50%);
+    width: 68px; height: 68px;
+    border-radius: 50%;
+    background: #c0392b;
+    border: 3px solid #ff8a8a;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    z-index: 60;
+    box-shadow: 0 0 18px rgba(255, 0, 0, 0.6);
+  }
+
+  #estopBtn:active { background: #922b21; }
+
+  /* ---------- 次要功能面板 ---------- */
+  #morePanelToggle {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 35;
+    padding: 10px 16px;
+    border-radius: 20px;
+    background: rgba(30, 30, 30, 0.85);
+    border: 1px solid #444;
+    color: #eee;
+    font-size: 13px;
+  }
+
+  #morePanel {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 70;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #morePanel.show { display: flex; }
+
+  #morePanelCard {
+    background: #161b19;
+    border: 1px solid #2a3a34;
+    border-radius: 12px;
+    padding: 18px;
+    width: min(90vw, 360px);
+    max-height: 82vh;
+    overflow-y: auto;
+  }
+
+  #morePanelCard h2 {
+    font-size: 16px;
+    margin: 0 0 14px;
+    color: #00fa9a;
+  }
+
+  .panel-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .panel-btn {
+    flex: 1;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: #2a4a6b;
+  }
+
+  .panel-btn:active { opacity: 0.7; }
+
+  .panel-btn.on { background: #1f7a4d; }
+  .panel-btn.off { background: #6b2a2a; }
+
+  #execInput {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    background: #0e1210;
+    color: #eee;
+    font-size: 14px;
+  }
+
+  #closePanelBtn {
+    width: 100%;
+    margin-top: 6px;
+    border: 1px solid #444;
+    background: transparent;
+    color: #999;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  #panelMsg {
+    font-size: 12px;
+    color: #888;
+    min-height: 16px;
+    margin-bottom: 8px;
+  }
+
+  /* ---------- 搖桿範圍設定 ---------- */
+  .axis-settings-title {
+    font-size: 13px;
+    color: #999;
+    margin: 14px 0 6px;
+    border-top: 1px solid #2a3a34;
+    padding-top: 12px;
+  }
+
+  .axis-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+
+  .axis-row label {
+    width: 34px;
+    color: #999;
+    flex-shrink: 0;
+  }
+
+  .axis-row input {
+    width: 0;
+    flex: 1;
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #0e1210;
+    color: #eee;
+    font-size: 12px;
+  }
+
+  /* ---------- 快速跳轉：沿用 css/style.css 的真正導覽列樣式，放在次要功能面板
+     裡面（隨面板一起開關），這裡只覆蓋窄螢幕需要的排版（float 改 flex-wrap）---------- */
+  #quickNavBar {
+    margin-top: 14px;
+    border-top: 1px solid #2a3a34;
+    padding-top: 4px;
+  }
+
+  #quickNavBar ul {
+    height: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  #quickNavBar li { float: none; }
+</style>
+</head>
+<body>
+
+  <div id="statusBar">
+    <div><span id="connDot" class="dot"></span><span id="connText">未連線</span></div>
+    <div>Strategy: <span id="strategyName">--</span> <span id="cameraModeName">(原始畫面)</span></div>
+  </div>
+
+  <div id="cameraWrap">
+    <img id="cameraImg" alt="camera stream">
+  </div>
+  <button id="cameraToggleBtn">切換鏡頭</button>
+
+  <div id="topLeftBar">
+    <button id="generateMainBtn">開啟步態</button>
+    <span id="stepReadout">X:0 Y:0 Theta:0</span>
+  </div>
+
+  <div id="horizSliderWrap">
+    <div class="head-slider-label"><span>Horizontal</span><span class="val" id="horizVal">2048</span></div>
+    <input type="range" class="head-slider" id="horizSlider" min="1024" max="3096" value="2048">
+  </div>
+  <div id="vertSliderWrap">
+    <div id="vertSliderInner">
+      <div class="head-slider-label"><span>Vertical</span><span class="val" id="vertVal">2048</span></div>
+      <input type="range" class="head-slider" id="vertSlider" min="1450" max="2900" value="2048">
+    </div>
+  </div>
+
+  <button id="lockJoyBtn">鎖定搖桿</button>
+
+  <div id="leftJoy" class="joystick-base">
+    <div class="joystick-knob"></div>
+    <div class="joystick-label">X / Y</div>
+  </div>
+  <div id="rightJoy" class="joystick-base">
+    <div class="joystick-knob"></div>
+    <div class="joystick-label">Theta</div>
+  </div>
+
+  <button id="estopBtn">急停</button>
+
+  <button id="morePanelToggle">更多功能 ▲</button>
+
+  <div id="morePanel">
+    <div id="morePanelCard">
+      <h2>次要功能</h2>
+      <div id="panelMsg"></div>
+
+      <div class="panel-row">
+        <button id="standBtn" class="panel-btn">站姿</button>
+        <button id="torqueBtn" class="panel-btn off">扭力：關</button>
+      </div>
+
+      <div class="panel-row">
+        <input id="execInput" type="number" placeholder="動作編號">
+        <button id="execBtn" class="panel-btn" style="flex:0 0 auto; padding:12px 16px;">Execute</button>
+      </div>
+
+      <div class="axis-settings-title" style="border-top:none; padding-top:0; margin-top:0;">頭部速度</div>
+      <div class="axis-row">
+        <label>Speed</label>
+        <input id="headSpeedInput" type="number" value="50" min="1">
+      </div>
+
+      <div class="axis-settings-title">搖桿範圍設定（最小 / 零點 / 最大）</div>
+      <div class="axis-row">
+        <label>X</label>
+        <input id="xMin" type="number" value="-6000">
+        <input id="xZero" type="number" value="0">
+        <input id="xMax" type="number" value="6000">
+      </div>
+      <div class="axis-row">
+        <label>Y</label>
+        <input id="yMin" type="number" value="-6000">
+        <input id="yZero" type="number" value="0">
+        <input id="yMax" type="number" value="6000">
+      </div>
+      <div class="axis-row">
+        <label>Theta</label>
+        <input id="thetaMin" type="number" value="-10">
+        <input id="thetaZero" type="number" value="0">
+        <input id="thetaMax" type="number" value="10">
+      </div>
+      <button id="applyAxisBtn" class="panel-btn" style="width:100%; margin-bottom:12px;">套用搖桿設定</button>
+
+      <!-- 快速跳轉：只留常用的幾個，放在次要功能面板下方 -->
+      <div id="quickNavBar">
+        <ul>
+          <li><a target="_blank" class="navbarright" href="HotspotManager.html">HotspotManager</a></li>
+          <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
+          <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+          <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+        </ul>
+      </div>
+
+      <button id="closePanelBtn">收合</button>
+    </div>
+  </div>
+
+  <script src="./js/config.js"></script>
+  <script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
+  <script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+  <script src="./strategy.js"></script>
+  <script>
+    // ===================================================================
+    // ROS 連線
+    // ===================================================================
+    var ros = new ROSLIB.Ros({
+      url: 'ws://' + window.ROBOT_CONFIG.ip + ':9090'
+    });
+
+    var rosConnected = false;
+
+    ros.on('connection', function () {
+      rosConnected = true;
+      document.getElementById('connDot').classList.add('online');
+      document.getElementById('connText').textContent = '已連線';
+    });
+    ros.on('error', function () {
+      rosConnected = false;
+      document.getElementById('connDot').classList.remove('online');
+      document.getElementById('connText').textContent = '未連線';
+    });
+    ros.on('close', function () {
+      rosConnected = false;
+      document.getElementById('connDot').classList.remove('online');
+      document.getElementById('connText').textContent = '未連線';
+    });
+
+    // ===================================================================
+    // Topics / Service（沿用 WalkingInterface / MotionControlInterface 既有的名稱）
+    // ===================================================================
+    var ContinousMode_Topic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/ContinousMode_Topic',
+      messageType: 'std_msgs/Int16'
+    });
+
+    var SendBodyAuto_Topic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/SendBodyAuto_Topic',
+      messageType: 'tku_msgs/Interface'
+    });
+
+    var StandExecuteTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/package/StandExecute',
+      messageType: 'std_msgs/Bool'
+    });
+
+    var InterfaceSend2Sector_Topic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/package/InterfaceSend2Sector',
+      messageType: 'tku_msgs/InterfaceSend2Sector'
+    });
+
+    var SectorPackage_Topic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/package/Sector',
+      messageType: 'std_msgs/Int16'
+    });
+
+    var CheckSectorClient = new ROSLIB.Service({
+      ros: ros,
+      name: '/package/InterfaceCheckSector',
+      serviceType: 'tku_msgs/CheckSector'
+    });
+
+    // 開機先讀 strategy.js 給的靜態值（跟其他頁面一樣的作法），
+    // 連上 ROS 之後再用 /locationBack 的即時訊息覆蓋過去
+    function parseStrategyLoc(raw) {
+      var loc = raw;
+      if (typeof loc === 'string') {
+        loc = loc.replace(/^\/+/, '');
+        loc = loc.split('/')[0].trim();
+      }
+      return loc;
+    }
+    document.getElementById('strategyName').textContent = parseStrategyLoc(window.currentStrategy || '') || '--';
+
+    var locationBack_Subscriber = new ROSLIB.Topic({
+      ros: ros,
+      name: '/locationBack',
+      messageType: 'tku_msgs/msg/Location'
+    });
+    locationBack_Subscriber.subscribe(function (msg) {
+      document.getElementById('strategyName').textContent = parseStrategyLoc(msg.data) || '--';
+    });
+
+    // ===================================================================
+    // 相機畫面（zoom_in / processed_image 切換）
+    // ===================================================================
+    var cameraStreams = ['/zoom_in', '/processed_image'];
+    var cameraStreamNames = ['原始畫面', '色模'];
+    var cameraIndex = 0;
+
+    function setCameraStream() {
+      var img = document.getElementById('cameraImg');
+      // 加時間戳讓每次切換的網址都不一樣，強迫瀏覽器當成全新資源重新連線
+      // （直接改 src 成同一個曾經用過的網址，有些瀏覽器會沿用舊的 MJPEG 連線狀態）
+      var url = 'http://' + window.ROBOT_CONFIG.ip + ':8080/stream?topic=' + cameraStreams[cameraIndex] + '&_=' + Date.now();
+      img.src = url;
+      document.getElementById('cameraModeName').textContent = '(' + cameraStreamNames[cameraIndex] + ')';
+    }
+    document.getElementById('cameraToggleBtn').onclick = function () {
+      cameraIndex = (cameraIndex + 1) % cameraStreams.length;
+      setCameraStream();
+    };
+    setCameraStream();
+
+    // ===================================================================
+    // 搖桿：x/y/theta 狀態 + 20Hz throttle 發送
+    // ===================================================================
+    var DEADZONE_RATIO = 0.15;
+
+    // 可調整的搖桿範圍（最小/零點/最大），零點是放手時要送出的值，不一定是 0
+    var axisConfig = {
+      x: { min: -6000, max: 6000, zero: 0 },
+      y: { min: -6000, max: 6000, zero: 0 },
+      theta: { min: -10, max: 10, zero: 0 }
+    };
+
+    function mapAxis(norm, axisName) {
+      var c = axisConfig[axisName];
+      if (norm >= 0) return c.zero + norm * (c.max - c.zero);
+      return c.zero + norm * (c.zero - c.min);
+    }
+
+    var joyX = axisConfig.x.zero, joyY = axisConfig.y.zero, joyTheta = axisConfig.theta.zero;
+
+    // 開啟步態的狀態：關閉時完全不送步長指令
+    var continuousOn = false;
+
+    function sendBodyMessage() {
+      var msg = new ROSLIB.Message({
+        x: joyX,
+        y: joyY,
+        z: 0,
+        theta: joyTheta,
+        walking_mode: 0,
+        walking_state: 0,
+        sensor_mode: 0
+      });
+      SendBodyAuto_Topic.publish(msg);
+    }
+
+    // 一般情況：步態沒開就不送
+    function publishBody() {
+      if (!rosConnected || !continuousOn) return;
+      sendBodyMessage();
+    }
+
+    // 急停等場合強制送出，不受「步態是否開啟」限制
+    function forcePublishBody() {
+      if (!rosConnected) return;
+      sendBodyMessage();
+    }
+
+    setInterval(publishBody, 50); // 20Hz
+
+    // 顯示目前步長 (x/y/theta)，放在「開啟步態」按鈕旁邊
+    function updateStepReadout() {
+      document.getElementById('stepReadout').textContent =
+        'X:' + joyX + ' Y:' + joyY + ' Theta:' + joyTheta;
+    }
+
+    // 鎖定搖桿：按下後凍結目前的 x/y/theta（定速），再按一次或重新觸碰任一搖桿解除
+    var joystickLocked = false;
+    var lockJoyBtn = document.getElementById('lockJoyBtn');
+
+    function setJoystickLocked(locked) {
+      joystickLocked = locked;
+      lockJoyBtn.textContent = joystickLocked ? '解除鎖定（定速中）' : '鎖定搖桿';
+      lockJoyBtn.classList.toggle('on', joystickLocked);
+    }
+
+    // 用 touchstart 而不是 onclick：手機上第二根手指的合成 click 事件常常在
+    // 另一根手指還在拖搖桿（多點觸控進行中）時被瀏覽器吃掉不觸發，
+    // 直接聽 touchstart 才能在搖桿拖動的同時按得到（跟急停按鈕用同一招）
+    lockJoyBtn.addEventListener('touchstart', function (e) {
+      e.preventDefault();
+      setJoystickLocked(!joystickLocked);
+    }, { passive: false });
+
+    function setupJoystick(baseEl, opts) {
+      var knobEl = baseEl.querySelector('.joystick-knob');
+      var touchId = null;
+
+      function handleMove(touch) {
+        if (joystickLocked) return; // 鎖定中：連視覺上的搖桿位置都不再跟著手指跑
+        var rect = baseEl.getBoundingClientRect();
+        var originX = rect.left + rect.width / 2;
+        var originY = rect.top + rect.height / 2;
+        var radius = rect.width / 2;
+
+        var dx = touch.clientX - originX;
+        var dy = opts.axis === 'x' ? 0 : (touch.clientY - originY);
+        var dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > radius) {
+          var scale = radius / dist;
+          dx *= scale;
+          dy *= scale;
+          dist = radius;
+        }
+
+        knobEl.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
+
+        var normX = dx / radius;
+        var normY = dy / radius;
+        var normDist = dist / radius;
+
+        if (normDist < DEADZONE_RATIO) {
+          opts.onMove(0, 0);
+        } else {
+          opts.onMove(normX, -normY); // 反轉 y：往上拖 = 正值
+        }
+      }
+
+      function reset() {
+        if (!joystickLocked) {
+          knobEl.style.transform = 'translate(0px, 0px)'; // 鎖定中就保持在目前的位置，不歸中
+        }
+        opts.onEnd();
+      }
+
+      baseEl.addEventListener('touchstart', function (e) {
+        e.preventDefault();
+        if (touchId !== null) return;
+        if (joystickLocked) setJoystickLocked(false);
+        var touch = e.changedTouches[0];
+        touchId = touch.identifier;
+        handleMove(touch);
+      }, { passive: false });
+
+      baseEl.addEventListener('touchmove', function (e) {
+        e.preventDefault();
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          var touch = e.changedTouches[i];
+          if (touch.identifier === touchId) handleMove(touch);
+        }
+      }, { passive: false });
+
+      function handleEnd(e) {
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === touchId) {
+            touchId = null;
+            reset();
+          }
+        }
+      }
+      baseEl.addEventListener('touchend', handleEnd);
+      baseEl.addEventListener('touchcancel', handleEnd);
+    }
+
+    setupJoystick(document.getElementById('leftJoy'), {
+      axis: 'both',
+      onMove: function (normX, normY) {
+        if (joystickLocked) return; // 鎖定中：忽略拖動，保持在鎖定當下的數值
+        joyX = Math.round(mapAxis(normY, 'x'));
+        joyY = Math.round(mapAxis(-normX, 'y')); // 左拖 = 正值（對應 LeftFun 增加 y）
+        updateStepReadout();
+      },
+      onEnd: function () {
+        if (joystickLocked) return; // 鎖定中：放手也不歸零，維持定速
+        joyX = axisConfig.x.zero;
+        joyY = axisConfig.y.zero;
+        publishBody(); // 放手立刻回到零點、立刻送出
+        updateStepReadout();
+      }
+    });
+
+    setupJoystick(document.getElementById('rightJoy'), {
+      axis: 'x',
+      onMove: function (normX) {
+        if (joystickLocked) return;
+        joyTheta = Math.round(mapAxis(-normX, 'theta')); // 左拖 = 正值（對應 LeftTurnFun）
+        updateStepReadout();
+      },
+      onEnd: function () {
+        if (joystickLocked) return;
+        joyTheta = axisConfig.theta.zero;
+        publishBody();
+        updateStepReadout();
+      }
+    });
+
+    // ===================================================================
+    // 急停
+    // ===================================================================
+    // 急停一律送出絕對 0，不受搖桿零點設定影響，確保停止訊號永遠明確；
+    // 同時關閉步態並更新「開啟步態」按鈕狀態
+    document.getElementById('estopBtn').addEventListener('touchstart', function (e) {
+      e.preventDefault();
+      setJoystickLocked(false);
+      joyX = 0; joyY = 0; joyTheta = 0;
+      document.querySelectorAll('.joystick-knob').forEach(function (k) {
+        k.style.transform = 'translate(0px, 0px)';
+      });
+      forcePublishBody(); // 一定要送出歸零，不受「步態是否開啟」限制
+      updateStepReadout();
+      if (continuousOn) {
+        continuousOn = false;
+        ContinousMode_Topic.publish(new ROSLIB.Message({ data: 0 }));
+        updateGenerateBtnUI();
+      }
+    }, { passive: false });
+
+    // ===================================================================
+    // 次要功能面板
+    // ===================================================================
+    var morePanel = document.getElementById('morePanel');
+
+    function openMorePanel() {
+      morePanel.classList.add('show');
+    }
+    function closeMorePanel() {
+      morePanel.classList.remove('show');
+    }
+
+    document.getElementById('morePanelToggle').onclick = openMorePanel;
+    document.getElementById('closePanelBtn').onclick = closeMorePanel;
+
+    // 點卡片以外的遮罩區域（旁邊沒東西的地方）也收合
+    morePanel.addEventListener('click', function (e) {
+      if (e.target === morePanel) closeMorePanel();
+    });
+
+    function panelMsg(text) {
+      document.getElementById('panelMsg').textContent = text;
+    }
+
+    // 開啟步態 (generate) — 常用功能，按鈕在主畫面上
+    // 沿用 WalkingInterface.html 的 /web/LoadWalkingGaitParameter service，
+    // 開啟前要先載入步態參數，載入完成才真的開始走
+    var LoadWalkingGaitParameterClient = new ROSLIB.Service({
+      ros: ros,
+      name: '/web/LoadWalkingGaitParameter',
+      serviceType: 'tku_msgs/WalkingGaitParameter'
+    });
+
+    function updateGenerateBtnUI() {
+      var btn = document.getElementById('generateMainBtn');
+      btn.textContent = continuousOn ? '步態運行中' : '開啟步態';
+      btn.classList.toggle('on', continuousOn);
+    }
+
+    document.getElementById('generateMainBtn').onclick = function () {
+      var btn = document.getElementById('generateMainBtn');
+
+      if (continuousOn) {
+        continuousOn = false;
+        ContinousMode_Topic.publish(new ROSLIB.Message({ data: 0 }));
+        updateGenerateBtnUI();
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '載入中...';
+      LoadWalkingGaitParameterClient.callService(new ROSLIB.ServiceRequest({ mode: 0 }), function () {
+        btn.disabled = false;
+        continuousOn = true;
+        ContinousMode_Topic.publish(new ROSLIB.Message({ data: 1 }));
+        updateGenerateBtnUI();
+        publishBody(); // 立刻送一次目前的搖桿值，不等下一個 20Hz tick
+      });
+    };
+
+    // 站姿 (stand)
+    document.getElementById('standBtn').onclick = function () {
+      StandExecuteTopic.publish(new ROSLIB.Message({ data: true }));
+      panelMsg('已送出站姿指令');
+    };
+
+    // 扭力開關 (toggle)
+    var torqueOn = false;
+    document.getElementById('torqueBtn').onclick = function () {
+      var targetState = torqueOn ? 0 : 1;
+      var msg = new ROSLIB.Message({
+        package: [83, 84, 246, 0, targetState, 78, 69],
+        sectorname: '',
+        delay: [],
+        cnt: 0
+      });
+      InterfaceSend2Sector_Topic.publish(msg);
+      torqueOn = !torqueOn;
+      var btn = document.getElementById('torqueBtn');
+      btn.textContent = torqueOn ? '扭力：開' : '扭力：關';
+      btn.className = 'panel-btn ' + (torqueOn ? 'on' : 'off');
+      panelMsg(torqueOn ? '扭力已開啟' : '扭力已關閉');
+    };
+
+    // 輸入號碼執行動作 (execute)
+    document.getElementById('execBtn').onclick = function () {
+      var sector = Number(document.getElementById('execInput').value);
+      if (!sector || sector < 1) {
+        panelMsg('請輸入有效的動作編號');
+        return;
+      }
+      panelMsg('檢查動作編號中...');
+      CheckSectorClient.callService(new ROSLIB.ServiceRequest({ data: sector }), function (srv) {
+        if (srv.checkflag) {
+          SectorPackage_Topic.publish(new ROSLIB.Message({ data: sector }));
+          panelMsg('已執行動作 #' + sector);
+        } else {
+          panelMsg('動作編號 #' + sector + ' 不存在');
+        }
+      });
+    };
+
+    // ===================================================================
+    // 頭部 Horizontal / Vertical（沿用 ImageProcessInterface.html 的 /Head_Topic）
+    // ===================================================================
+    var Head_Topic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/Head_Topic',
+      messageType: 'tku_msgs/HeadPackage'
+    });
+    var HEAD_SPEED = 50;
+
+    function publishHead(webId, position) {
+      var pos = Math.max(0, Math.min(4095, Math.round(position)));
+      Head_Topic.publish(new ROSLIB.Message({
+        id: webId,
+        position: pos,
+        speed: HEAD_SPEED
+      }));
+    }
+
+    // 拖動方向跟實際雲台轉動方向相反，這裡把送出去的刻度值反轉（顯示的數字 = 實際送出的值）
+    function invertSliderValue(inputEl) {
+      var min = Number(inputEl.min);
+      var max = Number(inputEl.max);
+      return min + max - Number(inputEl.value);
+    }
+
+    document.getElementById('horizSlider').addEventListener('input', function (e) {
+      var pos = invertSliderValue(e.target);
+      document.getElementById('horizVal').textContent = pos;
+      publishHead(1, pos);
+    });
+    document.getElementById('vertSlider').addEventListener('input', function (e) {
+      var pos = invertSliderValue(e.target);
+      document.getElementById('vertVal').textContent = pos;
+      publishHead(2, pos);
+    });
+
+    document.getElementById('headSpeedInput').addEventListener('change', function (e) {
+      var speed = Number(e.target.value);
+      if (!speed || speed < 1) {
+        e.target.value = HEAD_SPEED;
+        return;
+      }
+      HEAD_SPEED = speed;
+      panelMsg('頭部速度已設定為 ' + HEAD_SPEED);
+    });
+
+    // ===================================================================
+    // 套用搖桿範圍設定
+    // ===================================================================
+    document.getElementById('applyAxisBtn').onclick = function () {
+      var next = {
+        x: {
+          min: Number(document.getElementById('xMin').value),
+          zero: Number(document.getElementById('xZero').value),
+          max: Number(document.getElementById('xMax').value)
+        },
+        y: {
+          min: Number(document.getElementById('yMin').value),
+          zero: Number(document.getElementById('yZero').value),
+          max: Number(document.getElementById('yMax').value)
+        },
+        theta: {
+          min: Number(document.getElementById('thetaMin').value),
+          zero: Number(document.getElementById('thetaZero').value),
+          max: Number(document.getElementById('thetaMax').value)
+        }
+      };
+      for (var axisName in next) {
+        var c = next[axisName];
+        if (isNaN(c.min) || isNaN(c.zero) || isNaN(c.max) || c.min >= c.max || c.zero < c.min || c.zero > c.max) {
+          panelMsg('搖桿設定不合法（需 min < max，且 min ≤ 零點 ≤ max）');
+          return;
+        }
+      }
+      axisConfig = next;
+      joyX = axisConfig.x.zero;
+      joyY = axisConfig.y.zero;
+      joyTheta = axisConfig.theta.zero;
+      panelMsg('搖桿範圍設定已套用');
+    };
+  </script>
+
+</body>
+</html>

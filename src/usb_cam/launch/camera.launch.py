@@ -128,8 +128,11 @@ def generate_launch_description():
     # ================================================================
     # 5) 熱點裝置管理：網頁伺服器 + API
     # ================================================================
+    # 用自訂的 http_server.py 而不是 python3 -m http.server：
+    # /strategy.js 要即時讀 src/strategy/strategy/strategy.js 的最新內容
+    # （那個檔案會一直變動，複製或 symlink 都會過期/傳輸失真）。
     http_server = ExecuteProcess(
-        cmd=['python3', '-m', 'http.server', '9999'],
+        cmd=['python3', '/home/iclab/ros2_adult/hurocup_interface/http_server.py'],
         cwd='/home/iclab/ros2_adult/hurocup_interface',
         output='screen',
     )
@@ -143,11 +146,8 @@ def generate_launch_description():
 
     actions =  camera_nodes + \
               [driver_node, walking_node, motion_node, web_bridge_node, imu_node, switch_node] + \
-              [image_node, web_video, rosbridge_node,http_server, hotspot_api] 
-    # actions =  camera_nodes + \
-    #           [driver_node, walking_node, motion_node, web_bridge_node] + \
-    #           [image_node, web_video, rosbridge_node] + \
-    #           [http_server, hotspot_api]
+              [image_node, web_video, rosbridge_node,http_server, hotspot_api]
+
 
 
     ld = LaunchDescription()

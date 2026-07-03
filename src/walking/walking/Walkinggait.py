@@ -702,13 +702,20 @@ class WalkingGaitByLIPM:
         s = max(0.0, min(t / T, 1.0))
         if self.now_step_ == 3: s = max(0.0, min(t / (0.5 * T), 1.0))
 
+        # 延遲起飛比例：質心偏移獨占 [0, delay_ratio]，抬腳獨占 [delay_ratio, 1]
+        # 下限鎖 0.5 避免重心偏移速度跟不上抬腳，腳還沒離地就已經傾倒；上限留給網頁 T_DSP 可再延後
+        delay_ratio = max(0.1, min(float(getattr(parameter, "Tdsp", 0.0)), 0.8))
+
         # =========================================================
         # --- 1. 質心 (COM) Y 軸硬偏移 (絕對防左倒) ---
+        # 用 delay_ratio 把 s 重新映射到 [0,1]，讓質心在抬腳前就已經偏移到位，
+        # 而不是和抬腳動作同時、用同一條曲線慢慢飄過去
         # =========================================================
+        s_com = min(s / delay_ratio, 1.0)
         if self.now_step_ == 1:
-            self.py_ = y_shift * self.smooth_step(s)
+            self.py_ = y_shift * self.smooth_step(s_com)
         elif self.now_step_ == 2:
-            self.py_ = y_shift - (2 * y_shift) * self.smooth_step(s)
+            self.py_ = y_shift - (2 * y_shift) * self.smooth_step(s_com)
         elif self.now_step_ == 3:
             self.py_ = -y_shift * (1.0 - self.smooth_step(s))
 
@@ -739,8 +746,7 @@ class WalkingGaitByLIPM:
         # =========================================================
         # --- 3. 雙腳貝茲軌跡計算 ---
         # =========================================================
-        # 延遲起飛：讓重心移動一定比例後，腳才允許離地 (配合網頁的 T_DSP)
-        delay_ratio = max(0.1, min(float(getattr(parameter, "Tdsp", 0.0)), 0.4))
+        # 延遲起飛：質心已在 delay_ratio 前完成偏移，腳掌才開始離地
         s_swing = max(0.0, (s - delay_ratio) / (1.0 - delay_ratio)) if s < 1.0 else 1.0
 
         if self.now_step_ == 1:

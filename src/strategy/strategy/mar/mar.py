@@ -89,7 +89,7 @@ class Mar(API):
     def imu_go(self):
         
         self.theta = 0 + ORIGIN_THETA
-        self.speed_x = -2500
+        self.speed_x = 2500
 
         self.get_logger().debug(f'直走 yaw={self.yaw:.2f}')
 
@@ -114,14 +114,14 @@ class Mar(API):
     def arrow_turn(self):
         print(1)
         if self.arrow_temp[0] == 'right':
-            self.sendContinuousValue(-2500, -1000, -8 + ORIGIN_THETA)
+            self.sendContinuousValue(1000, -1000, -8 + ORIGIN_THETA)
         elif self.arrow_temp[0] == 'left':
-            self.sendContinuousValue(-2000, 1000, 8 + ORIGIN_THETA)
+            self.sendContinuousValue(1000, 3000, 8 + ORIGIN_THETA)
         else:
             self.sendContinuousValue(0, 0, 0)
             return
 
-        if abs(self.yaw - self.turn_start_yaw) > 95:
+        if abs(self.yaw - self.turn_start_yaw) > 90:
             self.sendSensorReset(True)
             self.turn_now_flag = False
             self.can_turn_flag = False
@@ -158,7 +158,7 @@ class Mar(API):
                         self.get_logger().info('穩定看到可轉向箭頭')
                         
                         # 接近箭頭才開始轉
-                        if self.arrow_center_y >= 140:
+                        if self.arrow_center_y >= 120:
                             self.arrow_cnt_times += 1
 
                         if self.arrow_cnt_times >= 13:

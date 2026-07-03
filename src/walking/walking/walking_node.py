@@ -452,9 +452,13 @@ def main():
                     # 上下樓梯 (LC) 專用：髖 roll (17/23) 跟腳踝 roll (20/21/26/27) 支撐方向相反，
                     # 只在 mode 1/2 反轉這兩顆，其餘馬達與一般走路/SR_Continuous 不受影響
                     if current_mode in (1, 2):
-                        for mid in (17, 23):
+                        for mid in (17, 23, 26, 27):
                             if mid in rel_cmd:
                                 rel_cmd[mid] = -rel_cmd[mid]
+
+                        if 26 in rel_cmd and 27 in rel_cmd:
+                            rel_cmd[26], rel_cmd[27] = rel_cmd[27], rel_cmd[26]
+
                     gp_abs = {}
                     for mid in LEG_IDS:
                         base = baseline_ticks.get(mid, DEFAULT_TICKS)

@@ -20,17 +20,17 @@ HEAD_CHECK = 2080
 HAND_BACK = 222 
 LEG_BACK = 1812
 VERTICAL_HEAD = 2125
-X_BENCHMARK = [199, 189, 184, 177, 171] # [最左,中左,中間,中右,最右]    #改大射左
+X_BENCHMARK = [200, 200, 200, 200, 200] # [最左,中左,中間,中右,最右]    #改大射左
 
-Y_BENCHMARK = 140 #改大射高
+Y_BENCHMARK = 190 #改大射高
 SHOOT_DELAY = 0.69
 
 # motion sector
-PREPARE = 9998 
+PREPARE = 9997
 SHOOT = 456       
 HAND_UP = 111
 LEG_DOWN1 = 1218 
-LEG_DOWN2 = 12188  
+# LEG_DOWN2 = 12188  
 
 #========================================================
 RIGHT_TURN = 2.4
@@ -184,7 +184,7 @@ class Archery(Node):
             
             self.send.sendBodySector(SHOOT) 
             self.send.drawImageFunction(6, 1, int(self.lowest_x-1), int(self.lowest_x+1), int(self.lowest_y-1), int(self.lowest_y+1), 255, 0, 255) 
-            time.sleep(2)
+            time.sleep(8)
             
             # self.send.sendBodySector(999)
             time.sleep(2)
@@ -342,7 +342,7 @@ class Archery(Node):
                             # if i < 2:
                             #     self.send.sendBodySector(LEG_DOWN1) #蘿菠蹲
                             # else:
-                            self.send.sendBodySector(LEG_DOWN2) #蘿菠蹲
+                            self.send.sendBodySector(LEG_DOWN1) #蘿菠蹲
                             time.sleep(0.5)
 
                     else:

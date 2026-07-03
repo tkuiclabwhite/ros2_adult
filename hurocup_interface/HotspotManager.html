@@ -57,9 +57,8 @@
     border-radius: 10px;
     padding: 14px 16px;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .device-card.blocked {
@@ -68,14 +67,23 @@
     color: #888;
   }
 
-  .device-info { flex: 1; min-width: 0; }
+  .device-card.offline {
+    opacity: 0.6;
+  }
+
+  .device-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 
   .device-hostname {
     font-size: 17px;
     font-weight: 600;
     color: #fff;
-    margin-bottom: 4px;
     word-break: break-all;
+    flex: 1;
+    min-width: 0;
   }
 
   .device-card.blocked .device-hostname { color: #999; }
@@ -98,16 +106,66 @@
     margin-left: 6px;
   }
 
-  .kick-btn {
+  .badge-offline {
+    display: inline-block;
+    font-size: 11px;
+    background: #333;
+    color: #999;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 6px;
+  }
+
+  .badge-online {
+    display: inline-block;
+    font-size: 11px;
+    background: #0f3d2b;
+    color: #00fa9a;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 6px;
+  }
+
+  .icon-btn {
     flex-shrink: 0;
+    border: 1px solid #2a3a34;
+    background: #1a231f;
+    color: #ccc;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 14px;
+  }
+
+  .icon-btn:active { opacity: 0.7; }
+
+  .device-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .action-btn {
+    flex: 1;
     border: none;
     border-radius: 8px;
-    padding: 14px 18px;
-    font-size: 15px;
+    padding: 12px 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: #2a4a6b;
+  }
+
+  .action-btn:active { opacity: 0.7; }
+
+  .kick-btn {
+    flex: 1;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 10px;
+    font-size: 14px;
     font-weight: 600;
     color: #fff;
     background: #b23b3b;
-    min-width: 76px;
   }
 
   .kick-btn:active { opacity: 0.7; }
@@ -160,7 +218,9 @@
   <div id="toast"></div>
 
 <script>
-  const API_BASE = 'http://' + window.location.hostname + ':5050';
+  // 透過 file:// 直接開啟（例如電腦用 SFTP 掛載後雙擊開檔）時沒有 hostname，
+  // 這台熱點 IP 固定，直接 fallback 回去就好。
+  const API_BASE = 'http://' + (window.location.hostname || '10.10.10.10') + ':5050';
   let toastTimer = null;
 
   function showToast(msg) {
@@ -199,30 +259,70 @@
 
     devices.forEach(dev => {
       const card = document.createElement('div');
-      card.className = 'device-card' + (dev.blocked ? ' blocked' : '');
+      card.className = 'device-card' + (dev.blocked ? ' blocked' : (dev.connected ? '' : ' offline'));
 
-      const info = document.createElement('div');
-      info.className = 'device-info';
-      info.innerHTML = `
-        <div class="device-hostname">${escapeHtml(dev.hostname || '(未知裝置)')}${dev.blocked ? '<span class="badge-blocked">已封鎖</span>' : ''}</div>
+      const nameRow = document.createElement('div');
+      nameRow.className = 'device-name-row';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'device-hostname';
+      const displayName = dev.nickname || dev.hostname || '(未知裝置)';
+      let statusBadge;
+      if (dev.blocked) {
+        statusBadge = '<span class="badge-blocked">已封鎖</span>';
+      } else if (dev.connected) {
+        statusBadge = '<span class="badge-online">已連線</span>';
+      } else {
+        statusBadge = '<span class="badge-offline">離線</span>';
+      }
+      nameEl.innerHTML = escapeHtml(displayName) + statusBadge;
+
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'icon-btn';
+      renameBtn.textContent = '✎';
+      renameBtn.onclick = () => renameDevice(dev);
+
+      nameRow.appendChild(nameEl);
+      nameRow.appendChild(renameBtn);
+
+      const details = document.createElement('div');
+      details.innerHTML = `
         <div class="device-detail">IP: ${escapeHtml(dev.ip)}</div>
         <div class="device-detail">MAC: ${escapeHtml(dev.mac)}</div>
         <div class="device-detail">連線時間: ${escapeHtml(dev.since)}</div>
+        <div class="device-detail">固定 IP: ${dev.reserved_ip ? escapeHtml(dev.reserved_ip) : '未設定'}</div>
       `;
 
-      const btn = document.createElement('button');
-      if (dev.blocked) {
-        btn.className = 'kick-btn unkick-btn';
-        btn.textContent = '解除';
-        btn.onclick = () => unkickDevice(dev.mac);
+      const actions = document.createElement('div');
+      actions.className = 'device-actions';
+
+      const reserveBtn = document.createElement('button');
+      reserveBtn.className = 'action-btn';
+      if (dev.reserved_ip) {
+        reserveBtn.textContent = '取消固定IP';
+        reserveBtn.onclick = () => unreserveDevice(dev.mac);
       } else {
-        btn.className = 'kick-btn';
-        btn.textContent = '踢除';
-        btn.onclick = () => kickDevice(dev.mac);
+        reserveBtn.textContent = '設定固定IP';
+        reserveBtn.onclick = () => reserveDevice(dev);
       }
 
-      card.appendChild(info);
-      card.appendChild(btn);
+      const kickBtn = document.createElement('button');
+      if (dev.blocked) {
+        kickBtn.className = 'kick-btn unkick-btn';
+        kickBtn.textContent = '解除';
+        kickBtn.onclick = () => unkickDevice(dev.mac);
+      } else {
+        kickBtn.className = 'kick-btn';
+        kickBtn.textContent = '踢除';
+        kickBtn.onclick = () => kickDevice(dev.mac);
+      }
+
+      actions.appendChild(reserveBtn);
+      actions.appendChild(kickBtn);
+
+      card.appendChild(nameRow);
+      card.appendChild(details);
+      card.appendChild(actions);
       list.appendChild(card);
     });
   }
@@ -273,6 +373,57 @@
       } else {
         showToast('解除失敗: ' + (data.error || ''));
       }
+    } catch (e) {
+      showToast('無法連線至 API');
+    }
+    loadDevices();
+  }
+
+  async function renameDevice(dev) {
+    const name = window.prompt('輸入裝置暱稱（留空可清除）', dev.nickname || '');
+    if (name === null) return;
+    try {
+      const res = await fetch(API_BASE + '/devices/' + encodeURIComponent(dev.mac), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nickname: name.trim() }),
+      });
+      const data = await res.json();
+      showToast(data.success ? '已更新暱稱' : '更新失敗: ' + (data.error || ''));
+    } catch (e) {
+      showToast('無法連線至 API');
+    }
+    loadDevices();
+  }
+
+  async function reserveDevice(dev) {
+    const ip = window.prompt('輸入要固定的 IP（10.10.10.0/24 網段）', dev.reserved_ip || '10.10.10.');
+    if (ip === null) return;
+    try {
+      const res = await fetch(API_BASE + '/devices/' + encodeURIComponent(dev.mac) + '/reserve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: ip.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('已設定固定 IP，' + (data.note || ''));
+      } else {
+        showToast('設定失敗: ' + (data.error || ''));
+      }
+    } catch (e) {
+      showToast('無法連線至 API');
+    }
+    loadDevices();
+  }
+
+  async function unreserveDevice(mac) {
+    try {
+      const res = await fetch(API_BASE + '/devices/' + encodeURIComponent(mac) + '/reserve', {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      showToast(data.success ? '已取消固定 IP' : '取消失敗: ' + (data.error || ''));
     } catch (e) {
       showToast('無法連線至 API');
     }

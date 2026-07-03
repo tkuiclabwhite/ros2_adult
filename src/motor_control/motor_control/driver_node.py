@@ -74,7 +74,7 @@ class DynamixelDriver(Node):
         self.head_sub = self.create_subscription(HeadPackage, 'Head_Topic', self._head_cb, 10)
 
         # 建議走路控制提升至 20Hz (0.05s)，診斷時可維持 0.5s
-        self.timer = self.create_timer(0.05, self._control_loop)
+        self.timer = self.create_timer(0.02, self._control_loop)
 
     def _init_hardware(self):
         pk = PacketHandler(PROTOCOL_VERSION)
