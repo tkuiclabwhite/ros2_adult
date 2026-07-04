@@ -83,10 +83,14 @@ SPINNER_LABEL = "處理中"
 
 def run_nmcli(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess:
     """同步執行 nmcli 指令 (在背景 thread 呼叫，避免卡住 UI)；失敗時回傳一個假的
-    CompletedProcess，讓呼叫端不用額外處理例外，只需檢查 returncode。"""
+    CompletedProcess，讓呼叫端不用額外處理例外，只需檢查 returncode。
+
+    前面加 sudo 是因為部分系統的 polkit rules.d 沒有生效（精簡編譯版本可能拿掉了
+    JS rules 引擎支援），改用 /etc/sudoers.d/ 設定的 NOPASSWD 規則讓 nmcli 免密碼執行。
+    """
     try:
         return subprocess.run(
-            ["nmcli"] + args,
+            ["sudo", "nmcli"] + args,
             capture_output=True,
             text=True,
             input=input_text,
@@ -263,7 +267,7 @@ def scan_wifi(saved_names: set[str] | None = None) -> list[WifiNetwork]:
     """掃描並回傳目前可見的 WiFi 清單"""
     saved_names = saved_names or set()
 
-    subprocess.run(["nmcli", "device", "wifi", "rescan"], capture_output=True, timeout=15)
+    run_nmcli(["device", "wifi", "rescan"])
     result = run_nmcli(
         ["-t", "-f", "SSID,BSSID,CHAN,FREQ,RATE,SIGNAL,SECURITY,IN-USE", "device", "wifi", "list"]
     )
