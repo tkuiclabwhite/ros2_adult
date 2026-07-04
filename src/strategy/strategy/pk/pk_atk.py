@@ -48,14 +48,25 @@ BALL_LOST_FRAMES    = 5      # 連續失蹤幾幀才退回搜尋
 BLUE_SIDE_THRESH    = 600    # 側欄藍色面積超過此值才開始閃避
 BLUE_CENTER_THRESH  = 1500   # 中欄藍色面積超過此值才減速
 
-# ── IMU 對準參數（SECOND_SEARCH_AND_ALIGN 繞球對準用）────────────────────────────
+# ── IMU 對準 + 繞球軌道（ALIGN_TO_GOAL 用）──────────────────────────────────────
 # yaw > 0 = 機器人向左偏，< 0 = 向右偏（相對於開場歸零時的方向）
-# ORBIT_ROT / ORBIT_TRANS 的正負號請實測後確認
 YAW_TOL     =  5.0   # yaw 誤差容忍值（度），在此範圍內視為對準球門
 CY_TARGET   = 160    # 射門準備距離對應的球畫面 y（待實測調整，0~240）
 CY_TOL      =  20    # cy 誤差容忍值（像素）
-ORBIT_ROT   =   2    # 繞球旋轉速度（ROT 單位，待實測）
-ORBIT_TRANS = 300    # 繞球平移速度（TRANS 單位，待實測）
+ORBIT_ROT   =   4    # 繞球旋轉速度（ROT 單位）
+ORBIT_TRANS = 1200   # 繞球平移速度（TRANS 單位）
+
+# ── 踢球準備位置（ALIGN_TO_GOAL yaw 對準後的精確定位）─────────────────────────────
+KICK_TARGET_CX   = 200   # 踢球準備：球的畫面 cx 目標（右腳前偏右）
+KICK_TARGET_AREA = 2800  # 踢球準備：球的畫面面積目標
+KICK_CX_TOL      =  20   # cx 容忍值（像素）
+KICK_AREA_TOL    = 300   # 面積容忍值
+
+# ── 掃頭垂直範圍（INIT 掃描時同時掃 pan + tilt）──────────────────────────────────
+TILT_SCAN_LO        = 2200   # 最低點：最高仰角（全局最小 tilt 值）
+TILT_SCAN_HI_SIDE   = 2500   # 最高點兩側值：兩側允許的最大俯角
+TILT_SCAN_HI_CENTER = 2750   # 最高點中間值：中央允許的最大俯角（同 TILT_SEARCH）
+TILT_SCAN_STEP      =  100   # pan 折返時 tilt 步進量（馬達單位）
 
 # ── 顏色索引（對應 API.COLORS 陣列順序）──────────────────────────────────────────
 _COLOR_IDX = {
@@ -71,7 +82,7 @@ BALL_COLOR        = 'Yellow'                    # 球的顏色'Orange', 'Yellow'
 START_SIDE        = 'center'                      # 機器人在場上的起始位置（'left' / 'center' / 'right'）
 BALL_RELATIVE_POS = 'left'                     # 球相對於機器人的方向（'left' / 'front' / 'right'）
 START_STATE = 0   # 測試用：從第幾個狀態開始（0~5）
-STOP_STATE  = 0  # 測試用：執行完此狀態後停步收尾（-1 = 不提前停止）
+STOP_STATE  = 3  # 測試用：執行完此狀態後停步收尾（-1 = 不提前停止）
 
 # ── 原地步態校正量 ─────────────────────────────────────────────────────────────
 STAY_X     = -1800   # 原地步態 X 校正（加在所有 sendContinuousValue 的 x 上）
@@ -79,7 +90,7 @@ STAY_Y     = 0      # 原地步態 Y 校正
 STAY_THETA = 2      # 原地步態 Theta 校正
 
 # ── 站姿微調 ────────────────────────────────────────────────────────────────────
-STAND_CORRECT_ATK    = False   # 是否在比賽開始時執行站姿微調
+STAND_CORRECT_ATK    = True   # 是否在比賽開始時執行站姿微調
 STAND_CORRECT_SECTOR = 201     # 站姿微調 sector 編號
 
 # 狀態編號對照表
@@ -111,18 +122,22 @@ _STATE_COLORS = [
     '\033[94m',   # 5 SECOND_SEARCH_AND_ALIGN   — 亮藍色
     '\033[91m',   # 6 FINAL_SHOT                — 亮紅色
 ]
+# SCAN_MAP 格式：(pan_lo, pan_hi, tilt_lo, tilt_hi_side, tilt_hi_center)
+# tilt_lo       = 最低點（最高仰角）
+# tilt_hi_side  = 最高點兩側值（兩側最大俯角）
+# tilt_hi_center= 最高點中間值（中央最大俯角）
 SCAN_MAP = {
-    ('left',   'left'):  (2048, 3072, TILT_SEARCH),
-    ('left',   'front'): (1748, 2348, TILT_SEARCH),
-    ('left',   'right'): (1024, 2048, TILT_SEARCH),
-    ('center', 'left'):  (2048, 2748, TILT_SEARCH),
-    ('center', 'front'): (1748, 2348, TILT_SEARCH),
-    ('center', 'right'): (1348, 2048, TILT_SEARCH),
-    ('right',  'left'):  (2048, 3072, TILT_SEARCH),
-    ('right',  'front'): (1748, 2348, TILT_SEARCH),
-    ('right',  'right'): (1024, 2048, TILT_SEARCH),
+    ('left',   'left'):  (2048, 3072, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('left',   'front'): (1748, 2348, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('left',   'right'): (1024, 2048, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('center', 'left'):  (2048, 2748, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('center', 'front'): (1748, 2348, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('center', 'right'): (1348, 2048, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('right',  'left'):  (2048, 3072, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('right',  'front'): (1748, 2348, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('right',  'right'): (1024, 2048, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
 }
-SCAN_FALLBACK = (PAN_MIN, PAN_MAX, TILT_SEARCH)   # 找不到對應組合時的備用掃描範圍
+SCAN_FALLBACK = (PAN_MIN, PAN_MAX, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER)
 
 
 class PenaltyKickAtk(API):
@@ -135,10 +150,14 @@ class PenaltyKickAtk(API):
         self._tilt = TILT_SEARCH
 
         # 掃描範圍（由 start_side + ball_relative_pos 決定）
-        self._scan_pan_lo  = PAN_MIN
-        self._scan_pan_hi  = PAN_MAX
-        self._scan_tilt    = TILT_SEARCH
-        self._scan_dir     = 1       # +1 = pan 增加（向左掃），-1 = pan 減少（向右掃）
+        self._scan_pan_lo       = PAN_MIN
+        self._scan_pan_hi       = PAN_MAX
+        self._scan_tilt         = TILT_SCAN_LO
+        self._scan_tilt_lo      = TILT_SCAN_LO
+        self._scan_tilt_hi_side = TILT_SCAN_HI_SIDE
+        self._scan_tilt_hi_ctr  = TILT_SCAN_HI_CENTER
+        self._scan_dir      = 1       # +1 = pan 增加（向左掃），-1 = pan 減少（向右掃）
+        self._scan_tilt_dir = 1       # +1 = tilt 增加（往下看），-1 = tilt 減少（往上看）
 
         # 狀態機
         self._state        = 'INIT_DIRECTIONAL_SEARCH'
@@ -173,13 +192,17 @@ class PenaltyKickAtk(API):
         start_side = START_SIDE
         ball_rel   = BALL_RELATIVE_POS
         
-        lo, hi, tilt = SCAN_MAP.get((start_side, ball_rel), SCAN_FALLBACK)
-        self._scan_pan_lo = lo
-        self._scan_pan_hi = hi
-        self._scan_tilt   = tilt
+        lo, hi, t_lo, t_hi_s, t_hi_c = SCAN_MAP.get((start_side, ball_rel), SCAN_FALLBACK)
+        self._scan_pan_lo       = lo
+        self._scan_pan_hi       = hi
+        self._scan_tilt_lo      = t_lo
+        self._scan_tilt_hi_side = t_hi_s
+        self._scan_tilt_hi_ctr  = t_hi_c
+        self._scan_tilt         = t_lo
+        self._scan_tilt_dir     = 1
 
         self._pan  = lo
-        self._tilt = tilt
+        self._tilt = t_lo
         self._scan_dir = 1
 
         self._state        = _STATE_NAMES[START_STATE]
@@ -263,17 +286,32 @@ class PenaltyKickAtk(API):
         self.sendHeadMotor(2, self._tilt, 25)
 
     def _head_scan(self):
-        """在限制掃描象限內左右來回掃描，尋找球。"""
-        STEP = 40   # 每次掃描步進量（馬達單位）
-        self._pan += STEP * self._scan_dir
+        """在限制掃描象限內左右掃描；每次 pan 折返時步進 tilt，形成 Z 字形掃描。"""
+        PAN_STEP  = 40
+        self._pan += PAN_STEP * self._scan_dir
+        pan_reversed = False
         if self._pan >= self._scan_pan_hi:
             self._pan      = self._scan_pan_hi
-            self._scan_dir = -1   # 碰到右邊界，改為向左掃
+            self._scan_dir = -1
+            pan_reversed   = True
         elif self._pan <= self._scan_pan_lo:
             self._pan      = self._scan_pan_lo
-            self._scan_dir = 1    # 碰到左邊界，改為向右掃
+            self._scan_dir = 1
+            pan_reversed   = True
 
-        self._tilt = self._scan_tilt
+        if pan_reversed:
+            self._scan_tilt += TILT_SCAN_STEP * self._scan_tilt_dir
+            if self._scan_tilt >= self._scan_tilt_hi_ctr:
+                self._scan_tilt     = self._scan_tilt_hi_ctr
+                self._scan_tilt_dir = -1
+            elif self._scan_tilt <= self._scan_tilt_lo:
+                self._scan_tilt     = self._scan_tilt_lo
+                self._scan_tilt_dir = 1
+
+        # 弧形上限：中央可看最低（hi_ctr），兩側限制（hi_side）
+        pan_ratio = min(abs(self._pan - PAN_CENTER) / (PAN_MAX - PAN_CENTER), 1.0) ** 2
+        tilt_cap  = int(self._scan_tilt_hi_ctr - pan_ratio * (self._scan_tilt_hi_ctr - self._scan_tilt_hi_side))
+        self._tilt = min(self._scan_tilt, tilt_cap)
         self.sendHeadMotor(1, self._pan,  30)
         self.sendHeadMotor(2, self._tilt, 30)
 
@@ -427,7 +465,7 @@ class PenaltyKickAtk(API):
             self._start_walk()
             return
 
-        cx, cy, _ = ball
+        cx, cy, area = ball
         self._head_track(cx, cy)
         self._start_walk()
 
@@ -450,14 +488,36 @@ class PenaltyKickAtk(API):
             self._disp_last_event = f'yaw 修正中 {yaw:.1f}° → 目標 ±{YAW_TOL}°'
             self._align_count = 0
         else:
-            # yaw 已對準：只做微調，不做軌道旋轉
-            self._walk(FWD_STOP, y_adj, t_adj)
-            self._align_count += 1
-            self._disp_last_event = f'yaw 對準 {yaw:.1f}°  [{self._align_count}/{BALL_ALIGN_FRAMES}]'
+            # yaw 已對準：導航到踢球準備位置（cx=KICK_TARGET_CX, area≥KICK_TARGET_AREA）
+            x_kick_err = cx - KICK_TARGET_CX
+            area_err   = KICK_TARGET_AREA - area
+            y_cmd = int(-x_kick_err * (abs(TRANS_R) / 160) * 2.0)
+            if area_err > KICK_AREA_TOL:
+                x_cmd = FWD_SLOW    # 太遠，前進
+            elif area_err < -KICK_AREA_TOL:
+                x_cmd = -FWD_SLOW   # 太近，後退
+            else:
+                x_cmd = FWD_STOP
+            self._walk(x_cmd, y_cmd, t_adj)
+
+            cx_ok   = abs(x_kick_err) < KICK_CX_TOL
+            area_ok = abs(area_err) <= KICK_AREA_TOL
+            if cx_ok and area_ok:
+                self._align_count += 1
+                self._disp_last_event = (
+                    f'定位中 cx={cx:.0f}→{KICK_TARGET_CX}  '
+                    f'area={area:.0f}→{KICK_TARGET_AREA}  [{self._align_count}/{BALL_ALIGN_FRAMES}]'
+                )
+            else:
+                self._align_count = 0
+                self._disp_last_event = (
+                    f'定位中 cx={cx:.0f}→{KICK_TARGET_CX}  '
+                    f'area={area:.0f}→{KICK_TARGET_AREA}'
+                )
             if self._align_count >= BALL_ALIGN_FRAMES:
                 self._stop_walk()
                 self._align_count = 0
-                self._disp_last_event = '對準球門完成 → WEAK_KICK'
+                self._disp_last_event = '踢球位置確認 → WEAK_KICK'
                 self._state = 'WEAK_KICK'
 
     def _handle_weak_kick(self):
@@ -714,12 +774,19 @@ class PenaltyKickAtk(API):
                 + _cv(p_ok, f'|pan|<{PAN_CENTER_TOL}')
             )
         elif self._state == 'ALIGN_TO_GOAL':
-            y_ok = abs(yaw) <= YAW_TOL
-            c_ok = self._align_count >= BALL_ALIGN_FRAMES
-            next_cond = (
-                _cv(y_ok, f'|yaw|≤{YAW_TOL}°') + '  '
-                + f'align≥{BALL_ALIGN_FRAMES} ' + _cv(c_ok, f'[{self._align_count}]')
-            )
+            y_ok    = abs(yaw) <= YAW_TOL
+            if y_ok:
+                kx_ok   = bool(self._disp_ball) and abs(ball_cx - KICK_TARGET_CX) < KICK_CX_TOL
+                ka_ok   = abs(KICK_TARGET_AREA - ball_area) <= KICK_AREA_TOL
+                c_ok    = self._align_count >= BALL_ALIGN_FRAMES
+                next_cond = (
+                    _cv(y_ok, f'|yaw|≤{YAW_TOL}°') + '  '
+                    + _cv(kx_ok, f'cx→{KICK_TARGET_CX}') + '  '
+                    + _cv(ka_ok, f'area→{KICK_TARGET_AREA}') + '  '
+                    + f'cnt ' + _cv(c_ok, f'[{self._align_count}]')
+                )
+            else:
+                next_cond = _cv(False, f'|yaw|≤{YAW_TOL}°  (yaw={yaw:.1f}°)')
         elif self._state == 'WEAK_KICK':
             next_cond = f'{D}動作執行完成後自動前進{R}'
         elif self._state == 'VISUAL_GUIDED_APPROACH':

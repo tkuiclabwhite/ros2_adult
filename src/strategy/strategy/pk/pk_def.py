@@ -14,17 +14,26 @@ Y_RATIO             = 40.0   # 垂直視角（度）
 HEAD_HORIZONTAL     = 2048   # 水平初始位置（馬達絕對值）
 HEAD_VERTICAL       = 2900   # 垂直初始位置（往下看）
 
+# ── 掃頭 tilt 弧形範圍 ────────────────────────────────────────────────────────
+TILT_SCAN_LO        = 2900   # 最低點：最高仰角（全局最小 tilt 值）
+TILT_SCAN_HI_SIDE   = 2550   # 最高點兩側值：兩側允許的最大俯角
+TILT_SCAN_HI_CENTER = 2750   # 最高點中間值：中央允許的最大俯角（同 MAX_HEAD_VERTICAL）
+TILT_SCAN_STEP      =   50   # pan 折返時 tilt 步進量（馬達單位）
+
 MAX_HEAD_HORIZONTAL = 2648   # 左邊界（HORIZONTAL 較大）
 MIN_HEAD_HORIZONTAL = 1448   # 右邊界（HORIZONTAL 較小）
-MAX_HEAD_VERTICAL   = 2900   # 下邊界（VERTICAL 較大，> 2048 = 往下看）
-MIN_HEAD_VERTICAL   = 2700   # 上邊界（VERTICAL 較小，< 2048 = 往上看）
+MAX_HEAD_VERTICAL   = TILT_SCAN_LO   # 下邊界（VERTICAL 較大，> 2048 = 往下看）
+MIN_HEAD_VERTICAL   = TILT_SCAN_HI_SIDE   # 上邊界（VERTICAL 較小，< 2048 = 往上看）
 
 # ── 守門判定參數 ───────────────────────────────────────────────────────────────
 BALL_INCOMING_SIZE = 1000   # 球飛來的像素面積門檻
 BALL_COUNT_DEFEND  = 5      # 觸發守門動作的累積幀數
 
+
+
 # ── 測試用起始狀態 ─────────────────────────────────────────────────────────────
 START_STATE = 0   # 從第幾個狀態開始（0~4）
+STOP_STATE  = 2
 
 BALL_COLOR        = 'Yellow'                    # 球的顏色'Orange', 'Yellow', 'Blue',
                                                         #'Green', 'Black', 'Red', 'White',
@@ -118,8 +127,10 @@ class PenaltyKickDef(API):
         self.head_horizon  = HEAD_HORIZONTAL
         self.head_vertical = HEAD_VERTICAL
 
-        # 掃描方向
-        self._search_dir = 'right'
+        # 掃描方向與 tilt 狀態
+        self._search_dir    = 'right'
+        self._scan_tilt     = TILT_SCAN_LO
+        self._scan_tilt_dir = 1
 
         # 狀態機
         self._state       = _STATE_NAMES[START_STATE]
@@ -141,9 +152,11 @@ class PenaltyKickDef(API):
     # ──────────────────────────────────────────────────────────────── 初始化 ──
 
     def _init_state(self):
-        self._search_dir   = 'right'
-        self.head_horizon  = HEAD_HORIZONTAL
-        self.head_vertical = HEAD_VERTICAL
+        self._search_dir    = 'right'
+        self._scan_tilt     = TILT_SCAN_LO
+        self._scan_tilt_dir = 1
+        self.head_horizon   = HEAD_HORIZONTAL
+        self.head_vertical  = HEAD_VERTICAL
         self._state        = _STATE_NAMES[START_STATE]
         self._check_count  = 0
 
@@ -163,23 +176,34 @@ class PenaltyKickDef(API):
             self.sendHeadMotor(2, self.head_vertical, speed)
 
     def _search_ball(self, scale=30):
-        """頭部依 右→下→左→上 順序掃描尋球。"""
+        """頭部弧形掃描：pan 左右往返，折返時步進 tilt（Z 字形）；tilt 上限依 pan 弧形限制。"""
+        pan_reversed = False
         if self._search_dir == 'right':
             self._control_head(1, self.head_horizon - scale, scale)
             if self.head_horizon <= MIN_HEAD_HORIZONTAL:
-                self._search_dir = 'down'
-        elif self._search_dir == 'down':
-            self._control_head(2, self.head_vertical + scale, scale)
-            if self.head_vertical >= MAX_HEAD_VERTICAL:
                 self._search_dir = 'left'
-        elif self._search_dir == 'left':
+                pan_reversed = True
+        else:  # 'left'
             self._control_head(1, self.head_horizon + scale, scale)
             if self.head_horizon >= MAX_HEAD_HORIZONTAL:
-                self._search_dir = 'up'
-        elif self._search_dir == 'up':
-            self._control_head(2, self.head_vertical - scale, scale)
-            if self.head_vertical <= MIN_HEAD_VERTICAL:
                 self._search_dir = 'right'
+                pan_reversed = True
+
+        if pan_reversed:
+            self._scan_tilt += TILT_SCAN_STEP * self._scan_tilt_dir
+            if self._scan_tilt >= TILT_SCAN_HI_CENTER:
+                self._scan_tilt     = TILT_SCAN_HI_CENTER
+                self._scan_tilt_dir = -1
+            elif self._scan_tilt <= TILT_SCAN_LO:
+                self._scan_tilt     = TILT_SCAN_LO
+                self._scan_tilt_dir = 1
+
+        # 弧形上限：中央可看最低（HI_CENTER），兩側限制（HI_SIDE）
+        pan_range  = max(MAX_HEAD_HORIZONTAL - HEAD_HORIZONTAL, 1)
+        pan_offset = abs(self.head_horizon - HEAD_HORIZONTAL)
+        pan_ratio  = min(pan_offset / pan_range, 1.0) ** 2
+        tilt_cap   = int(TILT_SCAN_HI_CENTER - pan_ratio * (TILT_SCAN_HI_CENTER - TILT_SCAN_HI_SIDE))
+        self._control_head(2, min(self._scan_tilt, tilt_cap), scale)
 
     def _track_ball(self):
         """頭部追蹤：依球的畫面位置計算誤差並調整馬達。"""
@@ -396,7 +420,11 @@ class PenaltyKickDef(API):
                 self._handle_resetting()
             case 'FINISH':
                 pass
-
+        # ── STOP_STATE 提早結束檢查 ──────────────────────────────────────────────
+        if STOP_STATE >= 0 and self._state in _STATE_NAMES:
+            if _STATE_NAMES.index(self._state) > STOP_STATE:
+                self._disp_last_event = f'STOP_STATE={STOP_STATE} 已達，停步收尾'
+                self._state = 'FINISH'
 
 def main(args=None):
     rclpy.init(args=args)

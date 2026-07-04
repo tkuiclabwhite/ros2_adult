@@ -144,9 +144,15 @@ def generate_launch_description():
         output='screen',
     )
 
+    # 拍照節點：訂閱 zoom_in/processed_image，收到 /capture_photo 觸發後存檔
+    photo_capture_node = ExecuteProcess(
+        cmd=['python3', os.path.join(dir_path, 'photo_capture_node.py')],
+        output='screen',
+    )
+
     actions =  camera_nodes + \
               [driver_node, walking_node, motion_node, web_bridge_node, imu_node, switch_node] + \
-              [image_node, web_video, rosbridge_node,http_server, hotspot_api]
+              [image_node, web_video, rosbridge_node, http_server, hotspot_api, photo_capture_node]
 
 
 

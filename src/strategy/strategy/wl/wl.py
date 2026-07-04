@@ -13,59 +13,24 @@ from rclpy.node import Node
 from tku_msgs.msg import SensorPackage
 
 # --- 全域參數 (對齊原始邏輯) ---
-WIGHT = 40  
-HEAD_MOTOR_START = 1433    
-HEAD_MOTOR_FINISH = 1350    
+WIGHT = 678  
+HEAD_MOTOR_START = 2900    
+HEAD_MOTOR_FINISH = 2900    
 FLAG1 = False  
 PRETURN = 1
 
 # 原始權重邏輯判斷 (修正重複判斷與賦值錯誤)
-if WIGHT == 86:
+if WIGHT == 678:
     THIRD_LINE = 200
     SPEED = 2000
-    PICK_ONE = 861
-    PICK_TWO = 862
-    PICK_THREE = 863
+    PICK_ONE = 67
+    PICK_TWO = 68
     LIFT = 8642
-
-elif WIGHT == 90:
-    THIRD_LINE = 200
-    SPEED = 2100
-    PICK_ONE = 901
-    PICK_TWO = 902
-    PICK_THREE = 903
-    LIFT = 904
-
-elif WIGHT == 80:
-    THIRD_LINE = 224
-    SPEED = 1800
-    PICK_ONE = 801
-    PICK_TWO = 802
-    PICK_THREE = 803
-    LIFT = 804
-
-elif WIGHT == 70:
-    THIRD_LINE = 223
-    SPEED = 1800
-    PICK_ONE = 701
-    PICK_TWO = 702
-    PICK_THREE = 703
-    LIFT = 704  
-
-elif WIGHT == 60:
-    SPEED = 1800
-    THIRD_LINE = 205
-    PICK_ONE = 601
-    PICK_TWO = 602
-    PICK_THREE = 603
-    LIFT = 604
-
 else:
     THIRD_LINE = 215
     SPEED = 1800
     PICK_ONE = 401
     PICK_TWO = 402
-    PICK_THREE = 403
     LIFT = 404
 
 

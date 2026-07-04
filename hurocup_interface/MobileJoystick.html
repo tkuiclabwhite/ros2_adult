@@ -33,12 +33,27 @@
     height: 34px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 0 10px;
     background: rgba(0, 0, 0, 0.75);
     border-bottom: 1px solid #1f2b26;
     z-index: 50;
     font-size: 13px;
+  }
+
+  #statusBar > div:first-child {
+    flex-shrink: 0;
+  }
+
+  /* Strategy 文字 + 按鈕塞不下時左右滑動，而不是被擠出螢幕外按不到 */
+  #statusBarRight {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-end;
   }
 
   #statusBar .dot {
@@ -57,6 +72,25 @@
     color: #00fa9a;
     font-weight: 600;
   }
+
+  .statusbar-btn {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background: rgba(30, 30, 30, 0.9);
+    color: #eee;
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+
+  .statusbar-btn.on {
+    background: rgba(31, 122, 77, 0.9);
+    border-color: #00fa9a;
+    color: #fff;
+  }
+
+  .statusbar-btn:active { opacity: 0.7; }
 
   /* ---------- 相機畫面 ---------- */
   #cameraWrap {
@@ -450,7 +484,12 @@
 
   <div id="statusBar">
     <div><span id="connDot" class="dot"></span><span id="connText">未連線</span></div>
-    <div>Strategy: <span id="strategyName">--</span> <span id="cameraModeName">(原始畫面)</span></div>
+    <div id="statusBarRight">
+      Strategy: <span id="strategyName">--</span> <span id="cameraModeName">(原始畫面)</span>
+      <button id="imageStartBtn" class="statusbar-btn">Start</button>
+      <button id="imageStopBtn" class="statusbar-btn">Stop</button>
+      <button id="takePhotoBtn" class="statusbar-btn">拍照</button>
+    </div>
   </div>
 
   <div id="cameraWrap">
@@ -656,6 +695,16 @@
     };
     setCameraStream();
 
+    // 拍照：交給機器人上的 photo_capture_node.py 存檔，這裡只送出「現在顯示的是哪一路」
+    var CapturePhoto_Topic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/capture_photo',
+      messageType: 'std_msgs/String'
+    });
+    document.getElementById('takePhotoBtn').onclick = function () {
+      CapturePhoto_Topic.publish(new ROSLIB.Message({ data: cameraStreams[cameraIndex] }));
+    };
+
     // ===================================================================
     // 搖桿：x/y/theta 狀態 + 20Hz throttle 發送
     // ===================================================================
@@ -720,6 +769,19 @@
       joystickLocked = locked;
       lockJoyBtn.textContent = joystickLocked ? '解除鎖定（定速中）' : '鎖定搖桿';
       lockJoyBtn.classList.toggle('on', joystickLocked);
+
+      if (!locked) {
+        // 解鎖時兩支搖桿一起歸零：不管是按按鈕解鎖、還是只摸了其中一支解鎖，
+        // 沒被摸到的那支都不該繼續停在鎖定當下的舊數值
+        joyX = axisConfig.x.zero;
+        joyY = axisConfig.y.zero;
+        joyTheta = axisConfig.theta.zero;
+        document.querySelectorAll('.joystick-knob').forEach(function (k) {
+          k.style.transform = 'translate(0px, 0px)';
+        });
+        publishBody();
+        updateStepReadout();
+      }
     }
 
     // 用 touchstart 而不是 onclick：手機上第二根手指的合成 click 事件常常在
@@ -936,6 +998,27 @@
       btn.textContent = torqueOn ? '扭力：開' : '扭力：關';
       btn.className = 'panel-btn ' + (torqueOn ? 'on' : 'off');
       panelMsg(torqueOn ? '扭力已開啟' : '扭力已關閉');
+    };
+
+    // Start/Stop：/package/dioarray 其實是 switch_node（switch.py）自己每 20Hz
+    // 發布出來的輸出 topic，不是它訂閱的；它真正訂閱、拿來覆蓋 GPIO 實體開關狀態
+    // 的是 /web/is_start（std_msgs/Bool），收到後 switch_node 會印出
+    // "Web override: strategy=..." 再於下一個 tick 轉發到 /package/dioarray，
+    // 這樣影像處理（mp.py 的 self.is_start）才會真的被觸發。
+    var WebIsStart_Topic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/web/is_start',
+      messageType: 'std_msgs/Bool'
+    });
+    document.getElementById('imageStartBtn').onclick = function () {
+      WebIsStart_Topic.publish(new ROSLIB.Message({ data: true }));
+      document.getElementById('imageStartBtn').classList.add('on');
+      document.getElementById('imageStopBtn').classList.remove('on');
+    };
+    document.getElementById('imageStopBtn').onclick = function () {
+      WebIsStart_Topic.publish(new ROSLIB.Message({ data: false }));
+      document.getElementById('imageStopBtn').classList.add('on');
+      document.getElementById('imageStartBtn').classList.remove('on');
     };
 
     // 輸入號碼執行動作 (execute)
