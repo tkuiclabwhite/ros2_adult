@@ -15,19 +15,21 @@ HEAD_HORIZONTAL     = 2048   # 水平初始位置（馬達絕對值）
 HEAD_VERTICAL       = 2900   # 垂直初始位置（往下看）
 
 # ── 掃頭 tilt 弧形範圍 ────────────────────────────────────────────────────────
-TILT_SCAN_LO        = 2900   # 最低點：最高仰角（全局最小 tilt 值）
-TILT_SCAN_HI_SIDE   = 2550   # 最高點兩側值：兩側允許的最大俯角
-TILT_SCAN_HI_CENTER = 2750   # 最高點中間值：中央允許的最大俯角（同 MAX_HEAD_VERTICAL）
+# tilt 值越大 = 越低頭（往下看），越小 = 越抬頭（往上看）
+TILT_SCAN_LO        = 2550   # 最小 tilt 值（最抬頭，掃描起始點）
+TILT_SCAN_HI_SIDE   = 2800   # 兩側允許的最大 tilt（兩側最大低頭角度）
+TILT_SCAN_HI_CENTER = 2900   # 中央允許的最大 tilt（中央最大低頭角度）
 TILT_SCAN_STEP      =   50   # pan 折返時 tilt 步進量（馬達單位）
 
 MAX_HEAD_HORIZONTAL = 2648   # 左邊界（HORIZONTAL 較大）
 MIN_HEAD_HORIZONTAL = 1448   # 右邊界（HORIZONTAL 較小）
-MAX_HEAD_VERTICAL   = TILT_SCAN_LO   # 下邊界（VERTICAL 較大，> 2048 = 往下看）
-MIN_HEAD_VERTICAL   = TILT_SCAN_HI_SIDE   # 上邊界（VERTICAL 較小，< 2048 = 往上看）
+MAX_HEAD_VERTICAL   = TILT_SCAN_HI_CENTER   # 下邊界（最大低頭 = TILT_SCAN_HI_CENTER）
+MIN_HEAD_VERTICAL   = TILT_SCAN_LO          # 上邊界（最大抬頭 = TILT_SCAN_LO）
 
 # ── 守門判定參數 ───────────────────────────────────────────────────────────────
-BALL_INCOMING_SIZE = 1000   # 球飛來的像素面積門檻
-BALL_COUNT_DEFEND  = 5      # 觸發守門動作的累積幀數
+BALL_INCOMING_SIZE       = 1000   # 球飛來的像素面積門檻（正前方基準值）
+BALL_INCOMING_SIDE_RATIO =  0.3   # 兩側門檻縮小比例：extreme side = BALL_INCOMING_SIZE * (1-0.3)
+BALL_COUNT_DEFEND        =    5   # 觸發守門動作的累積幀數
 
 
 
@@ -246,8 +248,11 @@ class PenaltyKickDef(API):
 
         self._track_ball()
 
-        if self.ball.target_size > BALL_INCOMING_SIZE:
-            self._disp_last_event = '球開始飛來 → CONFIRMING'
+        pan_ratio  = min(abs(self.head_horizon - HEAD_HORIZONTAL) / max(MAX_HEAD_HORIZONTAL - HEAD_HORIZONTAL, 1), 1.0)
+        threshold  = int(BALL_INCOMING_SIZE * (1.0 - pan_ratio * BALL_INCOMING_SIDE_RATIO))
+
+        if self.ball.target_size > threshold:
+            self._disp_last_event = f'球開始飛來（門檻={threshold}） → CONFIRMING'
             self._check_count = 1
             self._state = 'CONFIRMING'
 
@@ -257,7 +262,10 @@ class PenaltyKickDef(API):
         self._disp_ball_size = self.ball.target_size
         self._disp_ball_cx   = self.ball.center.x
 
-        if not self.ball.get_target or self.ball.target_size <= BALL_INCOMING_SIZE:
+        pan_ratio  = min(abs(self.head_horizon - HEAD_HORIZONTAL) / max(MAX_HEAD_HORIZONTAL - HEAD_HORIZONTAL, 1), 1.0)
+        threshold  = int(BALL_INCOMING_SIZE * (1.0 - pan_ratio * BALL_INCOMING_SIDE_RATIO))
+
+        if not self.ball.get_target or self.ball.target_size <= threshold:
             self._disp_last_event = '球消失或縮小 → TRACKING'
             self._check_count = 0
             self._state = 'TRACKING'
@@ -296,6 +304,48 @@ class PenaltyKickDef(API):
         self._disp_ball_cx   = self.ball.center.x
         self.sendBodySector(29)
         self._init_state()
+
+    # ──────────────────────────────────────────────────────────── 畫面疊加圖形 ──
+
+    def _draw_overlays(self):
+        """每幀更新畫面疊加偵錯圖形（呼叫自 _tick 末尾）。"""
+        # 1,2: 畫面中心十字線（灰色，常駐）
+        self.drawImageFunction(1, 1,   0, 320, 120, 120, 160, 160, 160, 1)
+        self.drawImageFunction(2, 1, 160, 160,   0, 240, 160, 160, 160, 1)
+
+        # 計算動態面積門檻（與 _handle_tracking/_handle_confirming 相同公式）
+        pan_ratio = min(
+            abs(self.head_horizon - HEAD_HORIZONTAL) / max(MAX_HEAD_HORIZONTAL - HEAD_HORIZONTAL, 1),
+            1.0
+        )
+        threshold = int(BALL_INCOMING_SIZE * (1.0 - pan_ratio * BALL_INCOMING_SIDE_RATIO))
+
+        # 3,4: 球的外框 + 中心圓點（顏色依大小/狀態）
+        if self.ball.get_target:
+            if self.ball.target_size > threshold:
+                if self._check_count >= BALL_COUNT_DEFEND:
+                    r, g, b = 0, 255, 0       # 綠：即將撲球
+                else:
+                    r, g, b = 255, 220, 0     # 黃：計數中
+            else:
+                r, g, b = 255, 80, 0          # 橘紅：低於門檻，持續追蹤
+            self.drawImageFunction(3, 2,
+                self.ball.edge_min.x, self.ball.edge_max.x,
+                self.ball.edge_min.y, self.ball.edge_max.y,
+                r, g, b, 2)
+            self.drawImageFunction(4, 3, self.ball.center.x, 5, self.ball.center.y, 0, r, g, b, 2)
+        else:
+            self.drawImageFunction(3, 2, 0, 0, 0, 0, 0, 0, 0, 1)
+            self.drawImageFunction(4, 3, 0, 0, 0, 0, 0, 0, 0, 1)
+
+        # 5,6: 左中右三欄分隔線（灰色，常駐；用於觀察球在哪一側）
+        col_w = 320 // 3   # ≈ 107
+        self.drawImageFunction(5, 1, col_w,     col_w,     0, 240, 120, 120, 120, 1)
+        self.drawImageFunction(6, 1, col_w * 2, col_w * 2, 0, 240, 120, 120, 120, 1)
+
+        # 7: 當前門檻大小參考圓（在畫面中心，藍色虛線圈）
+        ref_r = max(1, int((threshold / 3.14159) ** 0.5))
+        self.drawImageFunction(7, 3, 160, ref_r, 120, 0, 80, 80, 220, 1)
 
     # ──────────────────────────────────────────────────────────────── 顯示 ──
 
@@ -405,6 +455,7 @@ class PenaltyKickDef(API):
         """每 0.1 秒觸發一次，根據目前狀態呼叫對應的處理函式。"""
         if not self.is_start:
             self._handle_stopped()
+            self._draw_overlays()
             return
 
         match self._state:
@@ -425,6 +476,8 @@ class PenaltyKickDef(API):
             if _STATE_NAMES.index(self._state) > STOP_STATE:
                 self._disp_last_event = f'STOP_STATE={STOP_STATE} 已達，停步收尾'
                 self._state = 'FINISH'
+
+        self._draw_overlays()
 
 def main(args=None):
     rclpy.init(args=args)

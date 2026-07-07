@@ -473,10 +473,12 @@ class WalkingWebBridge(Node):
         response.hip_roll     = float(loaded_data.get("Hip_roll", loaded_data.get("hip_roll", 0.0)))
         response.ankle_roll   = float(loaded_data.get("Ankle_roll", loaded_data.get("ankle_roll", 0.0)))
 
+        print(f"DEBUG: [Check LC] com_y_swing 最終回傳值: {response.com_y_swing}", flush=True)
         print(f"DEBUG: [Check LC] period_t 最終回傳值: {response.period_t}", flush=True)
         print(f"DEBUG: [Check LC] t_dsp 最終回傳值: {response.t_dsp}", flush=True)
-        print(f"DEBUG: [Check LC] board_high 最終回傳值: {response.board_high}",flush=True)
         print(f"DEBUG: [Check LC] clearance 最終回傳值: {response.clearance}",flush=True)
+        print(f"DEBUG: [Check LC] board_high 最終回傳值: {response.board_high}",flush=True)
+
 
         return response
 

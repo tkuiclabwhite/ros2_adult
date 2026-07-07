@@ -62,10 +62,18 @@ KICK_TARGET_AREA = 2800  # 踢球準備：球的畫面面積目標
 KICK_CX_TOL      =  20   # cx 容忍值（像素）
 KICK_AREA_TOL    = 300   # 面積容忍值
 
+# ── 障礙物視覺掃描（ALIGN_TO_GOAL 子階段 SCAN_OBSTACLE 用）────────────────────────
+TILT_OBSTACLE      = 2400   # 掃障時的 tilt（稍抬頭，看前方障礙物）
+BLUE_CX_TOL        =   30   # 藍障置中容忍值（像素）
+BLUE_TRACK_FRAMES  =    5   # 藍障連續穩定幀數才讀取 pan 計算 yaw_target
+AVOID_MARGIN       =  15.0  # 繞過障礙物後的額外旋轉餘量（度）
+BLUE_SCAN_TIMEOUT  =   30   # 掃障最大等待幀數，超過視為無障礙，yaw_target=0
+
 # ── 掃頭垂直範圍（INIT 掃描時同時掃 pan + tilt）──────────────────────────────────
-TILT_SCAN_LO        = 2200   # 最低點：最高仰角（全局最小 tilt 值）
-TILT_SCAN_HI_SIDE   = 2500   # 最高點兩側值：兩側允許的最大俯角
-TILT_SCAN_HI_CENTER = 2750   # 最高點中間值：中央允許的最大俯角（同 TILT_SEARCH）
+# tilt 值越大 = 越低頭（往下看），越小 = 越抬頭（往上看）
+TILT_SCAN_LO        = 2200   # 最小 tilt（最抬頭，掃描起始點）
+TILT_SCAN_HI_SIDE   = 2500   # 兩側允許的最大 tilt（兩側最大低頭角度）
+TILT_SCAN_HI_CENTER = 2750   # 中央允許的最大 tilt（中央最大低頭角度，同 TILT_SEARCH）
 TILT_SCAN_STEP      =  100   # pan 折返時 tilt 步進量（馬達單位）
 
 # ── 顏色索引（對應 API.COLORS 陣列順序）──────────────────────────────────────────
@@ -76,7 +84,9 @@ _COLOR_IDX = {
 
 # ── 限制掃描象限對應表 ─────────────────────────────────────────────────────────
 # 鍵值：(start_side, ball_relative_pos)
-# 對應：(pan_lo, pan_hi, tilt)
+# 格式：(pan_lo, pan_hi, tilt_lo, tilt_hi_side, tilt_hi_center)
+# pan  > 2048 = 左轉，< 2048 = 右轉
+# tilt > 2048 = 低頭，< 2048 = 抬頭
 BALL_COLOR        = 'Yellow'                    # 球的顏色'Orange', 'Yellow', 'Blue',
                                                         #'Green', 'Black', 'Red', 'White',
 START_SIDE        = 'center'                      # 機器人在場上的起始位置（'left' / 'center' / 'right'）
@@ -166,12 +176,21 @@ class PenaltyKickAtk(API):
         self._lost_count   = 0   # 連續失蹤幀數計數
         self._stance_done  = False   # 本次 is_start=True 後是否已執行站姿調整
 
+        # ALIGN_TO_GOAL 子階段
+        self._align_phase        = 'SCAN_OBSTACLE'
+        self._yaw_target         = 0.0
+        self._blue_stable_count  = 0
+        self._blue_scan_frames   = 0
+
         # 步態旗標
         self._walk_active  = False
 
         # 顯示用快取（由各 handler 更新，display thread 讀取）
         self._disp_ball       = None               # (cx, cy, area) 或 None
+        self._disp_ball_bbox  = None               # (xmin, xmax, ymin, ymax) 或 None
         self._disp_blue       = (0.0, 0.0, 0.0)   # (left, center, right)
+        self._disp_blue_cx    = None               # (cx, area) 或 None（掃障用）
+        self._disp_blue_bbox  = None               # (xmin, xmax, ymin, ymax) 或 None
         self._disp_walk_cmd   = (0, 0, 0)          # (x, y, theta)
         self._disp_last_event = ''                  # 最後一個重要事件訊息
 
@@ -211,6 +230,10 @@ class PenaltyKickAtk(API):
         self._lost_count   = 0
         self._walk_active  = False
         self._stance_done  = False
+        self._align_phase        = 'SCAN_OBSTACLE'
+        self._yaw_target         = 0.0
+        self._blue_stable_count  = 0
+        self._blue_scan_frames   = 0
 
         self.sendSensorReset(True)
         self.sendHeadMotor(1, self._pan,  30)
@@ -238,12 +261,17 @@ class PenaltyKickAtk(API):
                 best_size = self.object_sizes[idx][i]
                 best_i = i
         if best_i is None:
-            self._disp_ball = None
+            self._disp_ball     = None
+            self._disp_ball_bbox = None
             return None
         cx = (self.object_x_max[idx][best_i] + self.object_x_min[idx][best_i]) // 2
         cy = (self.object_y_max[idx][best_i] + self.object_y_min[idx][best_i]) // 2
         result = float(cx), float(cy), float(self.object_sizes[idx][best_i])
-        self._disp_ball = result
+        self._disp_ball      = result
+        self._disp_ball_bbox = (
+            self.object_x_min[idx][best_i], self.object_x_max[idx][best_i],
+            self.object_y_min[idx][best_i], self.object_y_max[idx][best_i],
+        )
         return result
 
     def _get_blue_areas(self):
@@ -265,6 +293,28 @@ class PenaltyKickAtk(API):
                 right  += size
         self._disp_blue = left, center, right
         return left, center, right
+
+    def _get_blue_cx(self):
+        """回傳面積最大的藍色物件 (cx, area)，若無則回傳 None。"""
+        idx = _COLOR_IDX['Blue']
+        best_i    = None
+        best_size = 100
+        for i in range(self.color_counts[idx]):
+            if self.object_sizes[idx][i] > best_size:
+                best_size = self.object_sizes[idx][i]
+                best_i = i
+        if best_i is None:
+            self._disp_blue_cx   = None
+            self._disp_blue_bbox = None
+            return None
+        cx = (self.object_x_max[idx][best_i] + self.object_x_min[idx][best_i]) // 2
+        result = float(cx), float(best_size)
+        self._disp_blue_cx   = result
+        self._disp_blue_bbox = (
+            self.object_x_min[idx][best_i], self.object_x_max[idx][best_i],
+            self.object_y_min[idx][best_i], self.object_y_max[idx][best_i],
+        )
+        return result
 
     # ────────────────────────────────────────────────────────── 頭部控制 ────────
 
@@ -381,6 +431,55 @@ class PenaltyKickAtk(API):
 
         return x_cmd, y_cmd, theta_cmd
 
+    # ──────────────────────────────────────────────────────── 畫面疊加圖形 ────────
+
+    def _draw_overlays(self):
+        """每幀更新畫面疊加偵錯圖形（呼叫自 _tick 末尾）。"""
+        # 1,2: 畫面中心十字線（灰色，常駐）
+        self.drawImageFunction(1, 1,   0, 320, 120, 120, 160, 160, 160, 1)
+        self.drawImageFunction(2, 1, 160, 160,   0, 240, 160, 160, 160, 1)
+
+        # 3,4: 球的外框 + 中心圓點
+        if self._disp_ball and self._disp_ball_bbox:
+            cx, cy, area     = self._disp_ball
+            xmin, xmax, ymin, ymax = self._disp_ball_bbox
+            # 顏色依狀態/條件變化
+            if (self._state == 'ALIGN_TO_GOAL' and self._align_phase == 'POSITION'
+                    and abs(cx - KICK_TARGET_CX) < KICK_CX_TOL
+                    and abs(KICK_TARGET_AREA - area) <= KICK_AREA_TOL):
+                r, g, b = 0, 255, 80       # 綠：已到踢球位置
+            elif self._state == 'APPROACH_BALL_1' and area >= BALL_APPROACH1_SIZE:
+                r, g, b = 0, 255, 0        # 綠：距離已夠近
+            else:
+                r, g, b = 255, 220, 0      # 黃：一般追蹤中
+            self.drawImageFunction(3, 2, xmin, xmax, ymin, ymax, r, g, b, 2)
+            self.drawImageFunction(4, 3, int(cx), 5, int(cy), 0, r, g, b, 2)
+        else:
+            self.drawImageFunction(3, 2, 0, 0, 0, 0, 0, 0, 0, 1)
+            self.drawImageFunction(4, 3, 0, 0, 0, 0, 0, 0, 0, 1)
+
+        # 5: 踢球目標 cx=200 參考線（ALIGN_TO_GOAL 時顯示，青色）
+        if self._state == 'ALIGN_TO_GOAL':
+            self.drawImageFunction(5, 1, 200, 200, 0, 240, 0, 200, 255, 1)
+        else:
+            self.drawImageFunction(5, 1, 0, 0, 0, 0, 0, 0, 0, 1)
+
+        # 6: 藍色障礙物外框（SCAN_OBSTACLE 子階段顯示，藍色）
+        if (self._state == 'ALIGN_TO_GOAL' and self._align_phase == 'SCAN_OBSTACLE'
+                and self._disp_blue_bbox):
+            xmin, xmax, ymin, ymax = self._disp_blue_bbox
+            self.drawImageFunction(6, 2, xmin, xmax, ymin, ymax, 0, 100, 255, 2)
+        else:
+            self.drawImageFunction(6, 2, 0, 0, 0, 0, 0, 0, 0, 1)
+
+        # 7: 踢球 cx 容許帶（POSITION 子階段，顯示 ±KICK_CX_TOL 範圍框）
+        if self._state == 'ALIGN_TO_GOAL' and self._align_phase == 'POSITION':
+            lo = KICK_TARGET_CX - KICK_CX_TOL   # 180
+            hi = KICK_TARGET_CX + KICK_CX_TOL   # 220
+            self.drawImageFunction(7, 2, lo, hi, 0, 240, 0, 200, 255, 1)
+        else:
+            self.drawImageFunction(7, 2, 0, 0, 0, 0, 0, 0, 0, 1)
+
     # ──────────────────────────────────────────────────────── 各狀態處理函式 ────
 
     def _handle_init_directional_search(self):
@@ -447,78 +546,167 @@ class PenaltyKickAtk(API):
             self._walk(x_cmd, int(y_cmd), theta_cmd)
         else:
             self._stop_walk()
-            self._disp_last_event = '已到位且置中 → ALIGN_TO_GOAL'
+            self._disp_last_event   = '已到位且置中 → ALIGN_TO_GOAL'
+            self._align_phase        = 'SCAN_OBSTACLE'
+            self._blue_stable_count  = 0
+            self._blue_scan_frames   = 0
             self._state = 'ALIGN_TO_GOAL'
 
     def _handle_align_to_goal(self):
         """
-        狀態 2 — ALIGN_TO_GOAL（對準球門）
-        到位後原地繞球修正 yaw，確認機器人朝向球門後才進入 WEAK_KICK。
-        連續對準 BALL_ALIGN_FRAMES 幀才轉移，避免瞬間誤判。
+        狀態 2 — ALIGN_TO_GOAL（對準球門，三子階段）
+        SCAN_OBSTACLE : 移頭追蹤藍障置中，由 pan 值計算需繞到的 yaw_target
+        ORBIT         : 低頭看球繞行，直到 yaw 到達 yaw_target
+        POSITION      : 微調至右腳踢球準備位置後進入 WEAK_KICK
         """
-        ball = self._get_ball()
+        # ── 子階段 1：掃描藍障，計算 yaw_target ──────────────────────────────
+        if self._align_phase == 'SCAN_OBSTACLE':
+            self._stop_walk()
+            self._blue_scan_frames += 1
 
-        if ball is None:
-            self._align_count = 0
-            self._disp_last_event = '失去球，退回 APPROACH_BALL_1'
-            self._state = 'APPROACH_BALL_1'
-            self._start_walk()
+            blue = self._get_blue_cx()
+            if blue is not None:
+                blue_cx, _ = blue
+                x_err = blue_cx - 160
+                x_deg = x_err * (X_FOV_DEG / 320)
+                self._pan -= round(x_deg * 4096 / 360 * HEAD_TRACK_GAIN)
+                self._pan  = max(PAN_MIN, min(PAN_MAX, self._pan))
+                self._tilt = TILT_OBSTACLE
+                self.sendHeadMotor(1, self._pan,  25)
+                self.sendHeadMotor(2, self._tilt, 25)
+
+                if abs(x_err) <= BLUE_CX_TOL:
+                    self._blue_stable_count += 1
+                    self._disp_last_event = (
+                        f'[掃障] 藍障置中 pan={self._pan} '
+                        f'[{self._blue_stable_count}/{BLUE_TRACK_FRAMES}]'
+                    )
+                else:
+                    self._blue_stable_count = 0
+                    self._disp_last_event = f'[掃障] 追蹤藍障 cx={blue_cx:.0f}'
+            else:
+                self._blue_stable_count = 0
+                self._tilt = TILT_OBSTACLE
+                self.sendHeadMotor(2, self._tilt, 25)
+                self._disp_last_event = (
+                    f'[掃障] 尋找藍障... ({self._blue_scan_frames}/{BLUE_SCAN_TIMEOUT})'
+                )
+
+            if self._blue_stable_count >= BLUE_TRACK_FRAMES:
+                yaw_now    = self.imu_rpy[2]
+                theta_head = (self._pan - PAN_CENTER) * (X_FOV_DEG / (PAN_MAX - PAN_MIN))
+                theta_obs  = yaw_now + theta_head
+                margin = AVOID_MARGIN if theta_obs >= 0 else -AVOID_MARGIN
+                self._yaw_target = theta_obs + margin
+                self._disp_last_event = (
+                    f'[掃障] yaw_target={self._yaw_target:.1f}° → ORBIT'
+                )
+                self._align_phase = 'ORBIT'
+            elif self._blue_scan_frames >= BLUE_SCAN_TIMEOUT:
+                self._yaw_target = 0.0
+                self._disp_last_event = '[掃障] 無藍障，yaw_target=0 → ORBIT'
+                self._align_phase = 'ORBIT'
             return
 
+        # ── 子階段 2：繞球至 yaw_target ──────────────────────────────────────
+        if self._align_phase == 'ORBIT':
+            ball = self._get_ball()
+            if ball is None:
+                self._lost_count += 1
+                if self._lost_count >= BALL_LOST_FRAMES:
+                    self._stop_walk()
+                    self._lost_count        = 0
+                    self._align_phase        = 'SCAN_OBSTACLE'
+                    self._blue_scan_frames   = 0
+                    self._blue_stable_count  = 0
+                    self._disp_last_event    = '[繞球] 失去球 → APPROACH_BALL_1'
+                    self._state = 'APPROACH_BALL_1'
+                    self._start_walk()
+                return
+
+            self._lost_count = 0
+            cx, cy, area = ball
+            self._head_track(cx, cy)
+            self._start_walk()
+
+            yaw     = self.imu_rpy[2]
+            x_err   = cx - 160
+            pan_err = self._pan - PAN_CENTER
+            y_adj   = int(-x_err * (abs(TRANS_R) / 160) * 2.0)
+            t_adj   = pan_err * (abs(ROT_L) / (PAN_MAX - PAN_CENTER)) * 1.5
+            t_adj   = max(ROT_R * 2, min(ROT_L * 2, t_adj))
+
+            yaw_err = yaw - self._yaw_target
+            if abs(yaw_err) > YAW_TOL:
+                rot_dir = -1 if yaw_err > 0 else 1
+                y_cmd = int(-rot_dir * ORBIT_TRANS) + y_adj
+                t_cmd = rot_dir * ORBIT_ROT + t_adj
+                t_cmd = max(ROT_R * 2, min(ROT_L * 2, t_cmd))
+                self._walk(FWD_STOP, y_cmd, t_cmd)
+                self._disp_last_event = (
+                    f'[繞球] yaw={yaw:.1f}° → 目標 {self._yaw_target:.1f}°±{YAW_TOL}°'
+                )
+            else:
+                self._stop_walk()
+                self._align_count = 0
+                self._disp_last_event = '[繞球] 到達目標 → POSITION'
+                self._align_phase = 'POSITION'
+            return
+
+        # ── 子階段 3：微調踢球位置 ────────────────────────────────────────────
+        ball = self._get_ball()
+        if ball is None:
+            self._lost_count += 1
+            if self._lost_count >= BALL_LOST_FRAMES:
+                self._stop_walk()
+                self._lost_count        = 0
+                self._align_phase        = 'SCAN_OBSTACLE'
+                self._blue_scan_frames   = 0
+                self._blue_stable_count  = 0
+                self._disp_last_event    = '[定位] 失去球 → APPROACH_BALL_1'
+                self._state = 'APPROACH_BALL_1'
+                self._start_walk()
+            return
+
+        self._lost_count = 0
         cx, cy, area = ball
         self._head_track(cx, cy)
         self._start_walk()
 
-        yaw     = self.imu_rpy[2]
-        x_err   = cx - 160
         pan_err = self._pan - PAN_CENTER
-
-        # 根據球在畫面的位置計算 y/theta 微調量（基準值同 APPROACH_BALL_1）
-        y_adj   = int(-x_err * (abs(TRANS_R) / 160) * 2.0)
         t_adj   = pan_err * (abs(ROT_L) / (PAN_MAX - PAN_CENTER)) * 1.5
         t_adj   = max(ROT_R * 2, min(ROT_L * 2, t_adj))
 
-        if abs(yaw) > YAW_TOL:
-            rot_dir = -1 if yaw > 0 else 1
-            # 基準軌道運動 + 動態微調，保持球在畫面中央
-            y_cmd = int(-rot_dir * ORBIT_TRANS) + y_adj
-            t_cmd = rot_dir * ORBIT_ROT + t_adj
-            t_cmd = max(ROT_R * 2, min(ROT_L * 2, t_cmd))
-            self._walk(FWD_STOP, y_cmd, t_cmd)
-            self._disp_last_event = f'yaw 修正中 {yaw:.1f}° → 目標 ±{YAW_TOL}°'
-            self._align_count = 0
+        x_kick_err = cx - KICK_TARGET_CX
+        area_err   = KICK_TARGET_AREA - area
+        y_cmd = int(-x_kick_err * (abs(TRANS_R) / 160) * 2.0)
+        if area_err > KICK_AREA_TOL:
+            x_cmd = FWD_SLOW
+        elif area_err < -KICK_AREA_TOL:
+            x_cmd = -FWD_SLOW
         else:
-            # yaw 已對準：導航到踢球準備位置（cx=KICK_TARGET_CX, area≥KICK_TARGET_AREA）
-            x_kick_err = cx - KICK_TARGET_CX
-            area_err   = KICK_TARGET_AREA - area
-            y_cmd = int(-x_kick_err * (abs(TRANS_R) / 160) * 2.0)
-            if area_err > KICK_AREA_TOL:
-                x_cmd = FWD_SLOW    # 太遠，前進
-            elif area_err < -KICK_AREA_TOL:
-                x_cmd = -FWD_SLOW   # 太近，後退
-            else:
-                x_cmd = FWD_STOP
-            self._walk(x_cmd, y_cmd, t_adj)
+            x_cmd = FWD_STOP
+        self._walk(x_cmd, y_cmd, t_adj)
 
-            cx_ok   = abs(x_kick_err) < KICK_CX_TOL
-            area_ok = abs(area_err) <= KICK_AREA_TOL
-            if cx_ok and area_ok:
-                self._align_count += 1
-                self._disp_last_event = (
-                    f'定位中 cx={cx:.0f}→{KICK_TARGET_CX}  '
-                    f'area={area:.0f}→{KICK_TARGET_AREA}  [{self._align_count}/{BALL_ALIGN_FRAMES}]'
-                )
-            else:
-                self._align_count = 0
-                self._disp_last_event = (
-                    f'定位中 cx={cx:.0f}→{KICK_TARGET_CX}  '
-                    f'area={area:.0f}→{KICK_TARGET_AREA}'
-                )
-            if self._align_count >= BALL_ALIGN_FRAMES:
-                self._stop_walk()
-                self._align_count = 0
-                self._disp_last_event = '踢球位置確認 → WEAK_KICK'
-                self._state = 'WEAK_KICK'
+        cx_ok   = abs(x_kick_err) < KICK_CX_TOL
+        area_ok = abs(area_err) <= KICK_AREA_TOL
+        if cx_ok and area_ok:
+            self._align_count += 1
+            self._disp_last_event = (
+                f'[定位] cx={cx:.0f}→{KICK_TARGET_CX}  '
+                f'area={area:.0f}→{KICK_TARGET_AREA}  [{self._align_count}/{BALL_ALIGN_FRAMES}]'
+            )
+        else:
+            self._align_count = 0
+            self._disp_last_event = (
+                f'[定位] cx={cx:.0f}→{KICK_TARGET_CX}  '
+                f'area={area:.0f}→{KICK_TARGET_AREA}'
+            )
+        if self._align_count >= BALL_ALIGN_FRAMES:
+            self._stop_walk()
+            self._align_count = 0
+            self._disp_last_event = '踢球位置確認 → WEAK_KICK'
+            self._state = 'WEAK_KICK'
 
     def _handle_weak_kick(self):
         """
@@ -774,19 +962,31 @@ class PenaltyKickAtk(API):
                 + _cv(p_ok, f'|pan|<{PAN_CENTER_TOL}')
             )
         elif self._state == 'ALIGN_TO_GOAL':
-            y_ok    = abs(yaw) <= YAW_TOL
-            if y_ok:
-                kx_ok   = bool(self._disp_ball) and abs(ball_cx - KICK_TARGET_CX) < KICK_CX_TOL
-                ka_ok   = abs(KICK_TARGET_AREA - ball_area) <= KICK_AREA_TOL
-                c_ok    = self._align_count >= BALL_ALIGN_FRAMES
+            phase = self._align_phase
+            if phase == 'SCAN_OBSTACLE':
+                s_ok = self._blue_stable_count >= BLUE_TRACK_FRAMES
                 next_cond = (
-                    _cv(y_ok, f'|yaw|≤{YAW_TOL}°') + '  '
+                    '[掃障] 藍障置中  '
+                    + _cv(s_ok, f'stable≥{BLUE_TRACK_FRAMES} [{self._blue_stable_count}]')
+                    + f'  timeout {self._blue_scan_frames}/{BLUE_SCAN_TIMEOUT}'
+                )
+            elif phase == 'ORBIT':
+                yaw_err = yaw - self._yaw_target
+                y_ok = abs(yaw_err) <= YAW_TOL
+                next_cond = _cv(y_ok,
+                    f'[繞球] yaw→{self._yaw_target:.1f}°  '
+                    f'(yaw={yaw:.1f}°  err={yaw_err:.1f}°)'
+                )
+            else:
+                kx_ok = bool(self._disp_ball) and abs(ball_cx - KICK_TARGET_CX) < KICK_CX_TOL
+                ka_ok = abs(KICK_TARGET_AREA - ball_area) <= KICK_AREA_TOL
+                c_ok  = self._align_count >= BALL_ALIGN_FRAMES
+                next_cond = (
+                    '[定位] '
                     + _cv(kx_ok, f'cx→{KICK_TARGET_CX}') + '  '
                     + _cv(ka_ok, f'area→{KICK_TARGET_AREA}') + '  '
                     + f'cnt ' + _cv(c_ok, f'[{self._align_count}]')
                 )
-            else:
-                next_cond = _cv(False, f'|yaw|≤{YAW_TOL}°  (yaw={yaw:.1f}°)')
         elif self._state == 'WEAK_KICK':
             next_cond = f'{D}動作執行完成後自動前進{R}'
         elif self._state == 'VISUAL_GUIDED_APPROACH':
@@ -881,6 +1081,7 @@ class PenaltyKickAtk(API):
         """每 0.1 秒觸發一次，根據目前狀態呼叫對應的處理函式。"""
         if not self.is_start:
             self._handle_stopped()
+            self._draw_overlays()
             return
 
         if not self._stance_done:
@@ -921,6 +1122,8 @@ class PenaltyKickAtk(API):
                     self._stop_walk()
                 self.sendBodySector(29)
                 self._state = 'FINISH'
+
+        self._draw_overlays()
 
 
 def main(args=None):
