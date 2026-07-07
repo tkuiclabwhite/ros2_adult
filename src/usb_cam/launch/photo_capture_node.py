@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""拍照節點：訂閱 zoom_in 跟 processed_image 兩路影像，收到 /capture_photo
-觸發訊息（內容是要拍哪一路的 topic 名稱）後，把該路目前最新一張影像存到
-ros2_adult/snap/。"""
+"""拍照節點：訂閱 camera1/image_raw 跟 processed_image 兩路影像，收到
+/capture_photo 觸發訊息（內容是要拍哪一路的 topic 名稱）後，把該路目前最新
+一張影像存到 ros2_adult/snap/。"""
 import os
 import time
 
@@ -15,7 +15,7 @@ from cv_bridge import CvBridge
 SAVE_DIR = os.path.expanduser('~/ros2_adult/snap')
 
 TOPIC_LABELS = {
-    '/zoom_in': 'zoom_in',
+    'camera1/image_raw': 'image_raw',
     '/processed_image': 'processed_image',
 }
 

@@ -7,6 +7,7 @@ Sphinx 文件建置
 .. code-block:: bash
 
    pip install sphinx sphinx-rtd-theme sphinx-tabs
+   pip install sphinx-copybutton
    pip install sphinx-autobuild
 
    # 選配：從 Python 型別標注自動生成說明
@@ -19,10 +20,10 @@ Sphinx 文件建置
 
    本專案文件已初始化完成，此步驟僅供**全新建立**文件時參考。
 
-.. code-block:: bash
+   .. code-block:: bash
 
-   cd ~/ros2_adult/src/strategy/strategy/docs/
-   sphinx-quickstart
+      cd ~/ros2_adult/src/strategy/strategy/docs/
+      sphinx-quickstart
 
 編譯 HTML
 ---------
@@ -35,7 +36,7 @@ Sphinx 文件建置
    make clean
 
    # 生成 HTML 網頁
-   make html
+      make html
 
 編譯完成後，輸出位於 ``build/html/index.html``\ 。
 

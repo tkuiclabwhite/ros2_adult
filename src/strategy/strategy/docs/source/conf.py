@@ -28,6 +28,7 @@ extensions = [
     'sphinx.ext.napoleon',    # 支援 Google 格式註解
     'sphinx_rtd_theme',       # 使用 Read the Docs 主題
     'sphinx_tabs.tabs',       # tab 指令
+    'sphinx_copybutton',      # code block 複製按鈕
 ]
 
 def _copy_interface(app, exception):

@@ -208,6 +208,7 @@
     <div class="status-row"><span>SSID</span><span id="status-ssid">--</span></div>
     <div class="status-row"><span>IP</span><span id="status-ip">--</span></div>
     <div class="status-row"><span>狀態</span><span id="status-active">--</span></div>
+    <div class="status-row"><span>系統時間</span><span id="status-time">--</span></div>
   </div>
 
   <div id="refresh-info">每 5 秒自動更新</div>
@@ -237,6 +238,7 @@
       const data = await res.json();
       document.getElementById('status-ssid').textContent = data.ssid;
       document.getElementById('status-ip').textContent = data.ip;
+      document.getElementById('status-time').textContent = data.time || '--';
       const activeEl = document.getElementById('status-active');
       activeEl.textContent = data.active ? '運作中' : '未運作';
       const card = document.getElementById('status-card');

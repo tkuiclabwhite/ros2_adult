@@ -1,1 +1,1 @@
-window.currentStrategy = "pk/Parameter";
+window.currentStrategy = "obs/Parameter";

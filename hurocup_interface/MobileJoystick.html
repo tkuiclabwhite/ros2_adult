@@ -92,6 +92,25 @@
 
   .statusbar-btn:active { opacity: 0.7; }
 
+  #photoToast {
+    position: fixed;
+    top: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.85);
+    color: #00fa9a;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+    z-index: 90;
+  }
+
+  #photoToast.show { opacity: 1; }
+
   /* ---------- 相機畫面 ---------- */
   #cameraWrap {
     position: fixed;
@@ -492,6 +511,8 @@
     </div>
   </div>
 
+  <div id="photoToast"></div>
+
   <div id="cameraWrap">
     <img id="cameraImg" alt="camera stream">
   </div>
@@ -695,15 +716,30 @@
     };
     setCameraStream();
 
-    // 拍照：交給機器人上的 photo_capture_node.py 存檔，這裡只送出「現在顯示的是哪一路」
+    // 拍照：交給機器人上的 photo_capture_node.py 存檔。
+    // 畫面上看的是 zoom_in／processed_image，但拍照不要用 zoom_in，
+    // 「原始畫面」模式改成存 camera1/image_raw 這個真正的原始影像。
+    var captureTopics = ['camera1/image_raw', '/processed_image'];
     var CapturePhoto_Topic = new ROSLIB.Topic({
       ros: ros,
       name: '/capture_photo',
       messageType: 'std_msgs/String'
     });
     document.getElementById('takePhotoBtn').onclick = function () {
-      CapturePhoto_Topic.publish(new ROSLIB.Message({ data: cameraStreams[cameraIndex] }));
+      CapturePhoto_Topic.publish(new ROSLIB.Message({ data: captureTopics[cameraIndex] }));
+      showPhotoToast('已送出拍照指令');
     };
+
+    var photoToastTimer = null;
+    function showPhotoToast(text) {
+      var el = document.getElementById('photoToast');
+      el.textContent = text;
+      el.classList.add('show');
+      clearTimeout(photoToastTimer);
+      photoToastTimer = setTimeout(function () {
+        el.classList.remove('show');
+      }, 1500);
+    }
 
     // ===================================================================
     // 搖桿：x/y/theta 狀態 + 20Hz throttle 發送

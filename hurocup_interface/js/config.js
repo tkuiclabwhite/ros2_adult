@@ -1,17 +1,3 @@
-//window.ROBOT_CONFIG = {
-//    ip: '172.17.121.10'
-//};
-
-//document.addEventListener('DOMContentLoaded', function () {
-//    var sel = document.getElementById('addressSelect');
-//    if (!sel) return;
-//    var opt = document.createElement('option');
-//    opt.value = window.ROBOT_CONFIG.ip;
-//    opt.text  = window.ROBOT_CONFIG.ip;
-//    sel.insertBefore(opt, sel.firstChild);
-//    sel.value = window.ROBOT_CONFIG.ip;
-//});
-
 // 自動偵測目前是用哪個位址連上這個網頁，藉此決定要連哪個 rosbridge：
 // - 透過 http://172.17.121.10:8080/... 開啟 → 自動連 172.17.121.10 (有線網路)
 // - 透過 http://10.10.10.10:8080/...   開啟 → 自動連 10.10.10.10   (熱點)
@@ -26,8 +12,17 @@
 //
 // 同時把所有已知網路的位址都列進下拉選單，方便手動切換
 // (例如手機連著熱點，但想暫時切去連有線那台機器人測試)
+// 用 SFTP (GVFS) 掛載開檔案時，網址會長這樣：
+// file:///run/user/1000/gvfs/sftp:host=10.10.10.10,user=iclab/...
+// hostname 抓不到值，但路徑裡藏著實際連線的 host，直接解析出來用。
+function detectSftpHost() {
+    var path = decodeURIComponent(window.location.pathname || '');
+    var m = path.match(/sftp:host=([^,/]+)/);
+    return m ? m[1] : null;
+}
+
 window.ROBOT_CONFIG = {
-    ip: window.location.hostname || '172.17.121.10'
+    ip: window.location.hostname || detectSftpHost() || '172.17.121.10'
 };
 
 // 之後新增/修改已知網路位址，只要改這個清單即可，不用動下面的邏輯

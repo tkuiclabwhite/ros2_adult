@@ -6,6 +6,7 @@ symlink 的問題，改成每次請求都重新讀取最新內容就沒有這個
 """
 import http.server
 import os
+import sys
 
 HUROCUP_DIR = os.path.dirname(os.path.realpath(__file__))
 STRATEGY_JS_PATH = os.path.join(HUROCUP_DIR, '..', 'src', 'strategy', 'strategy', 'strategy.js')
@@ -36,6 +37,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(content)
 
 
+class QuietThreadingHTTPServer(http.server.ThreadingHTTPServer):
+    def handle_error(self, request, client_address):
+        # 手機瀏覽器切換/斷開 MJPEG 串流時常常會中途重置連線，這是預期行為，
+        # 不用印一整段 traceback 嚇人，其他非預期的錯誤還是照樣印出來。
+        exc_type = sys.exc_info()[0]
+        if exc_type in (ConnectionResetError, BrokenPipeError):
+            return
+        super().handle_error(request, client_address)
+
+
 if __name__ == '__main__':
-    server = http.server.ThreadingHTTPServer(('0.0.0.0', 9999), Handler)
+    server = QuietThreadingHTTPServer(('0.0.0.0', 9999), Handler)
     server.serve_forever()

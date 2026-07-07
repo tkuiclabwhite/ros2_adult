@@ -3,6 +3,7 @@
 import json
 import re
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, request
@@ -104,37 +105,56 @@ def get_associated_macs():
 
 
 def read_devices():
-    lease_file = find_lease_file()
-    if lease_file is None:
-        return []
-
     blocked = load_blocked()
     nicknames = load_nicknames()
     reservations = load_reservations()
     associated = get_associated_macs()
-    devices = []
-    with open(lease_file) as f:
-        for line in f:
-            parts = line.split()
-            if len(parts) < 4:
-                continue
-            expiry_epoch, mac, ip, hostname = parts[0], parts[1], parts[2], parts[3]
-            since = subprocess.run(
-                ['date', '-d', f'@{expiry_epoch}', '+%Y-%m-%d %H:%M:%S'],
-                capture_output=True, text=True,
-            ).stdout.strip()
-            mac = mac.lower()
-            devices.append({
-                'ip': ip,
-                'mac': mac,
-                'hostname': hostname if hostname != '*' else '',
-                'nickname': nicknames.get(mac, ''),
-                'since': since,
-                'blocked': mac in blocked,
-                'reserved_ip': reservations.get(mac),
-                'connected': mac in associated,
-            })
-    return devices
+    devices = {}
+
+    lease_file = find_lease_file()
+    if lease_file is not None:
+        with open(lease_file) as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 4:
+                    continue
+                expiry_epoch, mac, ip, hostname = parts[0], parts[1], parts[2], parts[3]
+                # 租約檔第一欄是「租約到期時間」，不是裝置連線當下的時間；
+                # 續約會讓這個時間一直往後延，沒辦法從這裡反推出最初的連線時刻。
+                lease_expires = subprocess.run(
+                    ['date', '-d', f'@{expiry_epoch}', '+%Y-%m-%d %H:%M:%S'],
+                    capture_output=True, text=True,
+                ).stdout.strip()
+                mac = mac.lower()
+                devices[mac] = {
+                    'ip': ip,
+                    'mac': mac,
+                    'hostname': hostname if hostname != '*' else '',
+                    'nickname': nicknames.get(mac, ''),
+                    'lease_expires': lease_expires,
+                    'blocked': mac in blocked,
+                    'reserved_ip': reservations.get(mac),
+                    'connected': mac in associated,
+                }
+
+    # 租約檔只記錄「目前還沒過期的租約」，不是永久歷史。把我們自己存過資料
+    # （暱稱／封鎖／固定 IP）但目前不在租約檔裡的裝置也一併列出來，標成離線。
+    known_macs = set(nicknames) | set(blocked) | set(reservations)
+    for mac in known_macs:
+        if mac in devices:
+            continue
+        devices[mac] = {
+            'ip': reservations.get(mac, ''),
+            'mac': mac,
+            'hostname': '',
+            'nickname': nicknames.get(mac, ''),
+            'lease_expires': '',
+            'blocked': mac in blocked,
+            'reserved_ip': reservations.get(mac),
+            'connected': False,
+        }
+
+    return list(devices.values())
 
 
 def is_valid_mac(mac):
@@ -290,6 +310,7 @@ def hotspot_status():
         'active': active,
         'ssid': HOTSPOT_SSID,
         'ip': HOTSPOT_IP,
+        'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     })
 
 
