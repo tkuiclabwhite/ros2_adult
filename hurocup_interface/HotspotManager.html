@@ -291,7 +291,7 @@
       details.innerHTML = `
         <div class="device-detail">IP: ${escapeHtml(dev.ip)}</div>
         <div class="device-detail">MAC: ${escapeHtml(dev.mac)}</div>
-        <div class="device-detail">連線時間: ${escapeHtml(dev.since)}</div>
+        <div class="device-detail">租約到期時間: ${escapeHtml(dev.lease_expires)}</div>
         <div class="device-detail">固定 IP: ${dev.reserved_ip ? escapeHtml(dev.reserved_ip) : '未設定'}</div>
       `;
 

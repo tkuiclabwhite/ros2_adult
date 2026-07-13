@@ -197,8 +197,35 @@
         #history-list .hp-item-redo   { color: #ffaa00; padding: 1px 4px; }
         #history-list .hp-item-future { color: #554400; padding: 1px 4px; }
         #history-list .hp-empty       { color: #444;    text-align: center; padding: 4px; }
+
+        /* ===== Calculator ===== */
+        #calc-panel {
+            clear: both; margin-top: 8px; padding: 6px;
+            background: rgba(8,16,18,0.97); border: 1px solid #03e9f4;
+            border-radius: 5px; width: 222px;
+        }
+        #calc-display {
+            width: 100%; box-sizing: border-box;
+            background: #000; color: #03e9f4;
+            font-size: 15px; font-family: monospace;
+            text-align: right; padding: 3px 6px;
+            border: 1px solid #03e9f4; margin-bottom: 4px;
+        }
+        .cb { height: 30px; margin: 0; font-size: 14px; cursor: pointer;
+              background: rgba(46,58,61,0.9); color: #ddd;
+              border: 1px solid #444; border-radius: 3px; }
+        .cb:hover { background: rgba(3,233,244,0.25); border-color: #03e9f4; }
+        .cb-op  { color: #03e9f4; }
+        .cb-clr { color: #ff5555; font-weight: bold; }
+        .cb-eq  { background: #03e9f4; color: #050505; font-weight: bold; }
+        .cb-eq:hover { background: #00b8c4; }
+        .cb-cnv { width: 108px; height: 26px; margin: 2px 1px; font-size: 11px; cursor: pointer;
+                  background: rgba(46,58,61,0.9); color: #ffaa00;
+                  border: 1px solid #664400; border-radius: 3px; }
+        .cb-cnv:hover { background: rgba(255,170,0,0.25); border-color: #ffaa00; }
+
     </style>
-    <script src="../src/strategy/strategy/strategy.js"></script>
+    <script src="./strategy.js"></script>
 </head>
 
 <body>
@@ -547,6 +574,22 @@
                     <input type="button" id="MoveUpButton" value="Move Up" onclick="MoveRow(-1);" style="width:80px" disabled="disabled">
                     <input type="button" id="MoveDownButton" value="Move Down" onclick="MoveRow(1);" style="width:90px" disabled="disabled"> : <input type="text" id="chose_move" value="-1" style="width:50px;">
                 </div>
+                <div style="margin-left: 180px; margin-bottom: 4px;">
+                    Strategy:&nbsp;<select id="import_strategy" style="height:25px; margin-right:5px;">
+                        <option value="ar">ar</option>
+                        <option value="bb">bb</option>
+                        <option value="mar">mar</option>
+                        <option value="obs">obs</option>
+                        <option value="wl">wl</option>
+                        <option value="sr">sr</option>
+                        <option value="sp">sp</option>
+                        <option value="pk">pk</option>
+                        <option value="rc">rc</option>
+                    </select>
+                    Sector:&nbsp;<input type="text" id="import_sector" value="-1" style="width:50px;">
+                    <input type="button" id="importSectorButton" value="Import Sector" onclick="ImportSector();" style="width:110px; margin-left:5px;" disabled="disabled">
+                    <span id="import_status"></span>
+                </div>
             </div>
         </div> 
         <div id="rightarea">
@@ -591,7 +634,7 @@
                         <div id="pos-btn-28" class="pos-motor-btn" style="top:9%; left:47%;" onclick="toggleTorqueAtPosition(28)">28</div>
                         <div id="pos-btn-29" class="pos-motor-btn" style="top:3%; left:47%;" onclick="toggleTorqueAtPosition(29)">29</div>
                     </div>
-                                    <div id="robotpic" style="margin-left: 0px; background-color: rgba(46, 58, 61, 0.637); padding: 8px; border-radius: 5px; overflow: hidden;">
+                                    <div id="robotpic" style="margin-left: 0px; background-color: rgba(46, 58, 61, 0.637); padding: 8px; border-radius: 5px;">
                 <div style="float: left; margin-left: 70px;">
                     X_Series&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Pro_Series
                 </div>
@@ -602,6 +645,9 @@
                 <div style="float: left;">
                     Speed &nbsp;&nbsp;&nbsp;: &nbsp;<input type="text" id="X_series_speed" value=10 style="width:50px;margin-left: 4px;" onclick="Speed();" onkeydown="if (event.key === 'Enter') Speed(this.value)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                     <input type="text" id="Pro_series_speed" value=696 style="width:50px;margin-left: 12px" onclick="SpeedReverse();" onkeydown="if (event.key === 'Enter') SpeedReverse();">
+                </div>
+                <div style="clear:both; margin-top:6px;">
+                    <button type="button" onclick="toggleCalc();" style="font-size:11px; padding:2px 10px; background:rgba(3,233,244,0.1); color:#03e9f4; border:1px solid #03e9f4; border-radius:3px; cursor:pointer;">☰ Calc</button>
                 </div>
                 </div>
                 </div>
@@ -705,7 +751,7 @@
                 <div id="copy_selected_panel" style="display:none; background:rgba(30,40,44,0.97); border:1px solid #ff8c00; border-radius:7px; padding:10px; margin: 4px 0 8px 0; width:100%; box-sizing:border-box;">
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                         <span style="color:#ff8c00; font-weight:bold;">Target Row ID:</span>
-                        <input type="text" id="copy_target_id" value="1" style="width:50px; text-align:center; font-weight:bold;">
+                        <input type="text" id="copy_target_id" value="-1" style="width:50px; text-align:center; font-weight:bold;">
                         <input type="button" value="全選" onclick="toggleAllCopyCheckboxes(true);" style="width:50px; background:#555; color:#fff; border-radius:3px; cursor:pointer;">
                         <input type="button" value="全不選" onclick="toggleAllCopyCheckboxes(false);" style="width:55px; background:#555; color:#fff; border-radius:3px; cursor:pointer;">
                         <input type="button" value="Execute" onclick="CopySelectedToRow();" style="width:65px; font-weight:bold; background:#ff8c00; color:#fff; border-radius:3px; cursor:pointer;">
@@ -764,6 +810,66 @@
             
 
     </form>
+
+    <!-- Floating draggable calculator (outside form to avoid submit) -->
+    <div id="calc-float" style="display:none; position:fixed; top:120px; right:20px; width:242px;
+         z-index:9999; background:rgba(8,16,18,0.97); border:1px solid #03e9f4; border-radius:5px;
+         box-shadow:0 0 20px rgba(3,233,244,0.3);">
+        <div id="calc-drag" style="background:rgba(3,233,244,0.12); color:#03e9f4; padding:5px 8px;
+             cursor:move; border-radius:5px 5px 0 0; display:flex; justify-content:space-between;
+             align-items:center; user-select:none; font-size:13px; letter-spacing:2px;">
+            <span>CALCULATOR</span>
+            <span onclick="toggleCalc()" style="cursor:pointer; padding:0 4px; font-size:16px;">✕</span>
+        </div>
+        <div style="padding:8px;">
+            <input type="text" id="calc-display" class="calc-display" value="0" readonly>
+            <!-- Row 1: C ⌫ ( ) -->
+            <div style="display:flex; gap:3px; margin-bottom:3px;">
+                <button type="button" class="cb cb-clr" style="flex:1" onclick="calcPress('C')">C</button>
+                <button type="button" class="cb cb-op"  style="flex:1" onclick="calcPress('⌫')">⌫</button>
+                <button type="button" class="cb cb-op"  style="flex:1" onclick="calcPress('(')">(</button>
+                <button type="button" class="cb cb-op"  style="flex:1" onclick="calcPress(')')">)</button>
+            </div>
+            <!-- Row 2: + − × ÷ -->
+            <div style="display:flex; gap:3px; margin-bottom:3px;">
+                <button type="button" class="cb cb-op" style="flex:1" onclick="calcPress('+')">+</button>
+                <button type="button" class="cb cb-op" style="flex:1" onclick="calcPress('-')">−</button>
+                <button type="button" class="cb cb-op" style="flex:1" onclick="calcPress('*')">×</button>
+                <button type="button" class="cb cb-op" style="flex:1" onclick="calcPress('/')">÷</button>
+            </div>
+            <!-- Row 3-5: 7-9, 4-6, 1-3 -->
+            <div style="display:flex; gap:3px; margin-bottom:3px;">
+                <button type="button" class="cb" style="flex:1" onclick="calcPress('7')">7</button>
+                <button type="button" class="cb" style="flex:1" onclick="calcPress('8')">8</button>
+                <button type="button" class="cb" style="flex:1" onclick="calcPress('9')">9</button>
+            </div>
+            <div style="display:flex; gap:3px; margin-bottom:3px;">
+                <button type="button" class="cb" style="flex:1" onclick="calcPress('4')">4</button>
+                <button type="button" class="cb" style="flex:1" onclick="calcPress('5')">5</button>
+                <button type="button" class="cb" style="flex:1" onclick="calcPress('6')">6</button>
+            </div>
+            <div style="display:flex; gap:3px; margin-bottom:3px;">
+                <button type="button" class="cb" style="flex:1" onclick="calcPress('1')">1</button>
+                <button type="button" class="cb" style="flex:1" onclick="calcPress('2')">2</button>
+                <button type="button" class="cb" style="flex:1" onclick="calcPress('3')">3</button>
+            </div>
+            <!-- Row 6: 0(wide), ., = -->
+            <div style="display:flex; gap:3px; margin-bottom:4px;">
+                <button type="button" class="cb" style="flex:2" onclick="calcPress('0')">0</button>
+                <button type="button" class="cb" style="flex:1" onclick="calcPress('.')">.</button>
+                <button type="button" class="cb cb-eq" style="flex:1" onclick="calcPress('=')">=</button>
+            </div>
+            <!-- Conversion buttons -->
+            <div>
+                <button type="button" class="cb-cnv" onclick="calcToXPos()">→ X Position</button>
+                <button type="button" class="cb-cnv" onclick="calcToProPos()">→ Pro Position</button>
+            </div>
+            <div>
+                <button type="button" class="cb-cnv" onclick="calcToXSpd()">→ X Speed</button>
+                <button type="button" class="cb-cnv" onclick="calcToProSpd()">→ Pro Speed</button>
+            </div>
+        </div>
+    </div>
 
     <dialog id="infoModal">
         <p>確認是否儲存!!!!!</p>
@@ -935,7 +1041,201 @@
             document.getElementById('redoButton').disabled = true;
             document.getElementById('clearHistoryButton').disabled = true;
             document.getElementById('history-list').innerHTML = '<div class="hp-empty">empty</div>';
+            document.getElementById('importSectorButton').disabled = true;
         });
+
+        ros.on('error', function() {
+            document.getElementById('importSectorButton').disabled = true;
+        });
+
+        ros.on('connection', function() {
+            document.getElementById('importSectorButton').disabled = false;
+        });
+
+        // ===== Calculator =====
+        var _calcExpr = '';
+
+        function toggleCalc() {
+            var p = document.getElementById('calc-float');
+            p.style.display = p.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function calcPress(val) {
+            if (val === 'C') {
+                _calcExpr = '';
+            } else if (val === '⌫') {
+                _calcExpr = _calcExpr.slice(0, -1);
+            } else if (val === '=') {
+                try {
+                    _calcExpr = String(Function('"use strict"; return (' + _calcExpr + ')')());
+                } catch(e) {
+                    _calcExpr = 'Error';
+                }
+            } else {
+                if (_calcExpr === 'Error') _calcExpr = '';
+                _calcExpr += val;
+            }
+            document.getElementById('calc-display').value = _calcExpr || '0';
+        }
+
+        function calcToXPos() {
+            var val = parseFloat(document.getElementById('calc-display').value);
+            if (!isNaN(val)) {
+                document.getElementById('X_series_position').value = val;
+                Position();
+            }
+        }
+
+        function calcToXSpd() {
+            var val = parseFloat(document.getElementById('calc-display').value);
+            if (!isNaN(val)) {
+                document.getElementById('X_series_speed').value = val;
+                Speed();
+            }
+        }
+
+        function calcToProPos() {
+            var val = parseFloat(document.getElementById('calc-display').value);
+            if (!isNaN(val)) {
+                document.getElementById('Pro_series_position').value = val;
+                PositionReverse();
+            }
+        }
+
+        function calcToProSpd() {
+            var val = parseFloat(document.getElementById('calc-display').value);
+            if (!isNaN(val)) {
+                document.getElementById('Pro_series_speed').value = val;
+                SpeedReverse();
+            }
+        }
+
+        // Drag support for floating calculator
+        (function() {
+            var dragging = false, ox, oy, ex, ey;
+            var handle = document.getElementById('calc-drag');
+            var panel  = document.getElementById('calc-float');
+            handle.addEventListener('mousedown', function(e) {
+                dragging = true;
+                ox = e.clientX; oy = e.clientY;
+                ex = panel.offsetLeft; ey = panel.offsetTop;
+                e.preventDefault();
+            });
+            document.addEventListener('mousemove', function(e) {
+                if (!dragging) return;
+                panel.style.left  = (ex + e.clientX - ox) + 'px';
+                panel.style.top   = (ey + e.clientY - oy) + 'px';
+                panel.style.right = 'auto';
+            });
+            document.addEventListener('mouseup', function() { dragging = false; });
+        })();
+
+        // ===== Import Sector =====
+        // Sector file format: motordata = speed1, pos1, speed2, pos2, ... (27 pairs = 54 values)
+        // Backend returns these as motionstate=2 (relative) or motionstate=4 (absolute)
+        function ImportSector() {
+            var strategy  = document.getElementById('import_strategy').value;
+            var sectorNum = document.getElementById('import_sector').value.trim();
+            var statusEl  = document.getElementById('import_status');
+
+            if (!sectorNum) {
+                document.getElementById('label').innerHTML = 'Import Sector: please enter a sector number!';
+                return;
+            }
+
+            var currentDisplay = document.getElementById('current-strategy-name').innerText;
+            var restorePath = '/home/iclab/ros2_adult/src/strategy/strategy/' +
+                (currentDisplay === '---' || currentDisplay === 'WAITING...' ? 'ar' : currentDisplay) +
+                '/Parameter';
+
+            location_msg.data = '/home/iclab/ros2_adult/src/strategy/strategy/' + strategy + '/Parameter';
+            location_strategy.publish(location_msg);
+            document.getElementById('label').innerHTML = 'Switching to strategy [' + strategy + ']...';
+
+            setTimeout(function() {
+                var svc = new ROSLIB.Service({
+                    ros: ros,
+                    name: '/package/InterfaceReadSaveMotion',
+                    serviceType: 'tku_msgs/ReadMotion'
+                });
+                svc.callService(new ROSLIB.ServiceRequest({
+                    read: true,
+                    name: 'sector/' + sectorNum,
+                    readstate: 0
+                }), function(data) {
+                    location_msg.data = restorePath;
+                    location_strategy.publish(location_msg);
+
+                    if (!data.vectorcnt || data.vectorcnt === 0) {
+                        document.getElementById('label').innerHTML = 'Import failed: sector/' + sectorNum + ' not found in [' + strategy + ']';
+                        return;
+                    }
+
+                    var baseRP = document.getElementById('RelativePositionTable').getElementsByClassName('inthesmallbox2').length;
+                    var baseRS = document.getElementById('RelativeSpeedTable').getElementsByClassName('inthesmallbox2').length;
+                    var baseAP = document.getElementById('AbsolutePositionTable').getElementsByClassName('inthesmallbox2').length;
+                    var baseAS = document.getElementById('AbsoluteSpeedTable').getElementsByClassName('inthesmallbox2').length;
+
+                    var nRP = 0, nRS = 0, nAP = 0, nAS = 0;
+                    var relEntryIdx = 0, absEntryIdx = 0;
+
+                    for (var i = 0; i < data.vectorcnt; i++) {
+                        var tName = (data.item_names && data.item_names[i]) ? data.item_names[i] : '';
+                        switch (data.motionstate[i]) {
+                            case 0: break; // MotionList: skip
+
+                            case 2: {
+                                // Combined entry: motordata = speed0,pos0,speed1,pos1,...
+                                // Even index → speed, Odd index → position
+                                var off = relEntryIdx * 54;
+
+                                NewRelativePosition();
+                                var rdP = (baseRP + nRP) * 2;
+                                document.getElementById('RelativePositionTable').getElementsByTagName('div')[rdP].getElementsByClassName('textbox')[0].value = -1;
+                                document.getElementById('RelativePositionTable').getElementsByTagName('div')[rdP+1].getElementsByClassName('textbox')[0].value = '-1';
+                                for (var j = 0; j < 27; j++)
+                                    document.getElementById('RelativePositionTable').getElementsByTagName('div')[rdP+1].getElementsByClassName('textbox')[j+1].value = data.relativedata[off + j*2 + 1];
+                                nRP++;
+
+                                NewRelativeSpeed();
+                                var rdS = (baseRS + nRS) * 2;
+                                document.getElementById('RelativeSpeedTable').getElementsByTagName('div')[rdS].getElementsByClassName('textbox')[0].value = -1;
+                                document.getElementById('RelativeSpeedTable').getElementsByTagName('div')[rdS+1].getElementsByClassName('textbox')[0].value = '-1';
+                                for (var j = 0; j < 27; j++)
+                                    document.getElementById('RelativeSpeedTable').getElementsByTagName('div')[rdS+1].getElementsByClassName('textbox')[j+1].value = data.relativedata[off + j*2];
+                                nRS++;
+                                relEntryIdx++;
+                                break;
+                            }
+                            case 4: {
+                                // Combined absolute: same interleaved format
+                                var off = absEntryIdx * 54;
+
+                                NewAbsolutePosition();
+                                var rdP = (baseAP + nAP) * 2;
+                                document.getElementById('AbsolutePositionTable').getElementsByTagName('div')[rdP].getElementsByClassName('textbox')[0].value = -1;
+                                document.getElementById('AbsolutePositionTable').getElementsByTagName('div')[rdP+1].getElementsByClassName('textbox')[0].value = '-1';
+                                for (var j = 0; j < 27; j++)
+                                    document.getElementById('AbsolutePositionTable').getElementsByTagName('div')[rdP+1].getElementsByClassName('textbox')[j+1].value = data.absolutedata[off + j*2 + 1];
+                                nAP++;
+
+                                NewAbsoluteSpeed();
+                                var rdS = (baseAS + nAS) * 2;
+                                document.getElementById('AbsoluteSpeedTable').getElementsByTagName('div')[rdS].getElementsByClassName('textbox')[0].value = -1;
+                                document.getElementById('AbsoluteSpeedTable').getElementsByTagName('div')[rdS+1].getElementsByClassName('textbox')[0].value = '-1';
+                                for (var j = 0; j < 27; j++)
+                                    document.getElementById('AbsoluteSpeedTable').getElementsByTagName('div')[rdS+1].getElementsByClassName('textbox')[j+1].value = data.absolutedata[off + j*2];
+                                nAS++;
+                                absEntryIdx++;
+                                break;
+                            }
+                        }
+                    }
+                    document.getElementById('label').innerHTML =
+                        'Import Sector [' + sectorNum + '] from [' + strategy + '] done! (' + data.vectorcnt + ' entries)';
+                });
+            }, 150);
+        }
     </script>
 </body>
 </html>

@@ -204,7 +204,7 @@ class MotorMove():
             self.api.drawImageFunction(3, 2, self.target.ball_x_min , self.target.ball_x_max , self.target.ball_y_max , self.target.ball_y_min, 255, 0, 255)
             self.api.drawImageFunction(4, 2, self.target.basket_x_min , self.target.basket_x_max , self.target.basket_y_max , self.target.basket_y_min, 255, 120, 255)
             # api.send.drawImageFunction(5, 1, api.send.yolo_XMin, api.send.yolo_XMax, api.send.yolo_YMin, api.send.yolo_YMax, 0, 255, 0)
-            self.api.drawImageFunction(6,3,160,100,240,0,255,0,0,1)
+            self.api.drawImageFunction(6,3,160,80,240,0,255,0,0,1)
             self.api.drawImageFunction(7,3,160,140,240,0,255,0,0,1)
             self.api.drawImageFunction(8,3,160,120,240,0,255,0,0,1)
     
@@ -605,7 +605,7 @@ class BasketBall(API):
             time.sleep(0.05)
             self.motor.bodyauto_close(0)
             time.sleep(1)
-            self.sendBodySector(50)
+            # self.sendBodySector(50)
             time.sleep(6)
             self.sendBodySector(29)
             time.sleep(0.05)

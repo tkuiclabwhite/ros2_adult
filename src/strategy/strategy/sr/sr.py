@@ -19,14 +19,14 @@ from strategy.sr.calculate_edge import deep_calculate
 
 #--校正量--#
 #原地量校正
-FORWARD_CORRECTION         = -500
+FORWARD_CORRECTION         = -1700
 #平移校正
-TRANSLATION_CORRECTION     = 100
+TRANSLATION_CORRECTION     = 0
 #旋轉校正
-THETA_CORRECTION           = -1
+THETA_CORRECTION           = 0
 
 #基礎變化量(前進&平移)
-BASE_CHANGE                = 200         
+BASE_CHANGE                = 1000         
 
 #上下板後路徑規劃
 ROUTE_PLAN_FLAG            = True
@@ -58,88 +58,88 @@ ROUTE_PLAN = [
 
 BOARD_LAYER_CONFIG = {
     "UP" :{
-        "LCUP": 20000,               #上板前進量
-        "STAND_CORRECT": False,      #上板看板子站姿
-        "STAND_CORRECT_SECTOR": 102, #上板看板子站姿sector        
-        "WALK_PARAM": dict(com_y_swing=-6, width_size=4, period_t=240, t_dsp=0.4,
-                            clearance=4.5, board_high=3, stand_height=23.5,
-                            com_height=29.5, hip_roll=0, ankle_roll=0), #上板步態參數
-        "NORMAL_OFFSET" : [2,2,1],
-        "U_OFFSET" : [6,4,2]
+        "LCUP": 40000,               #上板前進量
+        "STAND_CORRECT": True,      #上板看板子站姿
+        "STAND_CORRECT_SECTOR": 1, #上板看板子站姿sector        
+        "WALK_PARAM": dict(com_y_swing=5, width_size=0, period_t=360, t_dsp=0,
+                            clearance=14, board_high=5, stand_height=50,
+                            com_height=40), #上板步態參數
+        "NORMAL_OFFSET" : [1,3,1],#[中心值,邊緣值,曲率] [2,2,1](2,2,2,2,2,2) / [1,4,1](4,2,1,1,2,4) / [1,4,0.5](4,2,1,1,2,4)
+        "U_OFFSET"      : [6,4,2] #[中心值,邊緣值,曲率] [6,4,2](2,2,3,3,2,2) /
     },
 
     1: {
         "LCUP": None, #上板前進量 (數值 or None)
-        "WALK_PARAM_YN": True, #是否使用自訂步態參數
-        "WALK_PARAM": dict(com_y_swing=-6, width_size=4, period_t=240, t_dsp=0.4,
-                            clearance=4.5, board_high=3, stand_height=23.5,
-                            com_height=29.5, hip_roll=0, ankle_roll=0),
-        "LC_CORRECT": False,      #上板站姿微調
-        "LC_CORRECT_SECTOR": 209, #上板站姿微調sector
-        "LC_U": True, #上板U形板
+        "WALK_PARAM_YN": False, #是否使用自訂步態參數
+        "WALK_PARAM": dict(com_y_swing=5, width_size=0, period_t=360, t_dsp=0,
+                            clearance=8, board_high=3, stand_height=50,
+                            com_height=40),#上板步態參數
+        "LC_CORRECT": True,      #上板站姿微調
+        "LC_CORRECT_SECTOR": 2, #上板站姿微調sector
+        "LC_U": False, #上板U形板
     },
 
     2: {
-        "LCUP": 19000, #上板前進量 (數值 or None)
-        "WALK_PARAM_YN": True, #是否使用自訂步態參數
-        "WALK_PARAM": dict(com_y_swing=-6, width_size=4, period_t=240, t_dsp=0.4,
-                            clearance=4.5, board_high=3, stand_height=23.5,
-                            com_height=29.5, hip_roll=0, ankle_roll=0),
-        "LC_CORRECT": False,      #上板站姿微調
-        "LC_CORRECT_SECTOR": 209, #上板站姿微調sector
-        "LC_U": True, #上板U形板
+        "LCUP": None, #上板前進量 (數值 or None)
+        "WALK_PARAM_YN": False, #是否使用自訂步態參數
+        "WALK_PARAM": dict(com_y_swing=5, width_size=0, period_t=360, t_dsp=0,
+                            clearance=8, board_high=3, stand_height=50,
+                            com_height=40),#上板步態參數
+        "LC_CORRECT": True,      #上板站姿微調
+        "LC_CORRECT_SECTOR": 2, #上板站姿微調sector
+        "LC_U": False, #上板U形板
     },
 
     3: {
-        "LCUP": 19000, #上板前進量 (數值 or None)
-        "WALK_PARAM_YN": True, #是否使用自訂步態參數
-        "WALK_PARAM": dict(com_y_swing=-6, width_size=4, period_t=240, t_dsp=0.4,
-                            clearance=4.5, board_high=3, stand_height=23.5,
-                            com_height=29.5, hip_roll=0, ankle_roll=0),
-        "LC_CORRECT": False,      #上板站姿微調
-        "LC_CORRECT_SECTOR": 209, #上板站姿微調sector
-        "LC_U": True, #上板U形板
+        "LCUP": None, #上板前進量 (數值 or None)
+        "WALK_PARAM_YN": False, #是否使用自訂步態參數
+        "WALK_PARAM": dict(com_y_swing=5, width_size=0, period_t=360, t_dsp=0,
+                            clearance=8, board_high=3, stand_height=50,
+                            com_height=40),#上板步態參數
+        "LC_CORRECT": True,      #上板站姿微調
+        "LC_CORRECT_SECTOR": 2, #上板站姿微調sector
+        "LC_U": False, #上板U形板
     },
 
     "DOWN" :{
-        "LCDOWN": 20000,               #下板前進量
-        "STAND_CORRECT": False,      #下板看板子站姿
-        "STAND_CORRECT_SECTOR": 103, #下板看板子站姿sector
-        "WALK_PARAM": dict(com_y_swing=-6, width_size=4, period_t=240, t_dsp=0.4,
-                            clearance=4.5, board_high=3, stand_height=23.5,
-                            com_height=29.5, hip_roll=0, ankle_roll=0), #下板步態參數
-        "NORMAL_OFFSET" : [2,2,1],
-        "U_OFFSET" : [1,3,2]                            
+        "LCDOWN": 35000,               #下板前進量
+        "STAND_CORRECT": True,      #下板看板子站姿
+        "STAND_CORRECT_SECTOR": 1, #下板看板子站姿sector
+        "WALK_PARAM": dict(com_y_swing=-1, width_size=0, period_t=360, t_dsp=0,
+                            clearance=8, board_high=3, stand_height=50,
+                            com_height=40), #下板步態參數
+        "NORMAL_OFFSET" : [1,3,1], #[中心值,邊緣值,曲率] [2,2,1](2,2,2,2,2,2) / [1,4,1](4,2,1,1,2,4)
+        "U_OFFSET"      : [2,6,2]  #[中心值,邊緣值,曲率] [2,6,2](3,2,1,1,2,3)
     },
 
     4: {
-        "LCDOWN": 19000, #下板前進量 (數值 or None)
-        "WALK_PARAM_YN": True, #是否使用自訂步態參數
-        "WALK_PARAM": dict(com_y_swing=-6, width_size=4, period_t=240, t_dsp=0.4,
-                            clearance=4.5, board_high=3, stand_height=23.5,
-                            com_height=29.5, hip_roll=0, ankle_roll=0),
+        "LCDOWN": None, #下板前進量 (數值 or None)
+        "WALK_PARAM_YN": False, #是否使用自訂步態參數
+        "WALK_PARAM": dict(com_y_swing=-6, width_size=0, period_t=360, t_dsp=0.4,
+                            clearance=8, board_high=3, stand_height=50,
+                            com_height=40), #下板步態參數
         "LC_CORRECT": False,      #下板站姿微調
         "LC_CORRECT_SECTOR": 210, #下板站姿微調sector
         "LC_U": False, #下板U形板
     },
 
     5: {
-        "LCDOWN": 19000, #下板前進量 (數值 or None)
-        "WALK_PARAM_YN": True, #是否使用自訂步態參數
-        "WALK_PARAM": dict(com_y_swing=-6, width_size=4, period_t=240, t_dsp=0.4,
-                            clearance=4.5, board_high=3, stand_height=23.5,
-                            com_height=29.5, hip_roll=0, ankle_roll=0),
+        "LCDOWN": None, #下板前進量 (數值 or None)
+        "WALK_PARAM_YN": False, #是否使用自訂步態參數
+        "WALK_PARAM": dict(com_y_swing=-6, width_size=0, period_t=360, t_dsp=0.4,
+                            clearance=8, board_high=3, stand_height=50,
+                            com_height=40), #下板步態參數
         "LC_CORRECT": False,      #下板站姿微調
         "LC_CORRECT_SECTOR": 210, #下板站姿微調sector
         "LC_U": False, #下板U形板
     },
 
     6: {
-        "LCDOWN": 19000, #下板前進量 (數值 or None)
-        "WALK_PARAM_YN": True, #是否使用自訂步態參數
-        "WALK_PARAM": dict(com_y_swing=-6, width_size=4, period_t=240, t_dsp=0.4,
-                            clearance=4.5, board_high=3, stand_height=23.5,
-                            com_height=29.5, hip_roll=0, ankle_roll=0),
+        "LCDOWN": None, #下板前進量 (數值 or None)
+        "WALK_PARAM_YN": False, #是否使用自訂步態參數
+        "WALK_PARAM": dict(com_y_swing=-6, width_size=0, period_t=360, t_dsp=0.4,
+                            clearance=8, board_high=3, stand_height=50,
+                            com_height=40), #下板步態參數
         "LC_CORRECT": False,      #下板站姿微調
         "LC_CORRECT_SECTOR": 210, #下板站姿微調sector
         "LC_U": False, #下板U形板
@@ -150,20 +150,20 @@ BOARD_LAYER_CONFIG = {
 DRAW_FUNCTION_FLAG         = True                 #影像繪圖開關
 START_LAYER                = 1
 BOARD_COLOR                = ["Green"  ,           #板子顏色(根據比賽現場調整)
-                              "Yellow"   ,           #Blue Red Yellow Green
-                              "Blue", 
-                              "Red" , 
-                              "Blue"    , 
-                              "Yellow"   , 
+                              "Blue"   ,           #Blue Red Yellow Green
+                              "Red", 
+                              "Yellow" , 
+                              "Red"    , 
+                              "Blue"   , 
                               "Green"]              
 #----------#                       右腳           左腳
 #                              左 ,  中,  右|  左,  中,   右
-FOOT                       = [96, 123, 145, 175, 197, 224]
-HEAD_HORIZONTAL            = 2040                  #頭水平
-HEAD_VERTICAL              = 1240                  #頭垂直 #down 2750
+FOOT                       = [120, 137, 155, 180, 195, 210]
+HEAD_HORIZONTAL            = 2048                  #頭水平
+HEAD_VERTICAL              = 2700                  #頭垂直 #down 2750
 
 ##判斷值
-FOOTBOARD_LINE             = 215                   #基準線
+FOOTBOARD_LINE             = 225                   #基準線
 UP_WARNING_DISTANCE        = 6                     #上板危險距離
 DOWN_WARNING_DISTANCE      = 0                     #下板危險距離
 GO_UP_DISTANCE             = 20                    #上板距離
@@ -171,15 +171,15 @@ GO_DOWN_DISTANCE           = 3                     #下板距離
 
 FORWORD_CHANGE_LINE = {"MIN_NORMAL": 50, "NORMAL_BIG": 100, "BIG_SUPER": 150} #前進判斷線 {小 ~ 一般, 一般 ~ 大, 大 ~ 超大}
 
-BACK                = {"MIN": -600, "NORMAL": -800} #後退{小後退,後退}
+BACK                = {"MIN": -4000, "NORMAL": -6000} #後退{小後退,後退}
 
-FORWARD             = {"MIN": 600, "NORMAL": 1000, "BIG": 1400, "SUPER": 2000}    #前進{小前進,前進,大前進,超大前進}
+FORWARD             = {"MIN": 2000,  "NORMAL": 3000, "BIG": 4000  , "SUPER": 5000}    #前進{小前進,前進,大前進,超大前進}
 
-TRANSLATION         = {"MIN": 700, "NORMAL": 1000, "BIG": 1200}      #平移{小平移,平移,大平移}
+TRANSLATION         = {"MIN": 3000,  "NORMAL": 5000, "BIG": 6000}      #平移{小平移,平移,大平移}
 
-THETA               = {"MIN": 4, "NORMAL": 5, "BIG": 8}              #旋轉{小旋轉,旋轉,大旋轉}
+THETA               = {"MIN": 5,    "NORMAL": 8,    "BIG": 10}              #旋轉{小旋轉,旋轉,大旋轉}
 
-SLOPE               = {"MIN": 2, "NORMAL": 5, "BIG": 12}  #斜{小斜,斜,大斜}
+SLOPE               = {"MIN": 2,    "NORMAL": 4,    "BIG": 6}  #斜{小斜,斜,大斜}
 
 #左基礎參數
 LEFT_THETA                 = 1
@@ -210,6 +210,7 @@ class LiftandCarry(API):
             self.sendHeadMotor(2,self.head_Vertical,100)#垂直
         else:
             self.sendHeadMotor(2,self.head_Vertical,100)#垂直
+            # self.sendHeadMotor(2,self.head_Vertical+20,100)#垂直
 
         if DRAW_FUNCTION_FLAG:
             self.draw_function()
@@ -220,15 +221,15 @@ class LiftandCarry(API):
                 self.sendHeadMotor(1,self.head_Horizontal,100)  #水平
                 self.sendHeadMotor(2,self.head_Vertical,100)    #垂直
                 self.sendLCWalkParameter(                
-                com_y_swing  = float(-1.5),   #起步步態補償
-                width_size   = float(4.5),  #雙腳距離
-                period_t     = int(320),  #步態頻率
-                t_dsp        = float(0.1),  #雙支撐時間
-                lift_height  = float(2),
-                stand_height = float(23.5), #機器人初始站姿高度
-                com_height   = float(29.5),  #質心高度
-            )    
-                time.sleep(1.5)
+                com_y_swing  = float(0),   #起步步態補償
+                width_size   = float(0),  #雙腳距離
+                period_t     = int(420),  #步態頻率
+                t_dsp        = float(0),  #雙支撐時間
+                lift_height  = float(5),
+                stand_height = float(50), #機器人初始站姿高度
+                com_height   = float(40),  #質心高度
+                )    
+                time.sleep(4)
                 self.sendbodyAuto(0)
                 time.sleep(1.5)
                 self.sendBodySector(29)             #基礎站姿磁區                 
@@ -247,8 +248,9 @@ class LiftandCarry(API):
                         self.action_status = "上板看板子站姿調整" if self.board_cfg["group"] == "UP" else "下板看板子站姿調整"
                         time.sleep(1)
 
-                    self.sendbodyAuto(1)
-                    self.sendContinuousValue(self.forward,0,0)
+                    self.sendBodyAutoCmd(self.forward,0,0,0)
+                    # self.sendbodyAuto(1)
+                    # self.sendContinuousValue(self.forward,0,0)
 
                     self.walkinggait_stop = False
                     self.first_in         = False
@@ -262,13 +264,12 @@ class LiftandCarry(API):
                            (self.distance[4] == 0 and self.distance[5] == 0 and max(self.distance) < 2):
                             self.action_status = "！！！！！！！！！！直接下板！！！！！！！！！！"
                             self.walkinggait(motion = 'continue_to_lc')
-                   
+                
                     self.sendbodyAuto(0)
                     self.walkinggait(motion = 'walking')
                     self.walkinggait_stop = False
                     self.route_plan(self.layer)
                 elif not self.walkinggait_stop:
-                    # send.data_check = False
                     self.find_board()
                     self.walkinggait(motion=self.edge_judge())
                     
@@ -290,7 +291,7 @@ class LiftandCarry(API):
         self.distance              = [9999,9999,9999,9999,9999,9999]
         self.next_distance         = [9999,9999,9999,9999,9999,9999]
         #步態參數
-        self.forward               = FORWARD[1] + FORWARD_CORRECTION
+        self.forward               = FORWARD["NORMAL"] + FORWARD_CORRECTION
         self.translation           = 0              + TRANSLATION_CORRECTION
         self.theta                 = 0              + THETA_CORRECTION
         self.now_forward           = 0 
@@ -353,10 +354,8 @@ class LiftandCarry(API):
                 board_high   = float(self.board_cfg["walk_param"]["board_high"]),
                 stand_height = float(self.board_cfg["walk_param"]["stand_height"]),
                 com_height   = float(self.board_cfg["walk_param"]["com_height"]),
-                hip_roll     = float(self.board_cfg["walk_param"]["hip_roll"]),
-                ankle_roll   = float(self.board_cfg["walk_param"]["ankle_roll"]),
             )
-            time.sleep(2)
+            time.sleep(3)
             self.action_status = "準備上板" if self.board_cfg["group"] == "UP" else "準備下板"
 
             if self.board_cfg["lc_correct_enabled"]:
@@ -367,17 +366,17 @@ class LiftandCarry(API):
             self.now_translation,self.translation = 0,0
             self.now_theta,self.theta = 0,0
             self.sendBodyAutoCmd(x=self.board_cfg["forward_value"], walking_mode=(1 if self.board_cfg["group"]=="UP" else 2))
-
+            time.sleep(3)
             self.sendLCWalkParameter(                
-                com_y_swing  = float(-1.5),   #起步步態補償
-                width_size   = float(4.5),  #雙腳距離
-                period_t     = int(320),  #步態頻率
-                t_dsp        = float(0.1),  #雙支撐時間
-                lift_height  = float(2),
-                stand_height = float(23.5), #機器人初始站姿高度
-                com_height   = float(29.5),  #質心高度
-            )            
-            time.sleep(2) 
+                com_y_swing  = float(0),   #起步步態補償
+                width_size   = float(0),  #雙腳距離
+                period_t     = int(420),  #步態頻率
+                t_dsp        = float(0),  #雙支撐時間
+                lift_height  = float(5),
+                stand_height = float(50), #機器人初始站姿高度
+                com_height   = float(40),  #質心高度
+            )           
+            time.sleep(3) 
             self.sendBodySector(29)                  #這是基本站姿的磁區
             self.action_status ="站立姿勢"
             time.sleep(1.5)
@@ -631,13 +630,11 @@ class LiftandCarry(API):
         return cfg
 
     def make_offset_profile(self,center_value, edge_value, power=2.0):
-        # 以索引位置為基準(不是像素座標),index 2、3 永遠是中心,距離0
-        # index 1、4 距離中心1步;index 0、5 距離中心2步
         offsets = []
         for i in range(6):
-            d = min(abs(i - 2), abs(i - 3)) / 2   # 最大索引距離是2,拿來歸一化到 0~1
+            d = min(abs(i - 2), abs(i - 3)) / 2 
             value = edge_value + (center_value - edge_value) * ((1 - d) ** power)
-            offsets.append(value)
+            offsets.append(round(value))
         return offsets
     
     def draw_function(self):
@@ -667,7 +664,7 @@ class LiftandCarry(API):
         
         target = [self.board_cfg["trigger_base"] + o for o in self.board_cfg["active_offset"]]
         for i in range(6):
-            y = FOOTBOARD_LINE - target[i]
+            y = int(round(FOOTBOARD_LINE - target[i]))
             self.drawImageFunction(30+i, 2, FOOT[i]-4, FOOT[i]+4, y-2, y+2, 0, 255, 255, 1)
 
 class Coordinate:

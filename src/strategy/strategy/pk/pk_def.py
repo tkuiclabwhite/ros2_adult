@@ -35,7 +35,7 @@ BALL_COUNT_DEFEND        =    5   # 觸發守門動作的累積幀數
 
 # ── 測試用起始狀態 ─────────────────────────────────────────────────────────────
 START_STATE = 0   # 從第幾個狀態開始（0~4）
-STOP_STATE  = 2
+STOP_STATE  = 5
 
 BALL_COLOR        = 'Yellow'                    # 球的顏色'Orange', 'Yellow', 'Blue',
                                                         #'Green', 'Black', 'Red', 'White',
@@ -45,7 +45,7 @@ _STATE_NAMES = [
     'TRACKING',     # 1 找到球，追蹤中
     'CONFIRMING',   # 2 球飛來，累積幀數
     'DEFENDING',    # 3 執行撲球
-    'RESETTING',    # 4 動作後等待復位
+    'RESETTING',    # 4 揮手
     'FINISH',       # 5 動作完成，等待比賽結束
 ]
 _STATE_DESCS = [
@@ -53,7 +53,7 @@ _STATE_DESCS = [
     '找到球，頭部追蹤，等待球靠近',
     '球飛來中，累積確認幀數準備撲球',
     '執行守門撲球動作（blocking）',
-    '動作結束，等球離開後回到搜尋',
+    '揮手',
     '撲球完成，等待比賽結束',
 ]
 _STATE_COLORS = [
@@ -278,24 +278,42 @@ class PenaltyKickDef(API):
             self._disp_last_event = f'確認球進入！幀數={self._check_count} → DEFENDING'
             self._state = 'DEFENDING'
 
+    def _interruptible_sleep(self, seconds, step=0.1):
+        """以 step 秒為間隔輪詢 is_start；若 is_start 變 False 則立即回傳 False。"""
+        steps = max(1, int(seconds / step))
+        for _ in range(steps):
+            if not self.is_start:
+                return False
+            time.sleep(step)
+        return True
+
     def _handle_defending(self):
-        """DEFENDING — 執行守門撲球動作（blocking），完成後停止。"""
+        """DEFENDING — 執行守門撲球動作（blocking），完成後進入 RESETTING。"""
         self._disp_last_event = '執行撲球動作'
         self.sendBodySector(67)
-        time.sleep(26)
+        if not self._interruptible_sleep(11):
+            self.sendBodySector(29)
+            self._check_count = 0
+            self._state = 'FINISH'
+            return
         self._check_count = 0
-        self._disp_last_event = '撲球完成 → FINISH'
-        self._state = 'FINISH'
+        self._disp_last_event = '撲球完成 → RESETTING'
+        self._state = 'RESETTING'
 
     def _handle_resetting(self):
-        """RESETTING — 保留備用，目前流程不會進入此狀態。"""
-        self.ball.update()
-        self._disp_ball_size = self.ball.target_size
-
-        if not self.ball.get_target or self.ball.target_size <= BALL_INCOMING_SIZE:
-            self._init_state()
-            self._disp_last_event = '復位完成 → SEARCHING'
-            self._state = 'SEARCHING'
+        """RESETTING — 持續揮手直到 is_start 變 False 才停止。"""
+        self._disp_last_event = '揮手中... (停止比賽即結束)'
+        if self.is_start:
+            self.sendBodySector(10)
+            if not self._interruptible_sleep(2):
+                self.sendBodySector(29)
+                self._state = 'FINISH'
+                return
+            self.sendBodySector(5)
+            if not self._interruptible_sleep(2):
+                self.sendBodySector(29)
+                self._state = 'FINISH'
+                return
 
     def _handle_stopped(self):
         """比賽未開始或中斷：重置所有狀態並站直。"""
@@ -303,6 +321,7 @@ class PenaltyKickDef(API):
         self._disp_ball_size = self.ball.target_size
         self._disp_ball_cx   = self.ball.center.x
         self.sendBodySector(29)
+        # time.sleep(1)
         self._init_state()
 
     # ──────────────────────────────────────────────────────────── 畫面疊加圖形 ──
@@ -497,3 +516,91 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
+# 111t111tt11tfffffftttt1iii1i1ttffftttft;;:;ii1111t1t11111111t111t1tttfLLttt1ttfftffttttLCfft11t;:-iii;it;;i1:-:;-,-itfffLLLLCCCCGG
+# iiitiiii1ii1t1tttt11ttt111iii1111itttffii;i1:;i1i;i11;;iii;itiii1iii1t1111tt1ttf1t1ii1111iti1it;::1i11i1;;i1:-:;-,-itffLLLLCCCCGGG
+# fffLffffLfffLfffLLffLLfffffffLffffLCLLffffLLfLLLLLCCCCCCLLLLLfttfffftttttttfLfLLfLLtfLLLLLLLLLLLLLCCCCCCLLLCLfffftttfffLLLCCCGGGG0
+# CCCCCCCCCCCCCCCCCCCCCCCCCLLLLCCCCCCCCfLLLLLLLCCCCCGGGGGGCCCCCCCCCCCCLLLttttLCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGCCLLLLffffLLLCCCGGG000
+# LLLLCCCCCCCCCCCLLCLLLCLLLLLLL000G000CLfLLLLLLCCCCCCGGGGGGCCCCCLffffffftttttLGGGGGGCffLCLLLCCLLLCCCCCCCCGGCCCCCLLLLffffLLLCCGGG0000
+# LLLLCLCCCCCCCCCCCCCCCCCCLLLfLG000000GLLLLLLLCCCCCCCCCGGG0GCCCCCCLCLLLLLttttLGGGGGGCLLLCLLLCCLLLCCCCGCCGGGGGGCCLLLLLffLLLCCGGG00000
+# LLCCCCCLCCCCCCCCCCCCCCCCCLLLLG0000000LLLLLLCCCGCCCCCCGGGGGGGCCCCCCLLLLLtttfLGGGGGGCCLLCCLLCCLLCCCCCGGGGGGGGGCCCLLLLLLLLCCGG0000000
+# LLLLCLLLCCCCCCCCCCCCCCCCCLLLLG0000000LLLLLLLCCGCCCCCCCCCGGGGGGCLLCLLLLLttttLGGGGGGCLLLCLLLLCLLLCCCCCCCCCGCCCCLLLLLLLLLLCGG00000008
+# LLLLCLLCCCCCCCCCCCCCCCCCCCLLLG0000000LLLLLCCCGGGGGGCCCCCGGGGGG0GCCCCCLLttttLGGGGGGCLLLLLLLLCCLCCCCGGGGGGGGGGCCLLLLLLLLCGG000000088
+# CCCCCCCCCGGGGGGGGGGGGGGGGGGCLC0000000LCCCCGGGGGGGGGGGGGCCGGGG000000GGCGCCffLGGGGGGCCCCCCCCCCCCGGGGGGGGG0000000GGGGGGCCGGG000000880
+# CCCCCCCCCCGGGGGCGGGGGGGGGGGCCC0000000CCCCGGGGGG0000GGGGGCCCCGGGGGGGGGGGGCCLCGGGGGGGGGGGGGGGGGG0000000000000000000GGGGGGG00GCG00000
+# 111111t1t11tttttttttttffffffffttft1t1tffttttffffffffffffttfffffLLLLLLLCLLftt1111i1tLLLLLLLLLLLLLCCCCCLLGGGGGGGGGGGGLt1tLCGG0000000
+# CCCCCCCCCCCLCCGGGGGGGGGGGGGCCCGCCCLLCLLCCCGGG000000000GCLCCCCCCCGGGGGGGGGLfLCCCCCCCCCCCCCCCCCCCCCCCLLCGGGGGGGGGGGGGGGCCCLG0GCf;C00
+# tttttttttttt111111111111111111G0GGGGGCi11111111111111111111111111tt11111111L0GCLCGLt111111111111111111111111111111111tLCCCt;;;;C00
+# ttttttttttttttttttttttttttttttGGGGG00Cfffffffffffffffttttt111i;i;;1ttftttttC0000GGCLfLLLLLLLLLLLLLLLLLLLLLLLffftttfffLLCLi;;i;;CGG
+# ;1i;;ii;ii1i;iii;;i;::i;:::;--C000000GfL1:-:;-,-;;;;ii;;;;;;;:::--::;ii;;ifC000000L;-i;:-;i;;;i;iit;;;1;:;1:-:;--:1LLCCCC1iiiiiLCC
+# .i,..-:..-;,,-;:--;:,,::,,-;..fG00000GLLti-:i-,-ii;ii;:::::----,,,::;i;;;ifLGG0000L;-i;::ii;;i1;iit;;;t::;1;:i1111fCCCLLLtiii;iffC
+# ,;;,,-;..,;-,-;;--;;-,:;---i-,tGGGG00GLLtii;1;;itt1ii;:::::-:;;itft11111::i1fCGGGGCt1tt11ttttfftftLtttLtttft1ttffLLCCLLLL1ii;:-,.,
+# ffLLLLLLLLLCCCCCCCCCCCCCCCCLLLCLCGCGGCfLLLCCCCGGCffffLLftfLCGCLCCCftttt:,-::ifCCCGCCCCCCCCCCCCCCCCCCCCCGCLLLffffLLLLLfLLfi;;:---,-
+# tttttttfttttttffffffffffffftttt1G88880ft1tttttft1i;itfLLffLfii:-1fLLLLL1,,-;itLCLCLt1tttttttttffffffffftttttt111t11tffLLi,,,,---:;
+# 111111111111111ttttttttttttttttt1fffttttttttttt1;;:-iLCCCL1;1ft111ttfffff1--;;ii1i11tttffffffffffffttfffftttttfCCCCCGGGf,  .,,:;;;
+# 11iiiiii1iiiiii111ii111111iiiiiiitiiiii11tiiiiiii;::tGCLtff11fftti;t11tttt1-:;iiiiiii11111111t11111111t11tfLLLC00000000C-.:;;;i11i
+# 111111i1t111111ttttttttfffftttfffffffffffffffffti::tCLf11t;t;-,,,;i-1fCLft1;-;i1tttttfttfffffLCCLCCCCCfttfLLLLC00000000Gt1tti;:;:-
+# ;;;:::;;;;;;;;;;;i;;;;;;i1;;;;;;11;;;;;i11;;;;;ii::tCLLttii;,....,-:tLCftt1;,:1tfffLLLLLLCCCCCCCGGCGGGGGG00000000000000CLLtiiiif1:
+# CCCCCCCCCCCGGGGGGGGGGGGGGGG00000GG000000000000000C1tLLCCCLttLLftt11tLCLt111i-,1CGGGGGGGGGGGGGGGG000000000088800000000000LfffttLf1:
+# CCCCGGGGGGGGGGGGGGGGGGGGGGGG000000G00000000000000G1ifffLCGGCf11tfffLCLtt1111i;i1CGGGGGGGGGGGGGGGG0000000000000000000000GL1:-;;::::
+# CCCCGCCGGGGGGGGGGGGGGGGGGGGGGGG000G0G0000000000000fi1ttfLCCGGGCCLtt11111111i-:1tLGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGCCCL1::it1;:::
+# fffffftttttt11111iiiiiii;;::::;;::::::::::::::::;;i;i11tfftt1i;;;:::;iiiiii: .---,,,,,,,,..................,........,:-,iti-;tti:-
+# ......,,............,,,,.,:-,..,,---------------:;;1ii111tt1i::::::;;;;;;ii- .-;ii;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;:::::::;1tffft1i;;
+# ;;;;;;;;;;;;;;;;;;;iiii;;;;;;;;;iiiiiii;;;;;;iiiii;;:.-ii;;;;::::::;;;;;ii1; .-iiii;;;;;;;;;;;;;;;;;;::::::;;::::::::;;;itLfti;;;i
+# iiiiiLG00CtiiiiiiiitCGGCtiiiii;;1111111iiiiiiii1fti:,. ;ii;;;;:::::;;;iii11;.,-;:;ii;;;;;;;::::;;:;;i;:::::;;;:;::;;;;;i;;11111i;:
+# iiiii11111111111iiii1111iiiiiiii1t1-;t1iiii111111i:--,.1Lt1iiii;;;;;iii1111;,.,,-;i::::--:--::::;:;;;;;::::::;::::;;;;;i1ft1;--,--
+# ii-:::-:--:---,,,,------,,,,,:iittfffffti11i:----::--,,ifLfftt1i;;;;ii11tt1i-..,:ii;;;;;;;iiiiii;1;i1iii;;i;;;;ii;;;;:1CLft1i;:--:
+# 11,,,----:::,,,,.,-:::::,,,,,:i1tfttttfftt11i--::::-,.,-tCCCLt1iiiiii11tt11i;:..,,::i1ttffffffft1CCLLff1i:111i;;;:::---itfti;;::-:
+# tt-,,---,,,,,,,,,--:;;::-,,,,:;-::1i;i1ttt;:i:---::-,,.,1CCCLft1iiii11ttttti- .....,,--;i11tffft1fttLf;-:;;:::::::::::-;;::::::::-
+# tt:,--,,,,.,,...,,-:ii;::-,,,:1--,:;;i1t1:  .-::::-,,,...:1fLLftt1111t111;-  ......,,,,,,--:;i1itCLLLf;;:----,,--------;;,...     
+# tt;,--:--:----,,,,-:;i;:--;i;tftfLfffffti1i:::----,,,,,,... ,::;iii;:-,.   .......,,,,,,,,,,---::;;it1:-,,,,,,-----,,,,:;-,..     
+# ii;-,-;iit1i  ..,,-:;;;::-::-1fffffftfti;::-----------,,,.,...           ........,,,,,,,,,,,,,,,,---::-,.,,,,,,,,-,,,,,-;-......  
+# ;;;:,,,;;::,,,::,,-:;iii;::--1tttiii;;::----,,---------,,,,,.......................,,,,,,,,,,,,,,,,,,,--..,,,..,--,,,,,,:-........
+# :;;-,---:::::::-,,--::;;:--,,ittti;:------,,,,,,,,,,,,,,,,,,,,,,,.................,,,,,,,,,,,....,,...,,-,...,--,,,,,,.,-,......,;
+# ::::--:;;;;;::-:::::;ii;i;:--ift;:-,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,..........,,,,,,,,,,,,,,...........,,, ,--,,,,,,.,,:,......:.
+# iii;;;;iiiiiii;;;;;;i1111iiii11:-,,.....,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,.,.,,,,,,,,,,,,,,,,,....... ......,,--,..,,...,,:-.....-..
+# tttttttffftfffftfffffffffffff1:-,,........,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,...... .. .............,,.,-;,...-...
+# tffftfCCCCCCffffffffffLLLLLLf;-,,,.........,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,........ .  . .............,,,;-..-....
+# fLCGCfffLLLLLLLLLLLLLLLLLLLL;-,,,..........,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,.............  .  ...............,,.::,:.....
+# fLLLLLLLLLLLLLLLLLLLLLLLLLL;-,,.,.. .  ....,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,:L1-fCLCi:-......      .. ..........,,. ,;i, ....
+# fffffffffffffffffffLLLLLLLi,,...... .  .....,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,.it1:1;tt:ttt. ..      ..  .........,,.  .;-. ....
+# ffffffffLLLLLLLLLLLLLLLLLt-,,.....  .  ......,,,,,,,,,,,,,,.,,,,.,,,,,,,,,,,,...,:1ttff1t;:i,   .          .......,,,.   .;,......
+# LLLLLLLLLLLLLLLLLLLLLLLLt-,,,.   .      ......,,,,,,,,...........................:1i;:-,,,,-,                .. .,-,...,,--,..,,..
+# LLLLLLLLLLLLLLLLLLLLLLLf-...,..         .........,,...,..................................                       ....ift1i;:::::;-.
+# LLLLLLLLLLLLLLLLLLLLLLLi,.....           .......,;:.,:-........-....,;..................                        ....-1t11111111i..
+# LLLLLLLCLLLLLLLLLLLLLLt:......           .......:1::;,.........:i..,i...................                        . ..:1tfttttttti..
+# LLLLLLLLLLLLLLLLLLLLLt:,......            ......-11:............1,.i.........                                      .:1tt111tttti..
+# LLLLLLLLLLLLLLLLLLfft:,,....              .....;LLft:...........;CLt;..  .....                                   ...,--::::::;;:..
+# LLLLLLLLffffffffffff;,,,......            .....:ii;:-...........tft1i-... ....                                 ...........       .
+# ffffffffffffffftfff1:,,..    ..           .....:i;:::,..........,:---:..........                             .....................
+# ffffffffffffftttffff1-.                    ...,;1i;:i;,.. ......i-ii:,i1........                ti              ..................
+# ffffffffffttLLCCGGGGCCf1i-,.               ..,ii;-:i:.. . .....,t.i::-.-...   ..                ff;.-:iii;;:-,,,.  ...............
+# ttffftttttttttttttttttttt1tffLLft1;-.  ,   ...,:1;:;-..  ......t:.;1-;.  ....                  ,fi,;1tfffftt1i;:-,.   .,,,,,......
+# ttttttt1ttttttttttttttttttLLLCCCCLLf1;-;   ....-iiii-..  .  .... .i11i;.  . ....               ii:1tffffffttt1i;, ..,,....,,,,,...
+# ttttt1ttttttttttttfCG000CfLLCCCCCCCLLt1:,  ....-tCGGCt-.  .     ...tG0GGt.                     ;itffLLLLfftt1i;:,..       ..,,,,,,
+# ttt1LGGGCLLfffttttttttttttfLLLCCCCCCCLf1;. ....;fttfff:.        ...CLLLLL1.   .               -1tfLLLLLfftt1i;-,,,......          
+# 11tttttttttttttttttttttttt1tfLLCCCCCCCLft;, ... -1111ff- .        .-t1i11fL,                 :1fLLLLLfft11i;:-,..,,,..........    
+# 1ttttttttttttttttttttttttt11tffLCCCCCCCLLti,...iCLftfLC:.          GLttt1fGf.               ;tLLLLLLft11i;:,.......,,,............
+# tttttttttttttttttttttttttttt111tfLCCCGGCCLf;..iGffCCCGC:.          0LLf-.;CL-              iLLCCLLfft1i;:,. .........  ...........
+# 1tttttttttttttt1ttttttttttttt1ii1tfLCCGGCCLf;;GCfLCGCLf:.          0Gf-.;CGLi            .1LCCCLLft1i;:,....      ..........      
+# ttttttttt11tttttttt111111tt111t1ii1fLLCCGGCCffGCCGGCLLt,           L0G1tCGLL1           -fCCCCLft1i;:;;.....    .        .........
+# 11tttttt1111ttt1tttt11111tt1ttttt1i1tfLCCGGGCG00GLfLLt-            ,CGGGLfLt-      ,::ifCCCCLft1i;-::-1:...            ....       
+# 1111111ttt111111111tttt1111111111111i1tfLCCGGGGGCCLLt-              ,CCGCCLffti;;1fCCCCCCCCLf1i;-  ,:,1-.                         
+# 1111111111111111111111111111111111111111fLCCGCCLCGCLLLft;,          .1ffLLLCCLffffLLLLCCCLLfti:.   .i,...                         
+# 11111111111111111111111111111111111111111LCCCCCLfLLCCLfffft;.        -tffLLffLLCGCLtfLCCCCLf1-      ft,.                          
+# 11t11111111111111111111111111111111111111tCGCCCLftfLLLLLfft-         1GftLffffLGCCGL1tLCCCCf1.      1G,.                          
+# 1111111111111fGGLt11111111111111111111111fCCCCG0GLCLfLLCCCCL;       -0GGCCCCCCCCLCGC;,:tLCCL1.      .i..              ,-.         
+# 111111111111f08Ct11111111111111111111111tCCLLGGGGGGCCLLLLLLCC.      fGGGGCCCCCGG0CLft:-1LCCf1.       ,.               :-          
+# 11111111111f08Ct111111111111111111111111LCCfC8GGCCCCCCCGGGCff,      ,C0000000GLt11tLfi:1LCLti.       ..              ,1-          
+# 1111111111f08C1111111111111111111111111tLCLtfGG00000GCLf11fff;       iLf11ii11111tLLLftfLLfi;.       ..              :1,         .
+# 111111111L88C11111111111111111111111111tCCf11CLt1ii11111tfLff1.      .fLLfttffffffLCLLLfLLt:.        .              .i1,        ..
+# 11111111L88C111111111111111111111111111tCLfiiCCLLtttttffffLfft1.     ,CfLfLLLLLCCCGGGCLLLti.         .              :tt-        ..
+# 111111tC88L1111111111111111111111111111tLf1;;LCLfffLLLLLCLLLffLt     :LGLCCGGG0000GCffff1:.                        ,1f1,         .
+# 11111tG80L11111111111111111111111111111tLLLtf0CCLLCCCCGGGGGCCLf,      iCLCGG0GCCLLft1i;:,             .            :tti,          
+# 1111tG80f11111111111111111111111111111111fLfL000000000GGGCLff:          .;1ttt1i:--,.                 .           ,itt;.          
+# 111t00Ct1111111111111111111111111111111i.:tffLCCLtfLLLLLfi,                                                       -1tt;.          
+# 111111111111111111111111111111111111111;...,:;:,...                                                               ;ttt;.         .
+# 111111111111111111111111111111111111111;.....                                                                     :ttt:           
+# 111111111111111111111111111111111111111i..... ...                                                                 -1t1,           
+# 111111111111111111111111111111111111111i,..  ...                                                                  ,iti.          .
+# 1111111111111111111111111111111111111111:......                                                                   .;i,           .

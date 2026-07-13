@@ -92,7 +92,7 @@ BALL_COLOR        = 'Yellow'                    # 球的顏色'Orange', 'Yellow'
 START_SIDE        = 'center'                      # 機器人在場上的起始位置（'left' / 'center' / 'right'）
 BALL_RELATIVE_POS = 'left'                     # 球相對於機器人的方向（'left' / 'front' / 'right'）
 START_STATE = 0   # 測試用：從第幾個狀態開始（0~5）
-STOP_STATE  = 3  # 測試用：執行完此狀態後停步收尾（-1 = 不提前停止）
+STOP_STATE  = 2  # 測試用：執行完此狀態後停步收尾（-1 = 不提前停止）
 
 # ── 原地步態校正量 ─────────────────────────────────────────────────────────────
 STAY_X     = -1800   # 原地步態 X 校正（加在所有 sendContinuousValue 的 x 上）
@@ -100,7 +100,7 @@ STAY_Y     = 0      # 原地步態 Y 校正
 STAY_THETA = 2      # 原地步態 Theta 校正
 
 # ── 站姿微調 ────────────────────────────────────────────────────────────────────
-STAND_CORRECT_ATK    = True   # 是否在比賽開始時執行站姿微調
+STAND_CORRECT_ATK    = False   # 是否在比賽開始時執行站姿微調
 STAND_CORRECT_SECTOR = 201     # 站姿微調 sector 編號
 
 # 狀態編號對照表
@@ -559,154 +559,157 @@ class PenaltyKickAtk(API):
         ORBIT         : 低頭看球繞行，直到 yaw 到達 yaw_target
         POSITION      : 微調至右腳踢球準備位置後進入 WEAK_KICK
         """
-        # ── 子階段 1：掃描藍障，計算 yaw_target ──────────────────────────────
-        if self._align_phase == 'SCAN_OBSTACLE':
-            self._stop_walk()
-            self._blue_scan_frames += 1
+        # # ── 子階段 1：掃描藍障，計算 yaw_target ──────────────────────────────
+        # if self._align_phase == 'SCAN_OBSTACLE':
+        #     self._stop_walk()
+        #     self._blue_scan_frames += 1
 
-            blue = self._get_blue_cx()
-            if blue is not None:
-                blue_cx, _ = blue
-                x_err = blue_cx - 160
-                x_deg = x_err * (X_FOV_DEG / 320)
-                self._pan -= round(x_deg * 4096 / 360 * HEAD_TRACK_GAIN)
-                self._pan  = max(PAN_MIN, min(PAN_MAX, self._pan))
-                self._tilt = TILT_OBSTACLE
-                self.sendHeadMotor(1, self._pan,  25)
-                self.sendHeadMotor(2, self._tilt, 25)
+        #     blue = self._get_blue_cx()
+        #     if blue is not None:
+        #         blue_cx, _ = blue
+        #         x_err = blue_cx - 160
+        #         x_deg = x_err * (X_FOV_DEG / 320)
+        #         self._pan -= round(x_deg * 4096 / 360 * HEAD_TRACK_GAIN)
+        #         self._pan  = max(PAN_MIN, min(PAN_MAX, self._pan))
+        #         self._tilt = TILT_OBSTACLE
+        #         self.sendHeadMotor(1, self._pan,  25)
+        #         self.sendHeadMotor(2, self._tilt, 25)
 
-                if abs(x_err) <= BLUE_CX_TOL:
-                    self._blue_stable_count += 1
-                    self._disp_last_event = (
-                        f'[掃障] 藍障置中 pan={self._pan} '
-                        f'[{self._blue_stable_count}/{BLUE_TRACK_FRAMES}]'
-                    )
-                else:
-                    self._blue_stable_count = 0
-                    self._disp_last_event = f'[掃障] 追蹤藍障 cx={blue_cx:.0f}'
-            else:
-                self._blue_stable_count = 0
-                self._tilt = TILT_OBSTACLE
-                self.sendHeadMotor(2, self._tilt, 25)
-                self._disp_last_event = (
-                    f'[掃障] 尋找藍障... ({self._blue_scan_frames}/{BLUE_SCAN_TIMEOUT})'
-                )
+        #         if abs(x_err) <= BLUE_CX_TOL:
+        #             self._blue_stable_count += 1
+        #             self._disp_last_event = (
+        #                 f'[掃障] 藍障置中 pan={self._pan} '
+        #                 f'[{self._blue_stable_count}/{BLUE_TRACK_FRAMES}]'
+        #             )
+        #         else:
+        #             self._blue_stable_count = 0
+        #             self._disp_last_event = f'[掃障] 追蹤藍障 cx={blue_cx:.0f}'
+        #     else:
+        #         self._blue_stable_count = 0
+        #         self._tilt = TILT_OBSTACLE
+        #         self.sendHeadMotor(2, self._tilt, 25)
+        #         self._disp_last_event = (
+        #             f'[掃障] 尋找藍障... ({self._blue_scan_frames}/{BLUE_SCAN_TIMEOUT})'
+        #         )
 
-            if self._blue_stable_count >= BLUE_TRACK_FRAMES:
-                yaw_now    = self.imu_rpy[2]
-                theta_head = (self._pan - PAN_CENTER) * (X_FOV_DEG / (PAN_MAX - PAN_MIN))
-                theta_obs  = yaw_now + theta_head
-                margin = AVOID_MARGIN if theta_obs >= 0 else -AVOID_MARGIN
-                self._yaw_target = theta_obs + margin
-                self._disp_last_event = (
-                    f'[掃障] yaw_target={self._yaw_target:.1f}° → ORBIT'
-                )
-                self._align_phase = 'ORBIT'
-            elif self._blue_scan_frames >= BLUE_SCAN_TIMEOUT:
-                self._yaw_target = 0.0
-                self._disp_last_event = '[掃障] 無藍障，yaw_target=0 → ORBIT'
-                self._align_phase = 'ORBIT'
-            return
+        #     if self._blue_stable_count >= BLUE_TRACK_FRAMES:
+        #         yaw_now    = self.imu_rpy[2]
+        #         theta_head = (self._pan - PAN_CENTER) * (X_FOV_DEG / (PAN_MAX - PAN_MIN))
+        #         theta_obs  = yaw_now + theta_head
+        #         margin = AVOID_MARGIN if theta_obs >= 0 else -AVOID_MARGIN
+        #         self._yaw_target = theta_obs + margin
+        #         self._disp_last_event = (
+        #             f'[掃障] yaw_target={self._yaw_target:.1f}° → ORBIT'
+        #         )
+        #         self._align_phase = 'ORBIT'
+        #     elif self._blue_scan_frames >= BLUE_SCAN_TIMEOUT:
+        #         self._yaw_target = 0.0
+        #         self._disp_last_event = '[掃障] 無藍障，yaw_target=0 → ORBIT'
+        #         self._align_phase = 'ORBIT'
+        #     return
 
-        # ── 子階段 2：繞球至 yaw_target ──────────────────────────────────────
-        if self._align_phase == 'ORBIT':
-            ball = self._get_ball()
-            if ball is None:
-                self._lost_count += 1
-                if self._lost_count >= BALL_LOST_FRAMES:
-                    self._stop_walk()
-                    self._lost_count        = 0
-                    self._align_phase        = 'SCAN_OBSTACLE'
-                    self._blue_scan_frames   = 0
-                    self._blue_stable_count  = 0
-                    self._disp_last_event    = '[繞球] 失去球 → APPROACH_BALL_1'
-                    self._state = 'APPROACH_BALL_1'
-                    self._start_walk()
-                return
+        # # ── 子階段 2：繞球至 yaw_target ──────────────────────────────────────
+        # if self._align_phase == 'ORBIT':
+        #     ball = self._get_ball()
+        #     if ball is None:
+        #         self._lost_count += 1
+        #         if self._lost_count >= BALL_LOST_FRAMES:
+        #             self._stop_walk()
+        #             self._lost_count        = 0
+        #             self._align_phase        = 'SCAN_OBSTACLE'
+        #             self._blue_scan_frames   = 0
+        #             self._blue_stable_count  = 0
+        #             self._disp_last_event    = '[繞球] 失去球 → APPROACH_BALL_1'
+        #             self._state = 'APPROACH_BALL_1'
+        #             self._start_walk()
+        #         return
 
-            self._lost_count = 0
-            cx, cy, area = ball
-            self._head_track(cx, cy)
-            self._start_walk()
+        #     self._lost_count = 0
+        #     cx, cy, area = ball
+        #     self._head_track(cx, cy)
+        #     self._start_walk()
 
-            yaw     = self.imu_rpy[2]
-            x_err   = cx - 160
-            pan_err = self._pan - PAN_CENTER
-            y_adj   = int(-x_err * (abs(TRANS_R) / 160) * 2.0)
-            t_adj   = pan_err * (abs(ROT_L) / (PAN_MAX - PAN_CENTER)) * 1.5
-            t_adj   = max(ROT_R * 2, min(ROT_L * 2, t_adj))
+        #     yaw     = self.imu_rpy[2]
+        #     x_err   = cx - 160
+        #     pan_err = self._pan - PAN_CENTER
+        #     y_adj   = int(-x_err * (abs(TRANS_R) / 160) * 2.0)
+        #     t_adj   = pan_err * (abs(ROT_L) / (PAN_MAX - PAN_CENTER)) * 1.5
+        #     t_adj   = max(ROT_R * 2, min(ROT_L * 2, t_adj))
 
-            yaw_err = yaw - self._yaw_target
-            if abs(yaw_err) > YAW_TOL:
-                rot_dir = -1 if yaw_err > 0 else 1
-                y_cmd = int(-rot_dir * ORBIT_TRANS) + y_adj
-                t_cmd = rot_dir * ORBIT_ROT + t_adj
-                t_cmd = max(ROT_R * 2, min(ROT_L * 2, t_cmd))
-                self._walk(FWD_STOP, y_cmd, t_cmd)
-                self._disp_last_event = (
-                    f'[繞球] yaw={yaw:.1f}° → 目標 {self._yaw_target:.1f}°±{YAW_TOL}°'
-                )
-            else:
-                self._stop_walk()
-                self._align_count = 0
-                self._disp_last_event = '[繞球] 到達目標 → POSITION'
-                self._align_phase = 'POSITION'
-            return
+        #     yaw_err = yaw - self._yaw_target
+        #     if abs(yaw_err) > YAW_TOL:
+        #         rot_dir = -1 if yaw_err > 0 else 1
+        #         y_cmd = int(-rot_dir * ORBIT_TRANS) + y_adj
+        #         t_cmd = rot_dir * ORBIT_ROT + t_adj
+        #         t_cmd = max(ROT_R * 2, min(ROT_L * 2, t_cmd))
+        #         self._walk(FWD_STOP, y_cmd, t_cmd)
+        #         self._disp_last_event = (
+        #             f'[繞球] yaw={yaw:.1f}° → 目標 {self._yaw_target:.1f}°±{YAW_TOL}°'
+        #         )
+        #     else:
+        #         self._stop_walk()
+        #         self._align_count = 0
+        #         self._disp_last_event = '[繞球] 到達目標 → POSITION'
+        #         self._align_phase = 'POSITION'
+        #     return
 
-        # ── 子階段 3：微調踢球位置 ────────────────────────────────────────────
-        ball = self._get_ball()
-        if ball is None:
-            self._lost_count += 1
-            if self._lost_count >= BALL_LOST_FRAMES:
-                self._stop_walk()
-                self._lost_count        = 0
-                self._align_phase        = 'SCAN_OBSTACLE'
-                self._blue_scan_frames   = 0
-                self._blue_stable_count  = 0
-                self._disp_last_event    = '[定位] 失去球 → APPROACH_BALL_1'
-                self._state = 'APPROACH_BALL_1'
-                self._start_walk()
-            return
+        # # ── 子階段 3：微調踢球位置 ────────────────────────────────────────────
+        # ball = self._get_ball()
+        # if ball is None:
+        #     self._lost_count += 1
+        #     if self._lost_count >= BALL_LOST_FRAMES:
+        #         self._stop_walk()
+        #         self._lost_count        = 0
+        #         self._align_phase        = 'SCAN_OBSTACLE'
+        #         self._blue_scan_frames   = 0
+        #         self._blue_stable_count  = 0
+        #         self._disp_last_event    = '[定位] 失去球 → APPROACH_BALL_1'
+        #         self._state = 'APPROACH_BALL_1'
+        #         self._start_walk()
+        #     return
 
-        self._lost_count = 0
-        cx, cy, area = ball
-        self._head_track(cx, cy)
-        self._start_walk()
+        # self._lost_count = 0
+        # cx, cy, area = ball
+        # self._head_track(cx, cy)
+        # self._start_walk()
 
-        pan_err = self._pan - PAN_CENTER
-        t_adj   = pan_err * (abs(ROT_L) / (PAN_MAX - PAN_CENTER)) * 1.5
-        t_adj   = max(ROT_R * 2, min(ROT_L * 2, t_adj))
+        # pan_err = self._pan - PAN_CENTER
+        # t_adj   = pan_err * (abs(ROT_L) / (PAN_MAX - PAN_CENTER)) * 1.5
+        # t_adj   = max(ROT_R * 2, min(ROT_L * 2, t_adj))
 
-        x_kick_err = cx - KICK_TARGET_CX
-        area_err   = KICK_TARGET_AREA - area
-        y_cmd = int(-x_kick_err * (abs(TRANS_R) / 160) * 2.0)
-        if area_err > KICK_AREA_TOL:
-            x_cmd = FWD_SLOW
-        elif area_err < -KICK_AREA_TOL:
-            x_cmd = -FWD_SLOW
-        else:
-            x_cmd = FWD_STOP
-        self._walk(x_cmd, y_cmd, t_adj)
+        # x_kick_err = cx - KICK_TARGET_CX
+        # area_err   = KICK_TARGET_AREA - area
+        # y_cmd = int(-x_kick_err * (abs(TRANS_R) / 160) * 2.0)
+        # if area_err > KICK_AREA_TOL:
+        #     x_cmd = FWD_SLOW
+        # elif area_err < -KICK_AREA_TOL:
+        #     x_cmd = -FWD_SLOW
+        # else:
+        #     x_cmd = FWD_STOP
+        # self._walk(x_cmd, y_cmd, t_adj)
 
-        cx_ok   = abs(x_kick_err) < KICK_CX_TOL
-        area_ok = abs(area_err) <= KICK_AREA_TOL
-        if cx_ok and area_ok:
-            self._align_count += 1
-            self._disp_last_event = (
-                f'[定位] cx={cx:.0f}→{KICK_TARGET_CX}  '
-                f'area={area:.0f}→{KICK_TARGET_AREA}  [{self._align_count}/{BALL_ALIGN_FRAMES}]'
-            )
-        else:
-            self._align_count = 0
-            self._disp_last_event = (
-                f'[定位] cx={cx:.0f}→{KICK_TARGET_CX}  '
-                f'area={area:.0f}→{KICK_TARGET_AREA}'
-            )
-        if self._align_count >= BALL_ALIGN_FRAMES:
-            self._stop_walk()
-            self._align_count = 0
-            self._disp_last_event = '踢球位置確認 → WEAK_KICK'
-            self._state = 'WEAK_KICK'
+        # cx_ok   = abs(x_kick_err) < KICK_CX_TOL
+        # area_ok = abs(area_err) <= KICK_AREA_TOL
+        # if cx_ok and area_ok:
+        #     self._align_count += 1
+        #     self._disp_last_event = (
+        #         f'[定位] cx={cx:.0f}→{KICK_TARGET_CX}  '
+        #         f'area={area:.0f}→{KICK_TARGET_AREA}  [{self._align_count}/{BALL_ALIGN_FRAMES}]'
+        #     )
+        # else:
+        #     self._align_count = 0
+        #     self._disp_last_event = (
+        #         f'[定位] cx={cx:.0f}→{KICK_TARGET_CX}  '
+        #         f'area={area:.0f}→{KICK_TARGET_AREA}'
+        #     )
+        # if self._align_count >= BALL_ALIGN_FRAMES:
+        #     self._stop_walk()
+        #     self._align_count = 0
+        #     self._disp_last_event = '踢球位置確認 → WEAK_KICK'
+        time.sleep(1)
+        self.sendBodySector(71)#踢球
+        time.sleep(3)
+        self._state = 'WEAK_KICK'
 
     def _handle_weak_kick(self):
         """
@@ -1144,3 +1147,53 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
+
+# @@@@@@@@@@@@@@@@@@@@@@@@@@@@@t@@@@8C@@@8@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@@@@@@@@G0@@@GG@00G@@@@08@@@@@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@@8@@@@@G0C8G0GG@0C@8800@@@@@@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@@@C0G0GfG0@@0@888@@88L@@@@@88@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@@@8C@0@@@@8@8@@88@80@@@@808@@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@GG8@8C08@@@80@80@008@@0@@@@0@@00@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@LC80@08@80@@000G008C8880@8@00G@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@GC@@@80008Gft1;;;;iifG0@880t8@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@8Cf08@88G8;         .,--,  G8888LfGG8@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@88L0GG1                   -G0CC0@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@ttG000C         ::            f8L8@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@tGG1          .    .   ,,. C8CC08@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@tGLCL..       .f@; ,;i,   -C1LLCG@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@@8tti-t8@@C11G@@@@@@@@@1LL0@@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@@@CGLG@@@@@@@@@@@@@@@@@ff0@@@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@@@@G0f@@@@@0CG0GGCC88@8:0@@@@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@@@@@@C0@@@0CLLffL00@@@f8@@@@@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@@@@@@8LtGfG@0@@@@@@@@tf@@@@@@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@@@@@@8t8Ci0@t;----;;tC@@@@@@@@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@G-     G@L f@; ....        -if@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@@.    ,8@C,@@;            .  1@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@@@@G.     :8@:G@;i0@0;G1        C@@@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@@@@@@i. .,,.    8@Ct8880:C@f      ... -L@@@@@@@@@@@@@@@@@
+# @@@@@@@@@@@@@0t,          .  C@8GGGi108@C  .            f0@@@@@@@@@@@@
+# @@@@@@@@@8i,,,.              f08@@@0tftC8-              ,,,-t@@@@@@@@@
+# @@@@@@0;,,,,,.               t080@@1G0C8i                .,,,,,,0@@@@@
+# @@@t.,,,,..,,...-....        -G8G@@@LCi         .....  . ..,,,,,,.G@@@
+# @@@1.  .,....                t8GG@@@Cf                   ...,.,,, 0@@@
+# @@@f,                          -1L0G,                      ...,. ;@@@@
+# @@@L.                                                            i@@@@
+# @@@0,        . .          ... . .                                L@@@@
+# @@@@-.                         .                                 8@@@@
+# @@@@1.         .                                                i@@@@@
+# @@@@L,..,                                                       0@@@@@
+# @@@@0.          .                                              ,@@@@@@
+# @@@@8                                                          t@@@@@@
+# @@@@@.                                                        .8@@@@@@
+# @@@@@,        ..                                              ;@@@@@@@
+# @@@@@-                                                        G@@@@@@@
+# @@@@@t                                 .                     -@@@@@@@@
+# @@@@@@i                                                      C@@@@@@@@
+# @@@@@@@1                                                    .8@@@@@@@@
+# @@@@@@@@f                                                   t@@@@@@@@@
+# @@@@@@@@@f                                                  C@@@@@@@@@
+# @@@@@@@@@8,                                             .   0@@@@@@@@@
+# @@@@@@@@@0                            .                     8@@@@@@@@@
+# @@@@@@@@@@-      ,:,.                 .                     -@@@@@@@@@
+# @@@@@@@@@@C                   ,       .           .          :@@@@@@@@

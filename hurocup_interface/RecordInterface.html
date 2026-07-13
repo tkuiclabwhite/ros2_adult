@@ -57,7 +57,12 @@
 
         /* ── Motor Selection ── */
         .mg-row { display:flex; align-items:center; gap:3px; margin-bottom:5px; }
-        .mg-name { font-size:10px; color:#444; width:48px; flex-shrink:0; letter-spacing:1px; }
+        .mg-name {
+            font-size:10px; color:#03e9f4; width:48px; flex-shrink:0;
+            letter-spacing:1px; cursor:pointer; opacity:0.6;
+            transition:0.15s; user-select:none;
+        }
+        .mg-name:hover { opacity:1; text-shadow:0 0 6px #03e9f4; }
         .mcb {
             width:24px; height:21px; background:rgba(3,233,244,0.08);
             border:1px solid #1e3a3e; border-radius:3px;
@@ -255,6 +260,16 @@
                 <button class="ctrl-btn" onclick="insertFrame()">+ Insert</button>
                 <button class="ctrl-btn" onclick="duplicateFrame()">⧉ Copy</button>
                 <button class="ctrl-btn danger" onclick="deleteFrame()">✕ Del</button>
+                <button class="ctrl-btn danger" onclick="clearAllFrames()">✕ All</button>
+            </div>
+            <div class="row-flex" style="margin-top:6px; align-items:center;">
+                <span style="font-size:11px;color:#555;flex-shrink:0;">Del F</span>
+                <input class="ctrl-inp" id="delFrom" type="number" placeholder="0" min="0"
+                    style="width:48px; margin:0 2px;">
+                <span style="font-size:11px;color:#555;">~</span>
+                <input class="ctrl-inp" id="delTo" type="number" placeholder="0" min="0"
+                    style="width:48px; margin:0 2px;">
+                <button class="ctrl-btn danger" onclick="deleteRange()" style="margin:0;">Del</button>
             </div>
             <div class="row-flex" style="margin-top:6px;">
                 <span style="font-size:11px;color:#555;">t_ms:</span>
@@ -287,18 +302,20 @@
         <!-- Export -->
         <div class="card">
             <div class="card-title">Export → Sectors</div>
-            <div class="row-flex" style="margin-bottom:4px;">
-                <span style="font-size:11px;color:#555;">Base ID</span>
-                <span style="font-size:10px;color:#2a3a3e;">(≥ 1000, 為 MotionList ID)</span>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
+                <div>
+                    <div style="font-size:10px;color:#555;margin-bottom:3px;">MotionList ID</div>
+                    <input class="ctrl-inp" id="exportListId" type="number" min="1" value="1000"
+                        oninput="updateExportPreview()">
+                </div>
+                <div>
+                    <div style="font-size:10px;color:#555;margin-bottom:3px;">Frame Start ID <span style="color:#2a3a3e;">(≥1000)</span></div>
+                    <input class="ctrl-inp" id="exportFrameId" type="number" min="1000" value="1001"
+                        oninput="updateExportPreview()">
+                </div>
             </div>
-            <input class="ctrl-inp" id="exportBase" type="number" min="1000" value="1000"
-                style="margin-bottom:6px;" oninput="updateExportPreview()">
-            <div class="row-flex" style="margin-bottom:4px;">
-                <span style="font-size:11px;color:#555;">預設速度</span>
-                <span style="font-size:10px;color:#2a3a3e;">(vel=0 時使用)</span>
-            </div>
-            <input class="ctrl-inp" id="exportSpd" type="number" value="50"
-                style="margin-bottom:6px;">
+            <div style="font-size:10px;color:#555;margin-bottom:3px;">預設速度 <span style="color:#2a3a3e;">(vel 低於此值時補足)</span></div>
+            <input class="ctrl-inp" id="exportSpd" type="number" value="50" style="margin-bottom:6px;">
             <div class="status-line" id="exportPreview">---</div>
             <button class="ctrl-btn ok" onclick="exportSectors()"
                 style="width:100%;margin-top:4px;padding:6px;">⚡ Export</button>
@@ -383,6 +400,8 @@ function buildMotorGrid() {
         const lbl = document.createElement('span');
         lbl.className = 'mg-name';
         lbl.textContent = g.name;
+        lbl.title = `點擊切換 ${g.name}`;
+        lbl.onclick = () => toggleGroup(g.ids);
         row.appendChild(lbl);
         g.ids.forEach(id => {
             const btn = document.createElement('div');
@@ -401,6 +420,15 @@ function toggleMotor(id) {
     selMotors.has(id) ? selMotors.delete(id) : selMotors.add(id);
     const el = document.getElementById(`mcb${id}`);
     if (el) el.classList.toggle('on', selMotors.has(id));
+    refreshSelCount();
+}
+function toggleGroup(ids) {
+    const allOn = ids.every(id => selMotors.has(id));
+    ids.forEach(id => {
+        if (allOn) selMotors.delete(id); else selMotors.add(id);
+        const el = document.getElementById(`mcb${id}`);
+        if (el) el.classList.toggle('on', selMotors.has(id));
+    });
     refreshSelCount();
 }
 function selectAll()  { for(let i=1;i<=NUM_MOTORS;i++) selMotors.add(i);   buildMotorGrid(); }
@@ -592,6 +620,32 @@ function deleteFrame() {
     refreshRecStats();
 }
 
+function clearAllFrames() {
+    if (recFrames.length === 0) return;
+    if (!confirm(`確定刪除全部 ${recFrames.length} 幀？`)) return;
+    recFrames = [];
+    selFrame  = null;
+    renderTimeline();
+    renderFrameEditor();
+    refreshRecStats();
+}
+
+function deleteRange() {
+    const from = parseInt(document.getElementById('delFrom').value);
+    const to   = parseInt(document.getElementById('delTo').value);
+    if (isNaN(from) || isNaN(to) || from > to) { alert('範圍無效，請確認 from ≤ to'); return; }
+    if (from < 0 || to >= recFrames.length) {
+        alert(`F 範圍應在 0 ~ ${recFrames.length - 1}`); return;
+    }
+    const count = to - from + 1;
+    if (!confirm(`確定刪除 F${from} ~ F${to}（共 ${count} 幀）？`)) return;
+    recFrames.splice(from, count);
+    selFrame = recFrames.length === 0 ? null : Math.min(from, recFrames.length - 1);
+    renderTimeline();
+    renderFrameEditor();
+    refreshRecStats();
+}
+
 function setFrameTime(val) {
     if (selFrame === null || isNaN(val)) return;
     recFrames[selFrame].t_ms = val;
@@ -674,27 +728,40 @@ function onLoaded(jsonStr) {
 //  Export
 // ════════════════════════════════════════
 function updateExportPreview() {
-    const baseId = parseInt(document.getElementById('exportBase').value);
+    const listId  = parseInt(document.getElementById('exportListId').value);
+    const frameId = parseInt(document.getElementById('exportFrameId').value);
     const el = document.getElementById('exportPreview');
-    if (isNaN(baseId) || baseId < 1000) {
-        el.textContent = 'Base ID 須 ≥ 1000';
-        el.className = 'status-line status-err';
-        return;
+    if (isNaN(listId) || listId < 1 || isNaN(frameId) || frameId < 1000) {
+        el.textContent = 'Frame Start ID 須 ≥ 1000'; el.className = 'status-line status-err'; return;
+    }
+    if (listId === frameId) {
+        el.textContent = 'MotionList ID 不可 = Frame Start ID'; el.className = 'status-line status-err'; return;
     }
     const n = recFrames.length;
     if (n === 0) { el.textContent = '---'; el.className = 'status-line'; return; }
-    el.textContent = `List:${baseId}  幀:${baseId+1}~${baseId+n}`;
+    // Check if MotionList ID falls inside frame range
+    if (frameId <= listId && listId < frameId + n) {
+        el.textContent = 'MotionList ID 與 Frame 範圍重疊'; el.className = 'status-line status-err'; return;
+    }
+    el.textContent = `List:${listId}  幀:${frameId}~${frameId+n-1}`;
     el.className = 'status-line';
 }
 
 function exportSectors() {
     if (!pubExport) { alert('尚未連線'); return; }
     if (recFrames.length === 0) { alert('沒有幀可以 Export'); return; }
-    const baseId = parseInt(document.getElementById('exportBase').value);
-    if (isNaN(baseId) || baseId < 1000) { alert('Base ID 須 ≥ 1000'); return; }
+    const listId  = parseInt(document.getElementById('exportListId').value);
+    const frameId = parseInt(document.getElementById('exportFrameId').value);
+    if (isNaN(listId) || listId < 1) { alert('MotionList ID 須為正整數'); return; }
+    if (isNaN(frameId) || frameId < 1000) { alert('Frame Start ID 須 ≥ 1000'); return; }
+    if (listId === frameId) { alert('MotionList ID 不可等於 Frame Start ID'); return; }
+    if (frameId <= listId && listId < frameId + recFrames.length) {
+        alert('MotionList ID 與 Frame 範圍重疊'); return;
+    }
     const defSpd = parseInt(document.getElementById('exportSpd').value) || 50;
     pubExport.publish({ data: JSON.stringify({
-        base_id:         baseId,
+        motion_list_id:  listId,
+        frame_start_id:  frameId,
         default_speed:   defSpd,
         num_motors:      NUM_MOTORS,
         selected_motors: [...selMotors],

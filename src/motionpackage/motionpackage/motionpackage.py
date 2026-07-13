@@ -227,6 +227,10 @@ class MotionNode(Node):
                 elif motor_id in snapshot:
                     self.last_goals[motor_id] = snapshot[motor_id]
                 self.get_logger().info(f"[Torque ON] last_goals 已同步，ID={motor_id}")
+                # 通知 walking node 重新定錨，避免 baseline 使用舊資料
+                reset_msg = Bool()
+                reset_msg.data = True
+                self.anchor_reset_pub.publish(reset_msg)
 
         elif opcode in [241, 242, 243, 244]: # Save Sector Data (RAM) & Backup to Sector Folder
             data_content = list(packet[3:-2])
@@ -970,22 +974,28 @@ class MotionNode(Node):
     def cb_record_export(self, msg):
         try:
             p          = json.loads(msg.data)
-            base_id    = int(p['base_id'])
+            # 新格式: motion_list_id + frame_start_id
+            # 舊格式向下相容: base_id → motion_list_id=base_id, frame_start_id=base_id+1
+            if 'motion_list_id' in p:
+                ml_id       = int(p['motion_list_id'])
+                frame_start = int(p['frame_start_id'])
+            else:
+                ml_id       = int(p['base_id'])
+                frame_start = ml_id + 1
+
             def_spd    = int(p.get('default_speed', 50))
             num_motors = int(p.get('num_motors', 27))
             selected   = set(int(x) for x in p.get('selected_motors', []))
             frames     = p.get('frames', [])
             resp       = String()
 
-            if base_id < 1000:
-                resp.data = json.dumps({'error': 'base_id 須 ≥ 1000'})
+            if ml_id < 1 or frame_start < 1000:
+                resp.data = json.dumps({'error': 'Frame Start ID 須 ≥ 1000'})
                 self.record_result_pub.publish(resp)
                 return
 
-            all_ids   = [base_id] + [base_id + 1 + i for i in range(len(frames))]
-            conflicts = [i for i in all_ids if str(i) in self.saved_sectors]
-            if conflicts:
-                resp.data = json.dumps({'error': f'ID 衝突: {conflicts}'})
+            if ml_id == frame_start:
+                resp.data = json.dumps({'error': 'MotionList ID 不可等於 Frame Start ID'})
                 self.record_result_pub.publish(resp)
                 return
 
@@ -994,10 +1004,20 @@ class MotionNode(Node):
                                       self.location_folder, 'Parameter', 'sector')
             os.makedirs(sector_dir, exist_ok=True)
 
+            # 衝突檢查：以磁碟檔案為準（RAM 可能有舊資料殘留）
+            all_ids   = [ml_id] + [frame_start + i for i in range(len(frames))]
+            conflicts = [i for i in all_ids if os.path.exists(os.path.join(sector_dir, f'{i}.ini'))]
+            if conflicts:
+                preview = conflicts[:5]
+                suffix  = '...' if len(conflicts) > 5 else ''
+                resp.data = json.dumps({'error': f'磁碟 ID 衝突: {preview}{suffix}（共 {len(conflicts)} 個）'})
+                self.record_result_pub.publish(resp)
+                return
+
             ml_data   = []
             frame_ids = []
             for i, frame in enumerate(frames):
-                sector_id   = base_id + 1 + i
+                sector_id   = frame_start + i
                 motors_data = frame.get('motors', {})
                 data = []
                 for mid in range(1, num_motors + 1):
@@ -1016,12 +1036,12 @@ class MotionNode(Node):
                 ml_data.extend([sector_id, delay])
                 frame_ids.append(sector_id)
 
-            self.saved_sectors[str(base_id)] = {'opcode': 244, 'data': ml_data}
-            self.save_sector_to_disk(str(base_id), 244, ml_data)
+            self.saved_sectors[str(ml_id)] = {'opcode': 244, 'data': ml_data}
+            self.save_sector_to_disk(str(ml_id), 244, ml_data)
 
-            resp.data = json.dumps({'status': 'ok', 'motion_list_id': base_id, 'frame_ids': frame_ids})
+            resp.data = json.dumps({'status': 'ok', 'motion_list_id': ml_id, 'frame_ids': frame_ids})
             self.record_result_pub.publish(resp)
-            self.get_logger().info(f'[RecordExport] base={base_id}, {len(frames)} 幀')
+            self.get_logger().info(f'[RecordExport] list={ml_id}, frames={frame_start}~{frame_start+len(frames)-1}')
         except Exception as e:
             self.get_logger().error(f'[RecordExport] {e}')
             resp      = String()
