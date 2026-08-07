@@ -19,11 +19,11 @@ from strategy.sr.calculate_edge import deep_calculate
 
 #--校正量--#
 #原地量校正
-FORWARD_CORRECTION         = -1700
+FORWARD_CORRECTION         = -1400
 #平移校正
 TRANSLATION_CORRECTION     = 0
 #旋轉校正
-THETA_CORRECTION           = 0
+THETA_CORRECTION           = 1
 
 #基礎變化量(前進&平移)
 BASE_CHANGE                = 1000         
@@ -60,8 +60,10 @@ BOARD_LAYER_CONFIG = {
     "UP" :{
         "LCUP": 40000,               #上板前進量
         "STAND_CORRECT": True,      #上板看板子站姿
-        "STAND_CORRECT_SECTOR": 1, #上板看板子站姿sector        
-        "WALK_PARAM": dict(com_y_swing=5, width_size=0, period_t=360, t_dsp=0,
+        "STAND_CORRECT_SECTOR": 222, #上板看板子站姿sector    
+        "WARNING_DISTANCE": 7,   #危險距離
+        "GO_DISTANCE":17,      #上板距離    
+        "WALK_PARAM": dict(com_y_swing=8, width_size=0, period_t=360, t_dsp=0,
                             clearance=14, board_high=5, stand_height=50,
                             com_height=40), #上板步態參數
         "NORMAL_OFFSET" : [1,3,1],#[中心值,邊緣值,曲率] [2,2,1](2,2,2,2,2,2) / [1,4,1](4,2,1,1,2,4) / [1,4,0.5](4,2,1,1,2,4)
@@ -70,34 +72,40 @@ BOARD_LAYER_CONFIG = {
 
     1: {
         "LCUP": None, #上板前進量 (數值 or None)
-        "WALK_PARAM_YN": False, #是否使用自訂步態參數
-        "WALK_PARAM": dict(com_y_swing=5, width_size=0, period_t=360, t_dsp=0,
-                            clearance=8, board_high=3, stand_height=50,
+        "WARNING_DISTANCE": 4,   #危險距離
+        "GO_DISTANCE":17,      #上板距離
+        "WALK_PARAM_YN": True, #是否使用自訂步態參數
+        "WALK_PARAM": dict(com_y_swing=7, width_size=0, period_t=360, t_dsp=0,
+                            clearance=14, board_high=5, stand_height=50,
                             com_height=40),#上板步態參數
         "LC_CORRECT": True,      #上板站姿微調
-        "LC_CORRECT_SECTOR": 2, #上板站姿微調sector
+        "LC_CORRECT_SECTOR": 225, #上板站姿微調sector
         "LC_U": False, #上板U形板
     },
 
     2: {
         "LCUP": None, #上板前進量 (數值 or None)
-        "WALK_PARAM_YN": False, #是否使用自訂步態參數
-        "WALK_PARAM": dict(com_y_swing=5, width_size=0, period_t=360, t_dsp=0,
-                            clearance=8, board_high=3, stand_height=50,
+        "WARNING_DISTANCE": None,   #危險距離
+        "GO_DISTANCE":35,      #上板距離
+        "WALK_PARAM_YN": True, #是否使用自訂步態參數
+        "WALK_PARAM": dict(com_y_swing=6, width_size=0, period_t=360, t_dsp=0,
+                            clearance=14, board_high=5, stand_height=50,
                             com_height=40),#上板步態參數
         "LC_CORRECT": True,      #上板站姿微調
-        "LC_CORRECT_SECTOR": 2, #上板站姿微調sector
+        "LC_CORRECT_SECTOR": 226, #上板站姿微調sector
         "LC_U": False, #上板U形板
     },
 
     3: {
         "LCUP": None, #上板前進量 (數值 or None)
-        "WALK_PARAM_YN": False, #是否使用自訂步態參數
-        "WALK_PARAM": dict(com_y_swing=5, width_size=0, period_t=360, t_dsp=0,
-                            clearance=8, board_high=3, stand_height=50,
+        "WARNING_DISTANCE": 13,   #危險距離
+        "GO_DISTANCE":26,      #上板距離
+        "WALK_PARAM_YN": True, #是否使用自訂步態參數
+        "WALK_PARAM": dict(com_y_swing=6, width_size=0, period_t=360, t_dsp=0,
+                            clearance=14, board_high=5, stand_height=50,
                             com_height=40),#上板步態參數
         "LC_CORRECT": True,      #上板站姿微調
-        "LC_CORRECT_SECTOR": 2, #上板站姿微調sector
+        "LC_CORRECT_SECTOR": 223, #上板站姿微調sector
         "LC_U": False, #上板U形板
     },
 
@@ -105,6 +113,8 @@ BOARD_LAYER_CONFIG = {
         "LCDOWN": 35000,               #下板前進量
         "STAND_CORRECT": True,      #下板看板子站姿
         "STAND_CORRECT_SECTOR": 1, #下板看板子站姿sector
+        "WARNING_DISTANCE": 15,   #危險距離
+        "GO_DISTANCE":20,      #下板距離
         "WALK_PARAM": dict(com_y_swing=-1, width_size=0, period_t=360, t_dsp=0,
                             clearance=8, board_high=3, stand_height=50,
                             com_height=40), #下板步態參數
@@ -114,6 +124,8 @@ BOARD_LAYER_CONFIG = {
 
     4: {
         "LCDOWN": None, #下板前進量 (數值 or None)
+        "WARNING_DISTANCE": 15,   #危險距離
+        "GO_DISTANCE":20,      #下板距離
         "WALK_PARAM_YN": False, #是否使用自訂步態參數
         "WALK_PARAM": dict(com_y_swing=-6, width_size=0, period_t=360, t_dsp=0.4,
                             clearance=8, board_high=3, stand_height=50,
@@ -125,6 +137,8 @@ BOARD_LAYER_CONFIG = {
 
     5: {
         "LCDOWN": None, #下板前進量 (數值 or None)
+        "WARNING_DISTANCE": 15,   #危險距離
+        "GO_DISTANCE":20,      #下板距離
         "WALK_PARAM_YN": False, #是否使用自訂步態參數
         "WALK_PARAM": dict(com_y_swing=-6, width_size=0, period_t=360, t_dsp=0.4,
                             clearance=8, board_high=3, stand_height=50,
@@ -136,6 +150,8 @@ BOARD_LAYER_CONFIG = {
 
     6: {
         "LCDOWN": None, #下板前進量 (數值 or None)
+        "WARNING_DISTANCE": 15,   #危險距離
+        "GO_DISTANCE":20,      #下板距離
         "WALK_PARAM_YN": False, #是否使用自訂步態參數
         "WALK_PARAM": dict(com_y_swing=-6, width_size=0, period_t=360, t_dsp=0.4,
                             clearance=8, board_high=3, stand_height=50,
@@ -151,9 +167,9 @@ DRAW_FUNCTION_FLAG         = True                 #影像繪圖開關
 START_LAYER                = 1
 BOARD_COLOR                = ["Green"  ,           #板子顏色(根據比賽現場調整)
                               "Blue"   ,           #Blue Red Yellow Green
-                              "Red", 
-                              "Yellow" , 
-                              "Red"    , 
+                              "Yellow", 
+                              "Red" , 
+                              "Yellow"    , 
                               "Blue"   , 
                               "Green"]              
 #----------#                       右腳           左腳
@@ -164,8 +180,8 @@ HEAD_VERTICAL              = 2700                  #頭垂直 #down 2750
 
 ##判斷值
 FOOTBOARD_LINE             = 225                   #基準線
-UP_WARNING_DISTANCE        = 6                     #上板危險距離
-DOWN_WARNING_DISTANCE      = 0                     #下板危險距離
+# UP_WARNING_DISTANCE        = 15                     #上板危險距離
+# DOWN_WARNING_DISTANCE      = 0                     #下板危險距離
 GO_UP_DISTANCE             = 20                    #上板距離
 GO_DOWN_DISTANCE           = 3                     #下板距離
 
@@ -179,7 +195,7 @@ TRANSLATION         = {"MIN": 3000,  "NORMAL": 5000, "BIG": 6000}      #平移{�
 
 THETA               = {"MIN": 5,    "NORMAL": 8,    "BIG": 10}              #旋轉{小旋轉,旋轉,大旋轉}
 
-SLOPE               = {"MIN": 2,    "NORMAL": 4,    "BIG": 6}  #斜{小斜,斜,大斜}
+SLOPE               = {"MIN": 1,    "NORMAL": 3,    "BIG": 5}  #斜{小斜,斜,大斜}
 
 #左基礎參數
 LEFT_THETA                 = 1
@@ -355,7 +371,7 @@ class LiftandCarry(API):
                 stand_height = float(self.board_cfg["walk_param"]["stand_height"]),
                 com_height   = float(self.board_cfg["walk_param"]["com_height"]),
             )
-            time.sleep(3)
+            time.sleep(4)
             self.action_status = "準備上板" if self.board_cfg["group"] == "UP" else "準備下板"
 
             if self.board_cfg["lc_correct_enabled"]:
@@ -376,10 +392,10 @@ class LiftandCarry(API):
                 stand_height = float(50), #機器人初始站姿高度
                 com_height   = float(40),  #質心高度
             )           
-            time.sleep(3) 
+            time.sleep(4) 
             self.sendBodySector(29)                  #這是基本站姿的磁區
             self.action_status ="站立姿勢"
-            time.sleep(1.5)
+            time.sleep(2)
 
             if self.board_cfg["stand_correct_enabled"]:
                 self.sendBodySector(self.board_cfg["stand_correct_sector"])
@@ -456,7 +472,7 @@ class LiftandCarry(API):
 
             return 'ready_to_lc'
         else:
-            if (self.layer < 4) and (min(self.distance) <= UP_WARNING_DISTANCE):
+            if (self.layer < 4) and (min(self.distance) <= cfg["warning_distance"]):
                 if max(self.distance[0:3])>30:
                     self.forward = BACK["MIN"] + FORWARD_CORRECTION
                     self.translation = RIGHT_THETA * TRANSLATION["NORMAL"] + TRANSLATION_CORRECTION
@@ -477,13 +493,13 @@ class LiftandCarry(API):
                     self.forward = BACK["MIN"] + FORWARD_CORRECTION
                     self.theta_change()
                     self.state = "!!!小心踩板,後退(上板)!!!"
-            elif self.layer >= 4 and (min(self.distance) <= DOWN_WARNING_DISTANCE):
-                if self.distance[0] < GO_DOWN_DISTANCE and min(self.distance[3:6]) > GO_DOWN_DISTANCE:
+            elif self.layer >= 4 and (min(self.distance) <= cfg["warning_distance"]):
+                if self.distance[0] < cfg["go_distance"] and min(self.distance[3:6]) > cfg["go_distance"]:
                     self.forward = BACK["MIN"] + FORWARD_CORRECTION
                     self.translation = RIGHT_THETA * TRANSLATION["MIN"] + TRANSLATION_CORRECTION
                     self.theta = THETA["MIN"]*LEFT_THETA
                     self.state = "!!!右平移,左旋!!!"
-                elif self.distance[5] < GO_DOWN_DISTANCE and min(self.distance[0:3]) > GO_DOWN_DISTANCE:
+                elif self.distance[5] < cfg["go_distance"] and min(self.distance[0:3]) > cfg["go_distance"]:
                     self.forward = BACK["MIN"] + FORWARD_CORRECTION
                     self.translation = LEFT_THETA * TRANSLATION["MIN"] + TRANSLATION_CORRECTION
                     self.theta = THETA["MIN"]*RIGHT_THETA
@@ -619,14 +635,17 @@ class LiftandCarry(API):
         cfg["lc_correct_sector"]     = override.get("LC_CORRECT_SECTOR", base_cfg["STAND_CORRECT_SECTOR"])
         cfg["u_shape"]               = override.get("LC_U", False)
 
+        cfg["warning_distance"]      = override.get("WARNING_DISTANCE") or base_cfg["WARNING_DISTANCE"]
+        cfg["go_distance"]           = override.get("GO_DISTANCE") or base_cfg["GO_DISTANCE"]
+
         normal_params = override.get("NORMAL_OFFSET", base_cfg["NORMAL_OFFSET"])
         u_params      = override.get("U_OFFSET", base_cfg["U_OFFSET"])
         normal_offset = self.make_offset_profile(*normal_params)
         u_offset      = self.make_offset_profile(*u_params)
 
         cfg["active_offset"] = u_offset if cfg["u_shape"] else normal_offset
-        cfg["trigger_base"]  = GO_UP_DISTANCE if group == "UP" else GO_DOWN_DISTANCE
-
+        # cfg["trigger_base"]  = GO_UP_DISTANCE if group == "UP" else GO_DOWN_DISTANCE
+        cfg["trigger_base"]  = cfg["go_distance"]
         return cfg
 
     def make_offset_profile(self,center_value, edge_value, power=2.0):

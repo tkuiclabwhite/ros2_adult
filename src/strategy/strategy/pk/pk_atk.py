@@ -20,15 +20,15 @@ Y_FOV_DEG = 40.0          # 垂直視角（度）
 
 # ── 步態速度參數 ───────────────────────────────────────────────────────────────
 # 正 x = 前進，正 y = 左平移，正 theta = 左旋轉
-FWD_FAST  =  5000   # 快速前進
-FWD_MED   =  3000   # 中速前進
-FWD_SLOW  =   400   # 慢速前進
+FWD_FAST  =  7000   # 快速前進
+FWD_MED   =  6000   # 中速前進
+FWD_SLOW  =  3000   # 慢速前進
 FWD_STOP  =     0   # 停止
 FWD_BACK  =  -800   # 後退
 
-TRANS_L   =  1200   # 左平移
+TRANS_L   =  3000   # 左平移
 TRANS_S   =     0   # 不平移
-TRANS_R   = -1200   # 右平移
+TRANS_R   = -3000   # 右平移
 
 ROT_L     =   4     # 左旋轉
 ROT_S     =   0     # 不旋轉
@@ -36,7 +36,7 @@ ROT_R     =  -4     # 右旋轉
 
 # ── 狀態轉換閾值 ───────────────────────────────────────────────────────────────
 BALL_STABLE_FRAMES  = 5      # 連續偵測到球幾幀才確認球已找到
-BALL_APPROACH1_SIZE = 2500   # 第一次接近的停止 球像素面積
+BALL_APPROACH1_SIZE = 2300   # 第一次接近的停止 球像素面積
 BALL_CLOSE_SIZE     = 2500   # 	APF 導航的停止 球像素面積
 BALL_ALIGN_X_TOL    = 25     # 水平誤差容忍值（像素）：SECOND_SEARCH_AND_ALIGN 對準
 BALL_KICK_X_TOL     = 40     # 水平誤差容忍值（像素）：WEAK_KICK 前置中檢查
@@ -57,7 +57,7 @@ ORBIT_ROT   =   4    # 繞球旋轉速度（ROT 單位）
 ORBIT_TRANS = 1200   # 繞球平移速度（TRANS 單位）
 
 # ── 踢球準備位置（ALIGN_TO_GOAL yaw 對準後的精確定位）─────────────────────────────
-KICK_TARGET_CX   = 200   # 踢球準備：球的畫面 cx 目標（右腳前偏右）
+KICK_TARGET_CX   = 300   # 踢球準備：球的畫面 cx 目標（右腳前偏右）
 KICK_TARGET_AREA = 2800  # 踢球準備：球的畫面面積目標
 KICK_CX_TOL      =  20   # cx 容忍值（像素）
 KICK_AREA_TOL    = 300   # 面積容忍值
@@ -71,8 +71,8 @@ BLUE_SCAN_TIMEOUT  =   30   # 掃障最大等待幀數，超過視為無障礙�
 
 # ── 掃頭垂直範圍（INIT 掃描時同時掃 pan + tilt）──────────────────────────────────
 # tilt 值越大 = 越低頭（往下看），越小 = 越抬頭（往上看）
-TILT_SCAN_LO        = 2200   # 最小 tilt（最抬頭，掃描起始點）
-TILT_SCAN_HI_SIDE   = 2500   # 兩側允許的最大 tilt（兩側最大低頭角度）
+TILT_SCAN_LO        = 2600   # 最小 tilt（最抬頭，掃描起始點）
+TILT_SCAN_HI_SIDE   = 2600   # 兩側允許的最大 tilt（兩側最大低頭角度）
 TILT_SCAN_HI_CENTER = 2750   # 中央允許的最大 tilt（中央最大低頭角度，同 TILT_SEARCH）
 TILT_SCAN_STEP      =  100   # pan 折返時 tilt 步進量（馬達單位）
 
@@ -89,19 +89,19 @@ _COLOR_IDX = {
 # tilt > 2048 = 低頭，< 2048 = 抬頭
 BALL_COLOR        = 'Yellow'                    # 球的顏色'Orange', 'Yellow', 'Blue',
                                                         #'Green', 'Black', 'Red', 'White',
-START_SIDE        = 'center'                      # 機器人在場上的起始位置（'left' / 'center' / 'right'）
+START_SIDE        = 'right'                      # 機器人在場上的起始位置（'left' / 'center' / 'right'）
 BALL_RELATIVE_POS = 'left'                     # 球相對於機器人的方向（'left' / 'front' / 'right'）
 START_STATE = 0   # 測試用：從第幾個狀態開始（0~5）
-STOP_STATE  = 2  # 測試用：執行完此狀態後停步收尾（-1 = 不提前停止）
+STOP_STATE  = 5  # 測試用：執行完此狀態後停步收尾（-1 = 不提前停止）
 
 # ── 原地步態校正量 ─────────────────────────────────────────────────────────────
-STAY_X     = -1800   # 原地步態 X 校正（加在所有 sendContinuousValue 的 x 上）
+STAY_X     = -1700   # 原地步態 X 校正（加在所有 sendContinuousValue 的 x 上）
 STAY_Y     = 0      # 原地步態 Y 校正
-STAY_THETA = 2      # 原地步態 Theta 校正
+STAY_THETA = 1      # 原地步態 Theta 校正
 
 # ── 站姿微調 ────────────────────────────────────────────────────────────────────
 STAND_CORRECT_ATK    = False   # 是否在比賽開始時執行站姿微調
-STAND_CORRECT_SECTOR = 201     # 站姿微調 sector 編號
+STAND_CORRECT_SECTOR = 224     # 站姿微調 sector 編號
 
 # 狀態編號對照表
 _STATE_NAMES = [
@@ -141,9 +141,9 @@ SCAN_MAP = {
     ('left',   'front'): (1748, 2348, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
     ('left',   'right'): (1024, 2048, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
     ('center', 'left'):  (2048, 2748, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
-    ('center', 'front'): (1748, 2348, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
-    ('center', 'right'): (1348, 2048, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
-    ('right',  'left'):  (2048, 3072, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('center', 'front'): (2048, 2700, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('center', 'right'): (1348, 2700, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
+    ('right',  'left'):  (2325, 2700, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
     ('right',  'front'): (1748, 2348, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
     ('right',  'right'): (1024, 2048, TILT_SCAN_LO, TILT_SCAN_HI_SIDE, TILT_SCAN_HI_CENTER),
 }
@@ -545,7 +545,7 @@ class PenaltyKickAtk(API):
         if area < BALL_APPROACH1_SIZE or abs(x_err) > BALL_KICK_X_TOL or pan_abs_err > PAN_CENTER_TOL:
             self._walk(x_cmd, int(y_cmd), theta_cmd)
         else:
-            self._stop_walk()
+            # self._stop_walk()
             self._disp_last_event   = '已到位且置中 → ALIGN_TO_GOAL'
             self._align_phase        = 'SCAN_OBSTACLE'
             self._blue_stable_count  = 0
@@ -706,9 +706,15 @@ class PenaltyKickAtk(API):
         #     self._stop_walk()
         #     self._align_count = 0
         #     self._disp_last_event = '踢球位置確認 → WEAK_KICK'
-        time.sleep(1)
-        self.sendBodySector(71)#踢球
-        time.sleep(3)
+        # time.sleep(5)
+        # self.sendBodySector(70)#踢球
+        # time.sleep(5)
+        while self.is_start:
+            if self.is_start:
+                self.sendContinuousValue(4000,0,0)
+            else:
+                self._stop_walk()
+
         self._state = 'WEAK_KICK'
 
     def _handle_weak_kick(self):
@@ -1085,48 +1091,49 @@ class PenaltyKickAtk(API):
         if not self.is_start:
             self._handle_stopped()
             self._draw_overlays()
-            return
+            # return
+        else:
 
-        if not self._stance_done:
-            self._disp_last_event = '站立 → 基本站姿'
-            self.sendBodySector(29)
-            time.sleep(1.0)
-            if STAND_CORRECT_ATK:
-                self._disp_last_event = '站姿微調中...'
-                self.sendBodySector(STAND_CORRECT_SECTOR)
-                time.sleep(1.0)
-            self._stance_done = True
-            self._disp_last_event = '站姿完成，開始執行'
-            return
-
-        match self._state:
-            case 'INIT_DIRECTIONAL_SEARCH':
-                self._handle_init_directional_search()
-            case 'APPROACH_BALL_1':
-                self._handle_approach_ball_1()
-            case 'ALIGN_TO_GOAL':
-                self._handle_align_to_goal()
-            case 'WEAK_KICK':
-                self._handle_weak_kick()
-            case 'VISUAL_GUIDED_APPROACH':
-                self._handle_visual_guided_approach()
-            case 'SECOND_SEARCH_AND_ALIGN':
-                self._handle_second_search_and_align()
-            case 'FINAL_SHOT':
-                self._handle_final_shot()
-            case 'FINISH':
-                pass
-
-        # ── STOP_STATE 提早結束檢查 ──────────────────────────────────────────────
-        if STOP_STATE >= 0 and self._state in _STATE_NAMES:
-            if _STATE_NAMES.index(self._state) > STOP_STATE:
-                self._disp_last_event = f'STOP_STATE={STOP_STATE} 已達，停步收尾'
-                if self._walk_active:
-                    self._stop_walk()
+            if not self._stance_done:
+                self._disp_last_event = '站立 → 基本站姿'
                 self.sendBodySector(29)
-                self._state = 'FINISH'
+                time.sleep(1.0)
+                if STAND_CORRECT_ATK:
+                    self._disp_last_event = '站姿微調中...'
+                    self.sendBodySector(STAND_CORRECT_SECTOR)
+                    time.sleep(1.0)
+                self._stance_done = True
+                self._disp_last_event = '站姿完成，開始執行'
+                return
 
-        self._draw_overlays()
+            match self._state:
+                case 'INIT_DIRECTIONAL_SEARCH':
+                    self._handle_init_directional_search()
+                case 'APPROACH_BALL_1':
+                    self._handle_approach_ball_1()
+                case 'ALIGN_TO_GOAL':
+                    self._handle_align_to_goal()
+                case 'WEAK_KICK':
+                    self._handle_weak_kick()
+                case 'VISUAL_GUIDED_APPROACH':
+                    self._handle_visual_guided_approach()
+                case 'SECOND_SEARCH_AND_ALIGN':
+                    self._handle_second_search_and_align()
+                case 'FINAL_SHOT':
+                    self._handle_final_shot()
+                case 'FINISH':
+                    pass
+
+            # ── STOP_STATE 提早結束檢查 ──────────────────────────────────────────────
+            if STOP_STATE >= 0 and self._state in _STATE_NAMES:
+                if _STATE_NAMES.index(self._state) > STOP_STATE:
+                    self._disp_last_event = f'STOP_STATE={STOP_STATE} 已達，停步收尾'
+                    if self._walk_active:
+                        self._stop_walk()
+                    self.sendBodySector(29)
+                    self._state = 'FINISH'
+
+            self._draw_overlays()
 
 
 def main(args=None):

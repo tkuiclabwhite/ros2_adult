@@ -289,7 +289,7 @@ class NavigationNode(Node):
         self._fps_t0 = time.time()
         self._fps_count = 0
 
-        model_path = os.path.join(BASE_DIR, 'best(9).engine')
+        model_path = os.path.join(BASE_DIR, 'best(12).engine')
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model not found: {model_path}")
         print(f"[Nav] Loading YOLO model: {model_path}")

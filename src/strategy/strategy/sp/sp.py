@@ -14,16 +14,16 @@ FORWARD_START_SPEED = 3000     # 起步前進速度 2000
 BACK_START_SPEED = -3000       # 起步後退速度（負值代表反方向) 
 FORWARD_MAX_SPEED = 7000       # 前進速度上限
 FORWARD_MIN_SPEED = 3000       # 前進減速階段的下限（這裡設成 2000 => 等於不會真的降到更慢）
-BACK_MAX_SPEED = -10000         # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
+BACK_MAX_SPEED = -6000        # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
 
 # 每圈更新速度的變化量
-FORWARD_SPEED_ADD = 100        # 前進加速量
+FORWARD_SPEED_ADD = 50        # 前進加速量
 FORWARD_SPEED_SUB = -100       # 減速量（負值代表速度往小變）
 BACK_SPEED_ADD = -100          # 後退加速量（更負 => 更快後退）
 
 # theta(轉向)的基準偏移
-FORWARD_ORIGIN_THETA = 2   # 前進的基準修正
-BACK_ORIGIN_THETA = 1      # 後退的基準修正（通常後退要稍微修方向）
+FORWARD_ORIGIN_THETA = 0   # 前進的基準修正
+BACK_ORIGIN_THETA = 0      # 後退的基準修正（通常後退要稍微修方向）
 
 # =========================
 # 頭部馬達上下限
@@ -118,9 +118,9 @@ class SP():
         #     return 'Forward'
 
         # 門檻之後一定要現場調整
-        if 1450 >= self.tag_area >= 1000:
+        if 1400 >= self.tag_area >= 1000:
             return 'Decelerating'
-        elif self.tag_area > 1450:
+        elif self.tag_area > 1400:
             return 'Backward'
         
     def head_control(self):

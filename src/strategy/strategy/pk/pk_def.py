@@ -27,9 +27,9 @@ MAX_HEAD_VERTICAL   = TILT_SCAN_HI_CENTER   # 下邊界（最大低頭 = TILT_SC
 MIN_HEAD_VERTICAL   = TILT_SCAN_LO          # 上邊界（最大抬頭 = TILT_SCAN_LO）
 
 # ── 守門判定參數 ───────────────────────────────────────────────────────────────
-BALL_INCOMING_SIZE       = 1000   # 球飛來的像素面積門檻（正前方基準值）
+BALL_INCOMING_SIZE       = 1200   # 球飛來的像素面積門檻（正前方基準值）
 BALL_INCOMING_SIDE_RATIO =  0.3   # 兩側門檻縮小比例：extreme side = BALL_INCOMING_SIZE * (1-0.3)
-BALL_COUNT_DEFEND        =    5   # 觸發守門動作的累積幀數
+BALL_COUNT_DEFEND        =    10   # 觸發守門動作的累積幀數
 
 
 

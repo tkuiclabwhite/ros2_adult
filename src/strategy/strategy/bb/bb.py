@@ -205,7 +205,7 @@ class MotorMove():
             self.api.drawImageFunction(4, 2, self.target.basket_x_min , self.target.basket_x_max , self.target.basket_y_max , self.target.basket_y_min, 255, 120, 255)
             # api.send.drawImageFunction(5, 1, api.send.yolo_XMin, api.send.yolo_XMax, api.send.yolo_YMin, api.send.yolo_YMax, 0, 255, 0)
             self.api.drawImageFunction(6,3,160,80,240,0,255,0,0,1)
-            self.api.drawImageFunction(7,3,160,140,240,0,255,0,0,1)
+            self.api.drawImageFunction(7,3,160,141,240,0,255,0,0,1)
             self.api.drawImageFunction(8,3,160,120,240,0,255,0,0,1)
     
         def move_head(self, ID, Position,head_max_x, head_max_y, Speed):  #把相對頭部變化變絕對(call 2048就變2048)
@@ -560,7 +560,7 @@ class BasketBall(API):
                 self.get_logger().debug(f'球在視野中太小 -> 大範圍尋球')
                 # motor.view_search_left(2428, 1668, 1800, 1200, 40, 0.05) 2551
                 # self.motor.view_search(2700, 1678, 1660, 1200, 100, 0.05)
-                self.motor.view_search(2700, 1678, 2600, 2300, 120, 0.05)
+                self.motor.view_search(2700, 2500, 2600, 2300, 120, 0.05)
                 self.target.ball_parameter() 
 
             elif self.target.ball_size > 350:   # 球在視野中夠大
@@ -598,7 +598,7 @@ class BasketBall(API):
 
         elif self.step != 'begin' :
             self.sendHeadMotor(1, 2048, 30)
-            self.sendHeadMotor(2, 2048, 30)
+            self.sendHeadMotor(2, 2500, 30)
             self.target.initial()
             self.motor.initial()
             self.initial()
@@ -640,10 +640,10 @@ class BasketBall(API):
 
         #self.api.sendBodySector(6)      ############步態調整############
         #time.sleep(0.05)
-        self.sendBodySector(26) 
+        # self.sendBodySector(26)
         time.sleep(2)
         # self.sendBodySector(1) 
-        time.sleep(0.05)   
+        # time.sleep(0.05)   
 
 
         self.step = 'find_ball'
@@ -656,20 +656,20 @@ class BasketBall(API):
         if self.head_y_down_adjust:
             time.sleep(1)
             self.get_logger().debug(f'頭部抬起尋框')
-            self.motor.move_head(2,1700,1250,880,50)                
+            self.motor.move_head(2,2500,1250,880,50)                
             self.head_y_down_adjust = True
             time.sleep(1)
         
         else:
-            if self.target.ball_size <= 350:   # 球在視野中太小
+            if self.target.ball_size <= 150:   # 球在視野中太小
                 self.get_logger().info(f'球在視野中太小 -> 大範圍尋球')
                 # motor.view_search_left(2428, 1668, 1800, 1200, 40, 0.05)
                 # self.motor.move_head(2, 1700, 880, 880, 50)   # 先抬頭到 1700
                 time.sleep(0.5)
-                self.motor.view_search(2700, 1678, 2600, 2300, 120, 0.05)
+                self.motor.view_search(2700, 1678, 2500, 2700, 120, 0.05)
                 self.target.ball_parameter() 
 
-            elif self.target.ball_size > 350:   # 球在視野中夠大
+            elif self.target.ball_size > 150:   # 球在視野中夠大
 
                 if abs(self.target.ball_x - 160) > 25  or abs(self.target.ball_y - 120) > 25:  # 讓球在畫面中心
                     self.get_logger().info(f'球在視野中夠大 -> 鎖定球')
@@ -818,7 +818,7 @@ class BasketBall(API):
             self.get_logger().info(f'回復站姿')
             self.sendBodySector(29) 
             time.sleep(0.5)
-            self.sendBodySector(26) 
+            # self.sendBodySector(26) 
             time.sleep(0.5)
             
 
@@ -826,7 +826,7 @@ class BasketBall(API):
             self.get_logger().info(f'回復站姿')
             self.sendBodySector(29) 
             time.sleep(0.5)
-            self.sendBodySector(26) 
+            # self.sendBodySector(26) 
             time.sleep(0.5)
            
 
