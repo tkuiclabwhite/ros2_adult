@@ -4,10 +4,14 @@
       framerate: 30.0
       io_method: "mmap"
       frame_id: "camera"
+      # mjpeg2rgb -> V4L2 用 MJPG（相機內建硬體壓縮），由 OpenCV 解成 BGR 再發布。
+      # 這台相機在 MJPG 下 960x540 可以跑滿 30fps；YUYV 只到 15fps。
       pixel_format: "mjpeg2rgb"
       av_device_format: "YUV422P"
-      image_width: 320
-      image_height: 240
+      # 960x540 是 16:9。image_node 會在 usb 模式把它上下補黑成 960x600，
+      # 與 ZED 統一座標系，所以這裡不要改成 600（相機沒有這個模式）。
+      image_width: 960
+      image_height: 540
       camera_name: "test_camera"
       camera_info_url: "package://usb_cam/config/camera_info.yaml"
       brightness: 140

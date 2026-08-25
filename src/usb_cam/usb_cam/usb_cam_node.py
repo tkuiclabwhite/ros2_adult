@@ -88,7 +88,9 @@ class UsbCamNode(Node):
         self._camera_info_msg: CameraInfo | None = None
 
         # 發佈端：image_raw + camera_info 預設一律建立（兩條 topic 同步發佈）
-        qos = QoSProfile(depth=100)
+        # depth=1：影像只留最新一幀。原本的 100 在 960x540 bgr8 下等於押上
+        # 100 x 1.5MB ≈ 150MB 的緩衝，下游一慢就累積出好幾秒的延遲。
+        qos = QoSProfile(depth=1)
         self._pub_image = self.create_publisher(Image, BASE_TOPIC_NAME, qos)
         self._pub_camera_info = self.create_publisher(
             CameraInfo, "camera_info", qos
@@ -320,8 +322,11 @@ class UsbCamNode(Node):
             rclpy.shutdown()
             return
 
-        # 建立 timer（period_ms = 1000 / framerate）
-        period_s = 1.0 / max(self._params.framerate, 1e-6)
+        # 建立 timer。跑相機速度的兩倍：實際抓取由 camera_io 的讀取執行緒負責，
+        # 這個 timer 只是「去看看有沒有新的一張」。跟相機同速會與相機的節拍互相
+        # 拍打，偶爾整拍錯過；跑兩倍則每張都能即時取走，沒有新畫面時 get_image()
+        # 會直接回傳 None，成本可忽略。
+        period_s = 1.0 / max(self._params.framerate * 2.0, 1e-6)
         self._timer = self.create_timer(period_s, self._update)
         self.get_logger().info(
             f"Timer triggering every {period_s * 1000:.1f} ms"

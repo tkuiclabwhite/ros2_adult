@@ -66,6 +66,8 @@ autodoc_mock_imports = [
     "numpy",
     "cv_bridge",
     "std_msgs",
+    "std_srvs",      # API.sendOdomReset 用到 Trigger
+    "nav_msgs",      # ZED 里程計用到 Odometry
     "geometry_msgs",
     "sensor_msgs",
     "tku_msgs",

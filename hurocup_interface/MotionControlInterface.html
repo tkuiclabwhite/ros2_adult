@@ -18,6 +18,17 @@
     <link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/InterfaceTable.css">
 
     <style>
+        /* 六顆部位按鈕平分 460px 後每顆約 73px。維持預設字級，改為取消左右 padding
+           讓 right_hand 這種較長的標籤放得下；仍超出時由 overflow 裁掉而非撐破版面。
+           註：style.css 裡的是 #button_choose（id 選擇器），HTML 用的是 class，
+           那組樣式從來沒生效過，所以這裡才需要另外定義。 */
+        .button_choose {
+            padding: 3px 0;
+            text-align: center;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
         .button{
             width: 1500px;
         }
@@ -225,7 +236,7 @@
         .cb-cnv:hover { background: rgba(255,170,0,0.25); border-color: #ffaa00; }
 
     </style>
-    <script src="./strategy.js"></script>
+    <script src="../src/strategy/strategy/strategy.js"></script>
 </head>
 
 <body>
@@ -595,7 +606,7 @@
         <div id="rightarea">
             <div id="robotpic">
                 <div style="float: left; height: 470px; width: 300px;">
-                    <button type="button" id="TorqueButton" onclick="TorqueSwitch();" class="neon-btn">扭力關閉</button>
+                    <button type="button" id="TorqueButton" onclick="TorqueSwitch();" class="neon-btn">扭力狀態</button>
                     <div id="robot-container" class="robot-overlay-container">
                         <img src="./picture/towen.webp" style="width: 300px; height: 470px; border: solid black 2px;">
                         <!-- 左手 -->
@@ -654,12 +665,15 @@
             </div>
         </div>
         <div id="motor_area" style="width: 460px;">
-            <div>
-                <input type="button" id="btn_left_hand" class="button_choose" onclick="Torque_Choose('left_hand', 'btn_left_hand');" value="left_hand" style="width: 80px;">
-                <input type="button" id="btn_right_hand" class="button_choose" onclick="Torque_Choose('right_hand', 'btn_right_hand');" value="right_hand" style="width: 80px;">
-                <input type="button" id="btn_waist" class="button_choose" onclick="Torque_Choose('waist', 'btn_waist');" value="waist" style="width: 80px;">
-                <input type="button" id="btn_left_leg" class="button_choose" onclick="Torque_Choose('left_leg', 'btn_left_leg');" value="left_leg" style="width: 80px;">
-                <input type="button" id="btn_right_leg" class="button_choose" onclick="Torque_Choose('right_leg', 'btn_right_leg');" value="right_leg" style="width: 80px;">
+            <!-- 六顆部位按鈕用 flex 平分，與下方的「單顆控制」列同寬對齊。
+                 按鈕 id 必須是 btn_<partName>，refreshTorqueUI 依此對應 robotConfig。 -->
+            <div style="display: flex; gap: 4px; width: 100%; box-sizing: border-box;">
+                <input type="button" id="btn_left_hand" class="button_choose" onclick="Torque_Choose('left_hand');" value="left_hand" style="flex: 1; min-width: 0;">
+                <input type="button" id="btn_right_hand" class="button_choose" onclick="Torque_Choose('right_hand');" value="right_hand" style="flex: 1; min-width: 0;">
+                <input type="button" id="btn_waist" class="button_choose" onclick="Torque_Choose('waist');" value="waist" style="flex: 1; min-width: 0;">
+                <input type="button" id="btn_left_leg" class="button_choose" onclick="Torque_Choose('left_leg');" value="left_leg" style="flex: 1; min-width: 0;">
+                <input type="button" id="btn_right_leg" class="button_choose" onclick="Torque_Choose('right_leg');" value="right_leg" style="flex: 1; min-width: 0;">
+                <input type="button" id="btn_head" class="button_choose" onclick="Torque_Choose('head');" value="head" style="flex: 1; min-width: 0;">
             </div>
             <div style="margin-top: 8px; margin-bottom: 8px; padding: 5px; background-color: rgba(46, 58, 61, 0.8); border-radius: 5px; color: white; display: flex; align-items: center; justify-content: center; width: 100%; box-sizing: border-box;">
                 <span style="font-weight: bold; margin-right: 10px;">單顆控制 ID:</span>
@@ -885,18 +899,30 @@
     <script type="text/javascript" src="./js/Interface2.js"></script>
 
     <script>
-        const btn = document.getElementById('TorqueButton');
-
-        btn.addEventListener('click', function() {
-            btn.classList.toggle('active');
-            if (btn.classList.contains('active')) {
-                btn.innerText = "扭力已開啟";
-            } else {
-                btn.innerText = "扭力已關閉";
-            }
-        });
+        // 全身扭力按鈕的文字與 active 樣式一律由 refreshTorqueUI() 依實際狀態決定。
+        // 這裡原本另有一個 click listener 自行 toggle，只看點擊次數不看真實狀態，
+        // 與單顆／部位操作的更新互相打架，已移除。
 
         // --- Strategy Location ---
+        // 扭力狀態快取（motionpackage 維護）。開網頁時索取一次以還原介面，
+        // 否則 motorTorqueStates 是空的，畫面會全部顯示為關閉。
+        var TorqueStateClient = new ROSLIB.Service({
+            ros: ros,
+            name: '/package/GetTorqueState',
+            serviceType: 'tku_msgs/TorqueState'
+        });
+
+        function LoadTorqueState() {
+            TorqueStateClient.callService(new ROSLIB.ServiceRequest({ query: true }), function (res) {
+                if (!res || !res.states) return;
+                for (var i = 0; i < res.states.length; i++) {
+                    motorTorqueStates[i + 1] = res.states[i];
+                }
+                if (typeof refreshTorqueUI === "function") refreshTorqueUI();
+                console.log("已載入扭力狀態", res.states);
+            });
+        }
+
         var locationBack_Subscriber = new ROSLIB.Topic({
             ros: ros,
             name: '/locationBack',
@@ -1050,6 +1076,8 @@
 
         ros.on('connection', function() {
             document.getElementById('importSectorButton').disabled = false;
+            // 連上後向 motionpackage 索取扭力狀態，還原介面顯示
+            try { LoadTorqueState(); } catch (e) { console.warn('LoadTorqueState 失敗:', e); }
         });
 
         // ===== Calculator =====
@@ -1143,29 +1171,20 @@
                 return;
             }
 
-            var currentDisplay = document.getElementById('current-strategy-name').innerText;
-            var restorePath = '/home/iclab/ros2_adult/src/strategy/strategy/' +
-                (currentDisplay === '---' || currentDisplay === 'WAITING...' ? 'ar' : currentDisplay) +
-                '/Parameter';
-
-            location_msg.data = '/home/iclab/ros2_adult/src/strategy/strategy/' + strategy + '/Parameter';
-            location_strategy.publish(location_msg);
-            document.getElementById('label').innerHTML = 'Switching to strategy [' + strategy + ']...';
-
-            setTimeout(function() {
-                var svc = new ROSLIB.Service({
-                    ros: ros,
-                    name: '/package/InterfaceReadSaveMotion',
-                    serviceType: 'tku_msgs/ReadMotion'
-                });
-                svc.callService(new ROSLIB.ServiceRequest({
-                    read: true,
-                    name: 'sector/' + sectorNum,
-                    readstate: 0
-                }), function(data) {
-                    location_msg.data = restorePath;
-                    location_strategy.publish(location_msg);
-
+            // 直接向 motionpackage 指定要讀哪個策略，不再切換全域 strategy。
+            // 舊做法是 publish /location 切過去、等 150ms、讀完再切回來 ——
+            // 那個等待是純猜測，而且會連帶讓影像、走路等節點全部重載設定。
+            var svc = new ROSLIB.Service({
+                ros: ros,
+                name: '/package/InterfaceReadSaveMotion',
+                serviceType: 'tku_msgs/ReadMotion'
+            });
+            svc.callService(new ROSLIB.ServiceRequest({
+                read: true,
+                name: 'sector/' + sectorNum,
+                readstate: 0,
+                strategy: strategy
+            }), function(data) {
                     if (!data.vectorcnt || data.vectorcnt === 0) {
                         document.getElementById('label').innerHTML = 'Import failed: sector/' + sectorNum + ' not found in [' + strategy + ']';
                         return;
@@ -1233,8 +1252,7 @@
                     }
                     document.getElementById('label').innerHTML =
                         'Import Sector [' + sectorNum + '] from [' + strategy + '] done! (' + data.vectorcnt + ' entries)';
-                });
-            }, 150);
+            });
         }
     </script>
 </body>

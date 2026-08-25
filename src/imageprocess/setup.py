@@ -21,8 +21,9 @@ setup(
     entry_points={
         'console_scripts': [
             'image = imageprocess.image:main',
-            'image_test = imageprocess.image_test:main',
-            'imageprocess = imageprocess.imageprocess:main',
+            'depth_process_node = imageprocess.depth_process_node:main',
+            'overlap_node = imageprocess.overlap_node:main',
+            'camera_param_bridge_node = imageprocess.camera_param_bridge_node:main',
         ],
     },
 )

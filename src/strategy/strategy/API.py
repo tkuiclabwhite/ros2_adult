@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 # coding=utf-8
 import json
-import os
-import signal
-import subprocess
-from dataclasses import dataclass
+import math
 from typing import Dict, List, Tuple, Optional
 
 import numpy as np
@@ -14,11 +11,14 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.qos import QoSProfile, HistoryPolicy, ReliabilityPolicy, DurabilityPolicy
 
 from std_msgs.msg import String, UInt8MultiArray, Int16, Bool
-from geometry_msgs.msg import Point
+from std_srvs.srv import Trigger
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image as RosImage
 from cv_bridge import CvBridge
 
 from tku_msgs.msg import (
+    ZedImu,
+    Zoom,
     Interface,
     SensorPackage,
     SensorSet,
@@ -29,63 +29,19 @@ from tku_msgs.msg import (
     Dio,
 )
 
-# -------------------- Strategy Process Manager (Plan B-1) --------------------
-
-@dataclass
-class StrategyHandle:
-    name: str
-    popen: subprocess.Popen
-
-class StrategyProcessManager:
-    # Ensure only ONE strategy process runs at a time (ros2 run).
-    def __init__(self):
-        self._current: Optional[StrategyHandle] = None
-
-    def is_running(self) -> bool:
-        return self._current is not None and self._current.popen.poll() is None
-
-    def current_name(self) -> Optional[str]:
-        return self._current.name if self.is_running() else None
-
-    def start(self, name: str, ros2_pkg: str, ros2_exec: str):
-        if self.is_running():
-            self.stop()
-
-        cmd = ["ros2", "run", ros2_pkg, ros2_exec]
-
-        # stdout/stderr -> terminal (方便你看策略 log)
-        popen = subprocess.Popen(
-            cmd,
-            preexec_fn=os.setsid,  # new process group => killpg works
-            stdout=None,
-            stderr=None,
-            text=True,
-        )
-        self._current = StrategyHandle(name=name, popen=popen)
-
-    def stop(self, timeout_sec: float = 2.0):
-        if not self.is_running():
-            self._current = None
-            return
-
-        pgid = os.getpgid(self._current.popen.pid)
-
-        # graceful stop first
-        os.killpg(pgid, signal.SIGINT)
-        try:
-            self._current.popen.wait(timeout=timeout_sec)
-        except subprocess.TimeoutExpired:
-            os.killpg(pgid, signal.SIGKILL)
-            self._current.popen.wait(timeout=timeout_sec)
-
-        self._current = None
-
-
 # ------------------------------ API Node ------------------------------------
 
 class API(Node):
     ORANGE, YELLOW, BLUE, GREEN, BLACK, RED, WHITE, OTHERS = range(8)
     COLORS = ['orange', 'yellow', 'blue', 'green', 'black', 'red', 'white', 'others']
+
+    # 距離 class：與顏色各自獨立的分類系統，只是數量同為 8
+    D1, D2, D3, D4, D5, D6, D7, D8 = range(8)
+    DISTANCES = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8']
+
+    # 疊合組合：每組綁定一個顏色 class 與一個距離 class
+    SET1, SET2, SET3, SET4, SET5, SET6, SET7, SET8 = range(8)
+    SETS = ['Set1', 'Set2', 'Set3', 'Set4', 'Set5', 'Set6', 'Set7', 'Set8']
 
     def __init__(self, node_name: str = 'API'):
         super().__init__(node_name)
@@ -125,7 +81,10 @@ class API(Node):
         self.head_motor_pub = self.create_publisher(HeadPackage, '/Head_Topic', 10)
         self.sector_pub = self.create_publisher(Int16, '/package/Sector', 10)
 
+        self.zoomin_pub = self.create_publisher(Zoom, '/Zoom_In_Topic', 10)
+
         self.draw_image_pub = self.create_publisher(DrawImage, '/drawimage', 10)
+        self.draw_clear_pub = self.create_publisher(Bool, '/drawimage/clear', 10)
         self.walkparameter_pub = self.create_publisher(Parameter, '/strategy/walkparameter', 10)
 
         self.walking_json_pub = self.create_publisher(String, '/walking_params_update', 10)
@@ -139,10 +98,6 @@ class API(Node):
         self.HEAD_TILT_RANGE = 500
         self.HEAD_DEFAULT_SPEED = 100
 
-        # -------------------- Parameters (optional) --------------------
-        self.declare_parameter("start", False)
-        self.declare_parameter("mode", 0)
-
         # 實例變數 (在 __init__ 裡面)
         self.is_start: bool = False
         """
@@ -152,16 +107,9 @@ class API(Node):
         * **False** 代表停止
         """
 
-        self._last_param_start: Optional[bool] = None
-        self._last_param_mode: Optional[int] = None
-        self.create_timer(0.05, self._sync_start_from_param)  # 20Hz
-
         # -------------------- IMU / YOLO subscriptions --------------------
         self.imu_sub = self.create_subscription(
             SensorPackage, '/package/sensorpackage', self.imu, 10, callback_group=self.imu_cbg
-        )
-        self.yolo_zed = self.create_subscription(
-            Point, '/zed_yolo_ball', self.Yolo_Zed, 10, callback_group=self.imu_cbg
         )
         self.ContinuousValue_sub = self.create_subscription(
             Interface, '/ChangeContinuousValue_Topic', self.ContinuousValueFunction,
@@ -197,6 +145,45 @@ class API(Node):
                 self.qos_fast, callback_group=self.image_cbg
             )
 
+        # -------------------- 深度 (depth_process_node) --------------------
+        self.latest_depth_objects: Dict[str, List[dict]] = {d: [] for d in self.DISTANCES}
+        self.latest_depth_stamps: Dict[str, Tuple[int, int]] = {d: (0, 0) for d in self.DISTANCES}
+        for d in self.DISTANCES:
+            self.create_subscription(
+                String, f'/depth_detections/{d}',
+                lambda msg, label=d: self._depth_det_callback(msg, label),
+                self.qos_fast, callback_group=self.image_cbg
+            )
+
+        # 裁切對齊後的深度值（公釐 uint16），供 depth_at() 查任意座標
+        self._depth_mm: Optional[np.ndarray] = None
+        self.create_subscription(
+            RosImage, '/depth_mm', self._depth_mm_cb,
+            self.qos_fast, callback_group=self.image_cbg
+        )
+
+        # -------------------- 疊合 (overlap_node) --------------------
+        self.latest_overlap_objects: Dict[str, List[dict]] = {t: [] for t in self.SETS}
+        self.latest_overlap_stamps: Dict[str, Tuple[int, int]] = {t: (0, 0) for t in self.SETS}
+        for t in self.SETS:
+            self.create_subscription(
+                String, f'/overlap_detections/{t}',
+                lambda msg, label=t: self._overlap_det_callback(msg, label),
+                self.qos_fast, callback_group=self.image_cbg
+            )
+
+        # -------------------- ZED 內建 IMU (zed_imu_node) --------------------
+        self.zed_imu_sub = self.create_subscription(
+            ZedImu, '/zed_imu/data', self._zed_imu_cb, 10, callback_group=self.imu_cbg
+        )
+        self.zed_imu_reset_pub = self.create_publisher(SensorSet, '/zed_sensorset', 10)
+
+        # -------------------- ZED 里程計（最小驗證版，尚未做頭部補償） -----------
+        self.odom_sub = self.create_subscription(
+            Odometry, '/zed/zed_node/odom', self._odom_cb, 10, callback_group=self.imu_cbg
+        )
+        self.odom_reset_cli = self.create_client(Trigger, '/zed/zed_node/reset_odometry')
+
         # -------------------- state / stats --------------------
         self.roll = self.pitch = self.yaw = 0.0
         self.imu_rpy : List[float] = [self.roll, self.pitch, self.yaw]
@@ -213,9 +200,7 @@ class API(Node):
             >>> current_roll = api.imu_rpy[0]
         """
 
-        self.pose_x = self.pose_y = self.pose_z = 0.0
-        self.pose = [self.pose_x, self.pose_y, self.pose_z]
-        self.xx, self.yy, self.tt = 0, 0, 0
+        self.xx, self.yy, self.tt = 0.0, 0.0, 0.0
 
         self.color_counts: List[int] = [0] * len(self.COLORS)
         """
@@ -304,19 +289,255 @@ class API(Node):
 
         self.new_object_info: bool = False
 
-        # -------------------- Plan B Control Plane --------------------
-        self._mgr = StrategyProcessManager()
-        self._selected_strategy = "ar"
+        # 色模新增欄位：中心座標與寬高比。image.py 本來就有發，先前沒接。
+        self.object_cx: List[List[int]] = [[] for _ in self.COLORS]
+        """
+        各顏色類別物體邊界框的中心 X 座標清單。
 
-        self.strategy_name_sub = self.create_subscription(
-            String, "/strategy/name", self._on_strategy_name, 10
-        )
-        self.strategy_start_sub = self.create_subscription(
-            Bool, "/strategy/start", self._on_strategy_start, 10
-        )
-        self.strategy_status_pub = self.create_publisher(
-            String, "/strategy/status", 10
-        )
+        這是一個二維清單，第一層為顏色索引，第二層為該顏色的第幾個物體。
+        數值範圍介於 (0 ~ 960) 之間。
+
+        Example:
+            >>> # 取得第一個橘色物體的中心，用來對準頭部
+            >>> if api.color_counts[api.ORANGE] > 0:
+            >>>     cx = api.object_cx[api.ORANGE][0]
+            >>>     offset = cx - 480      # 480 為畫面中心
+        """
+
+        self.object_cy: List[List[int]] = [[] for _ in self.COLORS]
+        """
+        各顏色類別物體邊界框的中心 Y 座標清單。
+
+        這是一個二維清單，第一層為顏色索引，第二層為該顏色的第幾個物體。
+        數值範圍介於 (0 ~ 600) 之間。
+
+        Example:
+            >>> if api.color_counts[api.RED] > 0:
+            >>>     cy = api.object_cy[api.RED][0]
+        """
+
+        self.object_ratio: List[List[float]] = [[] for _ in self.COLORS]
+        """
+        各顏色類別物體邊界框的寬高比 (寬 / 高) 清單。
+
+        用於形狀判斷，可過濾掉輪廓明顯不符的雜訊：
+
+        * **約 1.0**：接近正方形或圓形（例如球）
+        * **遠小於 1**：窄而高（例如直立的桿子、門柱）
+        * **遠大於 1**：寬而扁（例如橫躺的橫桿、地面線條）
+
+        Example:
+            >>> # 只保留形狀接近圓形、且面積夠大的橘色目標
+            >>> balls = [i for i in range(api.color_counts[api.ORANGE])
+            ...          if api.object_sizes[api.ORANGE][i] > 3000
+            ...          and 0.7 < api.object_ratio[api.ORANGE][i] < 1.4]
+        """
+
+        # -------------------- 深度統計（形狀比照色模） --------------------
+        self.distance_counts: List[int] = [0] * len(self.DISTANCES)
+        """
+        各距離類別偵測到的物體總數清單。
+
+        距離類別 D1~D8 的範圍在網頁的深度模式中設定，儲存於各 strategy 的
+        ``depth.ini``。這 8 個區間與色模的 8 種顏色是**各自獨立**的分類系統，
+        只是數量恰好相同。
+
+        * **距離索引對照表**\ ：\ ``api.D1`` ~ ``api.D8``\ （即 0 ~ 7）
+
+        Example:
+            >>> # 檢查最近的距離區間內有沒有東西
+            >>> if api.distance_counts[api.D1] > 0:
+            >>>     print(f"D1 區間偵測到 {api.distance_counts[api.D1]} 個物體")
+        """
+
+        self.distance_sizes: List[List[float]] = [[] for _ in self.DISTANCES]
+        """各距離類別物體的面積（像素數）清單。用法同 :attr:`object_sizes`。"""
+
+        self.distance_x_min: List[List[int]] = [[] for _ in self.DISTANCES]
+        """各距離類別物體邊界框的最小 X 座標 (左邊界)，範圍 (0 ~ 960)。"""
+
+        self.distance_x_max: List[List[int]] = [[] for _ in self.DISTANCES]
+        """各距離類別物體邊界框的最大 X 座標 (右邊界)，範圍 (0 ~ 960)。"""
+
+        self.distance_y_min: List[List[int]] = [[] for _ in self.DISTANCES]
+        """各距離類別物體邊界框的最小 Y 座標 (上邊界)，範圍 (0 ~ 600)。"""
+
+        self.distance_y_max: List[List[int]] = [[] for _ in self.DISTANCES]
+        """各距離類別物體邊界框的最大 Y 座標 (下邊界)，範圍 (0 ~ 600)。"""
+
+        self.distance_cx: List[List[int]] = [[] for _ in self.DISTANCES]
+        """各距離類別物體邊界框的中心 X 座標，範圍 (0 ~ 960)。"""
+
+        self.distance_cy: List[List[int]] = [[] for _ in self.DISTANCES]
+        """各距離類別物體邊界框的中心 Y 座標，範圍 (0 ~ 600)。"""
+
+        self.distance_ratio: List[List[float]] = [[] for _ in self.DISTANCES]
+        """各距離類別物體的寬高比 (寬 / 高)，判讀方式同 :attr:`object_ratio`。"""
+
+        self.distance_cm: List[List[int]] = [[] for _ in self.DISTANCES]
+        """
+        各距離類別物體的平均距離清單，單位為**公分**。
+
+        取該物體所有有效深度像素的平均值。因為物體本來就被距離區間框住，
+        平均值必定落在該區間內。
+
+        Example:
+            >>> # 取得 D1 區間中最近的那個物體
+            >>> n = api.distance_counts[api.D1]
+            >>> if n > 0:
+            >>>     j = min(range(n), key=lambda i: api.distance_cm[api.D1][i])
+            >>>     print(f"最近的物體在 {api.distance_cm[api.D1][j]} 公分處")
+        """
+
+        self.distance_min_cm: List[List[int]] = [[] for _ in self.DISTANCES]
+        """
+        各距離類別物體**最近端**的距離，單位為公分。
+
+        與 :attr:`distance_max_cm` 一起看可判斷物體的深度延伸範圍。
+        正對鏡頭的球兩者會很接近；斜向的牆面則會相差很大。
+        """
+
+        self.distance_max_cm: List[List[int]] = [[] for _ in self.DISTANCES]
+        """各距離類別物體**最遠端**的距離，單位為公分。"""
+
+        self.new_distance_info: bool = False
+        """深度偵測是否有新資料的旗標，用法同 :attr:`new_object_info`。"""
+
+        # -------------------- 疊合統計（形狀比照色模） --------------------
+        self.overlap_counts: List[int] = [0] * len(self.SETS)
+        """
+        各疊合組合偵測到的交集區塊總數清單。
+
+        每一組 Set 綁定一個顏色類別與一個距離類別，交集即「**顏色符合且距離也符合**」
+        的區域。組合內容在網頁的疊合模式中設定，儲存於各 strategy 的 ``overlap.ini``。
+
+        * **組合索引對照表**\ ：\ ``api.SET1`` ~ ``api.SET8``\ （即 0 ~ 7）
+
+        .. note::
+           僅在色模為 ``All_color``、深度為 ``All_distance``、疊合為 ``All_overlap``
+           時更新，且只計算已勾選 Enable 的組合。
+
+        Example:
+            >>> # Set1 設定為「紅色 x D1」時，代表 1.5 公尺內的紅色目標
+            >>> if api.overlap_counts[api.SET1] > 0:
+            >>>     print("找到近距離的紅色目標")
+        """
+
+        self.overlap_sizes: List[List[float]] = [[] for _ in self.SETS]
+        """各疊合組合交集區塊的面積（像素數）清單。"""
+
+        self.overlap_x_min: List[List[int]] = [[] for _ in self.SETS]
+        """各疊合組合交集區塊的最小 X 座標 (左邊界)，範圍 (0 ~ 960)。"""
+
+        self.overlap_x_max: List[List[int]] = [[] for _ in self.SETS]
+        """各疊合組合交集區塊的最大 X 座標 (右邊界)，範圍 (0 ~ 960)。"""
+
+        self.overlap_y_min: List[List[int]] = [[] for _ in self.SETS]
+        """各疊合組合交集區塊的最小 Y 座標 (上邊界)，範圍 (0 ~ 600)。"""
+
+        self.overlap_y_max: List[List[int]] = [[] for _ in self.SETS]
+        """各疊合組合交集區塊的最大 Y 座標 (下邊界)，範圍 (0 ~ 600)。"""
+
+        self.overlap_cx: List[List[int]] = [[] for _ in self.SETS]
+        """各疊合組合交集區塊的中心 X 座標，範圍 (0 ~ 960)。"""
+
+        self.overlap_cy: List[List[int]] = [[] for _ in self.SETS]
+        """各疊合組合交集區塊的中心 Y 座標，範圍 (0 ~ 600)。"""
+
+        self.overlap_ratio: List[List[float]] = [[] for _ in self.SETS]
+        """各疊合組合交集區塊的寬高比 (寬 / 高)。"""
+
+        self.overlap_cm: List[List[int]] = [[] for _ in self.SETS]
+        """
+        各疊合組合交集區塊的平均距離，單位為公分。
+
+        Example:
+            >>> # 取得 Set1 中面積最大的目標，並取得其中心與距離
+            >>> n = api.overlap_counts[api.SET1]
+            >>> if n > 0:
+            >>>     j = max(range(n), key=lambda i: api.overlap_sizes[api.SET1][i])
+            >>>     cx = api.overlap_cx[api.SET1][j]
+            >>>     distance = api.overlap_cm[api.SET1][j]
+        """
+
+        self.overlap_min_cm: List[List[int]] = [[] for _ in self.SETS]
+        """各疊合組合交集區塊**最近端**的距離，單位為公分。"""
+
+        self.overlap_max_cm: List[List[int]] = [[] for _ in self.SETS]
+        """各疊合組合交集區塊**最遠端**的距離，單位為公分。"""
+
+        self.new_overlap_info: bool = False
+        """疊合偵測是否有新資料的旗標，用法同 :attr:`new_object_info`。"""
+
+        # -------------------- ZED IMU --------------------
+        self.zed_imu_rpy: List[float] = [0.0, 0.0, 0.0]
+        """
+        ZED 相機內建 IMU 的姿態數值（單位：度），已套用歸零。
+
+            * [0] roll：翻滾角
+            * [1] pitch：俯仰角
+            * [2] yaw：偏航角
+
+        歸零請呼叫 :meth:`sendZedSensorReset`\ 。
+
+        .. warning::
+           這與 :attr:`imu_rpy`\ （機身上的 Arduino IMU）是**兩顆不同的感測器**，
+           且 ZED 安裝在頭部雲台上 —— 只要頭部轉動，即使機身沒動 yaw 也會改變。
+           兩者的數值不能直接互相比較。
+
+        Example:
+            >>> current_roll = api.zed_imu_rpy[0]
+        """
+
+        self.zed_imu_abs_rpy: List[float] = [0.0, 0.0, 0.0]
+        """
+        ZED 內建 IMU \ **未歸零**\ 的絕對姿態（單位：度），索引順序同 :attr:`zed_imu_rpy`\ 。
+
+        roll 與 pitch 以重力為基準，屬於絕對值，可用來判斷相機真實的傾斜程度；
+        yaw 沒有絕對基準（無磁力計校正），會隨時間漂移。
+        """
+
+        self.zed_gyro: List[float] = [0.0, 0.0, 0.0]
+        """
+        ZED 內建 IMU 的角速度 [x, y, z]，單位為 \ **deg/s**\ （原生 rad/s 已換算）。
+
+        靜止時三軸都應接近 0，可用於偵測劇烈晃動或跌倒。
+        """
+
+        self.zed_accel: List[float] = [0.0, 0.0, 0.0]
+        """
+        ZED 內建 IMU 的線加速度 [x, y, z]，單位為 **m/s²**，數值含重力。
+
+        靜止且水平放置時 z 軸約為 9.81，可作為感測器是否正常運作的快速檢查。
+        """
+
+        self.zed_imu_zeroed: bool = False
+        """ZED IMU 是否已設定過零點。開機後尚未呼叫 :meth:`sendZedSensorReset` 前為 False。"""
+
+        # -------------------- ZED 里程計（驗證用，尚未做頭部補償） -----------
+        self.odom_xyz: List[float] = [0.0, 0.0, 0.0]
+        """
+        ZED 視覺里程計的位移 [x, y, z]，單位為**公分**。
+
+        相對於節點啟動時的位置，或最近一次 :meth:`sendOdomReset` 的位置。
+
+        .. warning::
+           這是**相機**的位移，而相機安裝在頭部雲台上 —— 只轉頭而機身不動時
+           數值同樣會變化。此外人形機器人走路時的晃動會影響視覺里程計的精度，
+           場地特徵稀少時也可能漂移。**目前僅供觀察驗證，請勿讓策略依賴此數值。**
+
+        Example:
+            >>> api.sendOdomReset()
+            >>> # ... 讓機器人前進一段距離 ...
+            >>> print(f"前進了約 {api.odom_xyz[0]:.1f} 公分")
+        """
+
+        self.odom_yaw: float = 0.0
+        """
+        ZED 視覺里程計的偏航角，單位為度。
+
+        與 :attr:`odom_xyz` 相同，這是**相機**而非機身的朝向。
+        """
 
         # -------------------- 硬體 DIO 狀態 --------------------
         self.is_start = False
@@ -329,22 +550,6 @@ class API(Node):
             self._dio_callback,
             10
         )
-
-        # 你要啟動的對應表：UI 只要送 name=ar/bb/sp
-        # 注意：這裡的 exe 必須存在於 setup.py 的 console_scripts
-        self._strategy_map = {
-            "ar": ("strategy", "ar"),
-            "bb": ("strategy", "bb"),
-            "sp": ("strategy", "sp"),
-            "obs": ("strategy", "obs"),
-            "sr": ("strategy", "sr"),
-            "wl": ("strategy", "wl"),
-            "mar": ("strategy", "mar"),
-            "pk": ("strategy", "pk"),
-            "rc": ("strategy", "rc"),
-        }
-
-        self._publish_strategy_status("idle")
 
     def _dio_callback(self, msg: Dio):
         """
@@ -361,7 +566,6 @@ class API(Node):
         Note:
             * **邊緣觸發 (Edge Detection)**：僅在狀態與上次不同時才執行記錄與邏輯更新，避免重複處理。
             * **視覺反饋**：使用 ANSI 轉義序列在終端機輸出彩色日誌（綠色為 START，紅色為 STOP）。
-            * 目前版本為了安全性，註解掉了自動觸發進程管理器的功能。
         同步狀態 (把硬體的 True/False 給 API)
         """
         if msg.strategy != self.is_start:
@@ -369,175 +573,9 @@ class API(Node):
             
             if self.is_start:
                 self.get_logger().info("\033[92m[DIO] 物理開關開啟：START\033[0m")
-                # 如果你需要它同時觸發進程管理器的話才保留下面這行
-                # self._start_selected_strategy() 
             else:
                 self.get_logger().info("\033[91m[DIO] 物理開關關閉：STOP\033[0m")
-                # self._stop_strategy()
-                
-    # -------------------- Param Sync (optional) --------------------
-    def _sync_start_from_param(self):
-        """
-        同步內部狀態與外部 ROS 2 參數的回呼函式。
 
-        定期讀取節點參數 `start` 與 `mode`，並在偵測到參數異動時，
-        自動觸發對應策略的啟動或停止流程。
-
-        此函式實現了「參數驅動控制」，允許使用者透過 `ros2 param set` 
-        或 GUI 工具遠端切換機器人任務（如從自動導引切換至平衡木）。
-
-        Attributes Referenced:
-            _last_param_start (bool): 紀錄上一次的啟動參數狀態。
-            _last_param_mode (int): 紀錄上一次的模式參數狀態。
-            _selected_strategy (str): 根據模式編號映射後的策略代號。
-
-        Note:
-            * **防洗版機制 (Anti-spam)**：僅在參數值確實發生改變時才執行後續邏輯，避免重複觸發進程管理器。
-            * **模式映射**：目前預設編號為 0 (ar), 1 (bb), 2 (sp)。
-        """
-        start = bool(self.get_parameter("start").value)
-        mode = int(self.get_parameter("mode").value)
-
-        # avoid spamming
-        changed = (start != self._last_param_start) or (mode != self._last_param_mode)
-        if not changed:
-            return
-        self._last_param_start = start
-        self._last_param_mode = mode
-
-        # If you want param mode to map to strategy name, do it here:
-        # e.g. mode=0->ar,1->bb,2->sp
-        mode_map = {0: "ar", 1: "bb", 2: "sp"}
-        if mode in mode_map:
-            self._selected_strategy = mode_map[mode]
-
-        # mimic start/stop
-        if start:
-            self._start_selected_strategy()
-        else:
-            self._stop_strategy()
-
-    # -------------------- Plan B callbacks --------------------
-    def _publish_strategy_status(self, state: str): 
-        """       
-        發送當前策略狀態的格式化字串至 ROS 2 主題。
-
-        將內部的策略選擇狀態與進程管理器的運行狀態整合為一條字串訊息，
-        並發布至 `/strategy/status`。 這對於外部 UI 
-        監控機器人當前的任務切換情形至關重要。
-
-        Args:
-            state (str): 自定義的狀態描述詞（例如 "idle", "running", "error"）。
-
-        Note:
-            發布的字串格式為：`"{state}; selected={_selected_strategy}; running={current_name}"`。
-            其中 `running` 欄位來自 `StrategyProcessManager` 的即時查詢結果。
-        """
-        msg = String()
-        msg.data = f"{state}; selected={self._selected_strategy}; running={self._mgr.current_name()}"
-        self.strategy_status_pub.publish(msg)
-
-    def _on_strategy_name(self, msg: String):
-        """
-        處理策略名稱切換的回呼函式。
-
-        監聽來自 `/strategy/name` 主題的字串訊息，並更新內部的預選策略代號 
-        (`_selected_strategy`)。此動作僅更新標記，並不會立即啟動進程。
-
-        Args:
-            msg (String): 包含策略代號（如 "ar", "bb", "sp"）的 ROS 2 字串訊息。
-
-        Note:
-            * **輸入清洗**：使用 `.strip()` 去除字串前後的空白或換行符號，防止比對失敗。
-            * **空值保護**：若收到的訊息內容為空，則直接忽略，維持目前的預選狀態。
-            * **狀態廣播**：更新成功後會呼叫 `_publish_strategy_status` 同步外部狀態。
-        """
-        name = msg.data.strip()
-        if not name:
-            return
-        self._selected_strategy = name
-        self.get_logger().info(f"[strategy] selected = {name}")
-        self._publish_strategy_status("selected")
-
-    def _on_strategy_start(self, msg: Bool):
-        """
-        處理策略啟動與停止指令的回呼函式。
-
-        監聽來自 `/strategy/start` 主題的布林訊息。當收到 `True` 時，
-        會嘗試啟動目前預選的策略進程；收到 `False` 時則終止當前運行的策略。
-
-        此函式是外部指令進入系統執行層的關鍵入口，實現了策略的遠端啟動功能。
-
-        Args:
-            msg (Bool): ROS 2 標準布林訊息包。
-                - `True`: 呼叫 `_start_selected_strategy()` 執行任務。
-                - `False`: 呼叫 `_stop_strategy()` 停止任務。
-
-        Note:
-            啟動前必須先透過 `_on_strategy_name` 選定策略名稱，否則啟動可能會因找不到對應功能包而失敗。
-        """
-        if msg.data:
-            self._start_selected_strategy()
-        else:
-            self._stop_strategy()
-
-    def _start_selected_strategy(self):
-        """
-        執行目前預選的機器人策略進程。
-
-        根據 `_selected_strategy` 的內容，從 `_strategy_map` 中檢索對應的 
-        ROS 2 功能包與執行檔名稱，並透過 `StrategyProcessManager` 啟動該進程。
-
-        此函式包含完整的校驗與錯誤處理機制，確保在啟動失敗時能及時回報狀態。
-
-        Raises:
-            Exception: 若 `StrategyProcessManager` 在啟動進程時發生系統錯誤，會被內部捕捉並記錄。
-
-        Note:
-            * **白名單校驗**：若預選名稱不在 `_strategy_map` 中，將視為未知任務並終止啟動。
-            * **狀態反饋**：啟動成功會發布 "running" 狀態；失敗或無效則發布 "error"。
-            * **自動切換**：`StrategyProcessManager` 內部會處理「先停後開」的邏輯，此處僅負責發起啟動請求。
-        """
-        name = self._selected_strategy
-        if name not in self._strategy_map:
-            self.get_logger().error(f"[strategy] unknown: {name}")
-            self._publish_strategy_status("error")
-            return
-
-        pkg, exe = self._strategy_map[name]
-        try:
-            self._mgr.start(name=name, ros2_pkg=pkg, ros2_exec=exe)
-            self.get_logger().info(f"[strategy] started: {name}")
-            self._publish_strategy_status("running")
-        except Exception as e:
-            self.get_logger().error(f"[strategy] start failed: {e}")
-            self._publish_strategy_status("error")
-
-    def _stop_strategy(self):
-        """
-        停止當前正在執行的機器人策略進程。
-
-        透過 `StrategyProcessManager` 向背景進程發送終止訊號。
-        此函式確保系統在切換任務或遭遇緊急狀況時，能回收系統資源並停止馬達控制指令。
-
-        此函式包含例外處理機制，防止因進程無法終止而導致 API 主節點崩潰。
-
-        Raises:
-            Exception: 若在執行 `_mgr.stop()` 過程中發生系統級錯誤，會被內部捕捉並記錄。
-
-        Note:
-            * **優雅終止**：底層管理器通常先發送 `SIGINT` (Ctrl+C)，若超時則發送 `SIGKILL` 強制結束。
-            * **狀態回報**：執行成功後會發布 "stopped" 狀態；若發生異常則回報 "error"。
-        """
-        try:
-            self._mgr.stop()
-            self.get_logger().info("[strategy] stopped")
-            self._publish_strategy_status("stopped")
-        except Exception as e:
-            self.get_logger().error(f"[strategy] stop failed: {e}")
-            self._publish_strategy_status("error")
-
-    # -------------------- existing helpers / callbacks --------------------
     def sendBodyAutoCmd(self, x: float=0, y: float=0, theta: float=0, walking_mode: int = 0) -> None:
         """
         發送步態步長數值，同時啟動步態。
@@ -550,7 +588,7 @@ class API(Node):
             y (float, optional): 左右平移步長。正值代表向左，負值代表向右。預設為 0。
             theta (float, optional): 旋轉角度。正值代表左轉，負值代表右轉。預設為 0。
             walking_mode (int, optional): 步態模式編號。用於切換不同的行走模式。預設為 0。
-            
+
                 * **0 (連續步態)**
                 * **1 (上板步態)**
                 * **2 (下板步態)**
@@ -558,19 +596,24 @@ class API(Node):
         Returns:
             None
 
+        Note:
+            * **可以給小數**：三個步長皆為浮點數，例如 ``theta=2.5``。
+              整數傳入也沒問題，函式內部會自行轉型。
+
         Example:
             >>> # 讓機器人以前進步長 300 穩定行走
             >>> api.sendBodyAutoCmd(x=300, y=0, theta=0, walking_mode=0)
             >>>
-            >>> # 讓機器人向左轉彎同時前進
-            >>> api.sendBodyAutoCmd(x=200, theta=5)
+            >>> # 讓機器人向左轉彎同時前進（可用小數微調轉向）
+            >>> api.sendBodyAutoCmd(x=200, theta=2.5)
             >>>
             >>> # 執行上板步態
             >>> api.sendBodyAutoCmd(x=20000, walking_mode=1)
 
         """
         m = Interface()
-        m.x, m.y, m.theta = int(x), int(y), int(theta)
+        # float()：訊息欄位是 float64，rclpy 不接受 int，而既有策略大多傳整數
+        m.x, m.y, m.theta = float(x), float(y), float(theta)
         m.walking_mode = walking_mode
         self.body_auto_pub.publish(m)
         n = Int16()
@@ -685,6 +728,9 @@ class API(Node):
         self.object_x_max = [[] for _ in self.COLORS]
         self.object_y_min = [[] for _ in self.COLORS]
         self.object_y_max = [[] for _ in self.COLORS]
+        self.object_cx = [[] for _ in self.COLORS]
+        self.object_cy = [[] for _ in self.COLORS]
+        self.object_ratio = [[] for _ in self.COLORS]
 
         for idx, color in enumerate(self.COLORS):
             lst = self.latest_objects.get(color, [])
@@ -701,6 +747,97 @@ class API(Node):
                 self.object_x_max[idx].append(int(x + w))
                 self.object_y_min[idx].append(int(y))
                 self.object_y_max[idx].append(int(y + h))
+                cx, cy = o.get('centroid', (x + w // 2, y + h // 2))
+                self.object_cx[idx].append(int(cx))
+                self.object_cy[idx].append(int(cy))
+                self.object_ratio[idx].append(
+                    float(o.get('aspect_ratio', (w / h) if h else 0.0)))
+
+    # -------------------- 深度 / 疊合 --------------------
+    def _fill_stats(self, labels, latest, counts, sizes, x_min, x_max, y_min, y_max,
+                    cx_l, cy_l, ratio_l, cm_l, cm_min_l, cm_max_l, tag):
+        """把 detections JSON 攤平成與色模相同形狀的平行清單。
+
+        深度與疊合的 JSON 欄位與色模完全相同，只是多了 distance_* 三個欄位，
+        所以這裡用同一套邏輯處理，避免三份幾乎一樣的程式碼。
+        """
+        for lst in (sizes, x_min, x_max, y_min, y_max, cx_l, cy_l, ratio_l,
+                    cm_l, cm_min_l, cm_max_l):
+            for i in range(len(labels)):
+                lst[i] = []
+
+        for idx, name in enumerate(labels):
+            objs = latest.get(name, [])
+            counts[idx] = len(objs)
+            for o in objs:
+                try:
+                    x, y, w, h = o['bbox']
+                    area = float(o.get('area', float(w * h)))
+                except Exception as ex:
+                    self.get_logger().warn(f"[{tag}] Malformed object for {name}: {ex}")
+                    continue
+                sizes[idx].append(area)
+                x_min[idx].append(int(x))
+                x_max[idx].append(int(x + w))
+                y_min[idx].append(int(y))
+                y_max[idx].append(int(y + h))
+                cx, cy = o.get('centroid', (x + w // 2, y + h // 2))
+                cx_l[idx].append(int(cx))
+                cy_l[idx].append(int(cy))
+                ratio_l[idx].append(float(o.get('aspect_ratio', (w / h) if h else 0.0)))
+                # 色模沒有距離欄位，缺的時候補 -1 以維持與其他清單等長
+                cm_l[idx].append(int(o.get('distance_cm', -1)))
+                cm_min_l[idx].append(int(o.get('distance_min_cm', -1)))
+                cm_max_l[idx].append(int(o.get('distance_max_cm', -1)))
+
+    def _recompute_distance_stats(self) -> None:
+        """重算 D1~D8 的統計，欄位形狀與色模一致。"""
+        self._fill_stats(
+            self.DISTANCES, self.latest_depth_objects, self.distance_counts,
+            self.distance_sizes, self.distance_x_min, self.distance_x_max,
+            self.distance_y_min, self.distance_y_max, self.distance_cx,
+            self.distance_cy, self.distance_ratio, self.distance_cm,
+            self.distance_min_cm, self.distance_max_cm, "depth")
+
+    def _recompute_overlap_stats(self) -> None:
+        """重算 Set1~Set8 的統計，欄位形狀與色模一致。"""
+        self._fill_stats(
+            self.SETS, self.latest_overlap_objects, self.overlap_counts,
+            self.overlap_sizes, self.overlap_x_min, self.overlap_x_max,
+            self.overlap_y_min, self.overlap_y_max, self.overlap_cx,
+            self.overlap_cy, self.overlap_ratio, self.overlap_cm,
+            self.overlap_min_cm, self.overlap_max_cm, "overlap")
+
+    def _json_det_callback(self, msg, label, latest, stamps, recompute):
+        """detections JSON 的共用解析（色模以外的兩套共用）。"""
+        try:
+            data = json.loads(msg.data)
+            st = data.get('stamp', {})
+            cur = (int(st.get('sec', 0)), int(st.get('nanosec', 0)))
+            if not self._is_newer_stamp(cur, stamps.get(label, (0, 0))):
+                return False
+            objs = data.get('objects', [])
+            latest[label] = objs if isinstance(objs, list) else []
+            stamps[label] = cur
+            recompute()
+            return True
+        except Exception as e:
+            self.get_logger().error(f'[det] {label} parse error: {e}')
+            return False
+
+    def _depth_det_callback(self, msg: String, label: str) -> None:
+        """/depth_detections/{D1~D8} 的回呼。"""
+        if self._json_det_callback(msg, label, self.latest_depth_objects,
+                                   self.latest_depth_stamps,
+                                   self._recompute_distance_stats):
+            self.new_distance_info = True
+
+    def _overlap_det_callback(self, msg: String, label: str) -> None:
+        """/overlap_detections/{Set1~Set8} 的回呼。"""
+        if self._json_det_callback(msg, label, self.latest_overlap_objects,
+                                   self.latest_overlap_stamps,
+                                   self._recompute_overlap_stats):
+            self.new_overlap_info = True
 
     def _det_callback(self, msg: String, label: str) -> None:
         """
@@ -824,26 +961,131 @@ class API(Node):
         self.yaw = msg.yaw
         self.imu_rpy = [self.roll, self.pitch, self.yaw]
 
-    def Yolo_Zed(self, msg: Point) -> None:
+    def setZoomIn(self, value: float = 1.0) -> None:
         """
-        處理 YOLO 與 ZED 相機整合後的空間定位數據回呼函式。
+        設定影像的裁切放大倍率。
 
-        接收來自視覺偵測節點的 3D 座標訊息，並將其同步至內部的姿態變數中。
-        這些數據代表目標物相對於機器人相機座標系的實際物理位置 (x, y, z)。
+        以畫面中心為基準裁切出 1/value 大小的區域，再放大回原本的解析度，
+        效果等同於數位變焦。色模、深度、疊合三套系統會同時跟著改，
+        所以放大後三邊的座標仍然彼此對齊。
 
         Args:
-            msg (Point): 包含 `x` (左右偏移)、`y` (前後距離/深度) 與 
-                         `z` (上下高度) 的空間點位數據。
+            value (float, optional): 放大倍率，範圍 1.0 ~ 5.0。預設為 1.0。
+                1.0 表示不裁切（完整視野），數值越大視野越窄、目標越大。
+                超出範圍會自動夾到邊界。
+
+        Returns:
+            None
 
         Note:
-            * **座標映射**：根據 ZED 的標準，`x` 通常代表水平偏移，`y` 代表物體距離，`z` 代表物體高度。
-            * **資料同步**：函式會同步更新獨立的 `pose_x/y/z` 與整合後的 `pose` 清單。
-            * **應用場景**：常用於自動導引 (AR) 任務中精確追蹤目標物或避障。
+            * **與網頁共用**：這裡送出的值等同於在影像處理介面拉 ZoomIn 滑桿，
+              網頁上的數字不會自動跟著跳，但機器人實際吃到的是最後送出的那個。
+            * **不會寫進 ini**：只改當下的執行狀態，重開節點後會回到 ini 裡的設定值。
+            * **視野會變窄**：放大後畫面邊緣的物體會直接消失在視野外，
+              追蹤目標時建議搭配頭部轉動使用。
+
+        Example:
+            >>> # 遠處的球太小，放大兩倍看清楚
+            >>> api.setZoomIn(2.0)
+            >>>
+            >>> # 找不到目標時退回完整視野
+            >>> api.setZoomIn(1.0)
         """
-        self.pose_x = msg.x
-        self.pose_y = msg.y
-        self.pose_z = msg.z
-        self.pose = [self.pose_x, self.pose_y, self.pose_z]
+        n = Zoom()
+        # float()：欄位是 float32，rclpy 不收 int；夾範圍是因為 image.py 直接
+        # 拿 width / zoom，傳 0 會讓它每一幀都噴 ZeroDivisionError
+        n.zoomin = self._clamp(float(value), 1.0, 5.0)
+        self.zoomin_pub.publish(n)
+
+    # -------------------- 深度值查詢 --------------------
+    def _depth_mm_cb(self, msg: RosImage) -> None:
+        """快取 /depth_mm（裁切對齊後的公釐深度圖），供 depth_at() 使用。"""
+        try:
+            self._depth_mm = self._bridge.imgmsg_to_cv2(msg, desired_encoding='mono16')
+        except Exception as e:
+            self.get_logger().error(f"[depth_mm] convert failed: {e}")
+
+    def depth_at(self, x: int, y: int, radius: int = 5) -> Optional[float]:
+        """查詢影像上任一點的深度，單位公分。
+
+        預設取該點周圍 (2*radius+1) 見方鄰域的**中位數**而非單一像素值。
+        ZED 深度圖有不少單像素的洞與雜訊，直接取單點很容易剛好打在無效值上，
+        中位數對這兩者都免疫。
+
+        Args:
+            x (int): 影像 X 座標，範圍 0~960（與 object_x_min 等同一座標系）。
+            y (int): 影像 Y 座標，範圍 0~600。
+            radius (int): 取樣半徑。0 表示只取該點；預設 5 即 11x11 鄰域。
+
+        Returns:
+            float | None: 距離（公分）。座標超出範圍、尚未收到深度圖、
+            或鄰域內全是無效值時回傳 None。
+
+        Example:
+            >>> # 查一個色模物體中心的距離
+            >>> cx = api.object_cx[api.RED][0]
+            >>> cy = api.object_cy[api.RED][0]
+            >>> d = api.depth_at(cx, cy)
+            >>> if d is not None and d < 80:
+            >>>     print("紅色目標在 80 公分內")
+        """
+        img = self._depth_mm
+        if img is None:
+            return None
+        h, w = img.shape[:2]
+        x, y = int(x), int(y)
+        if not (0 <= x < w and 0 <= y < h):
+            return None
+
+        r = max(0, int(radius))
+        x0, x1 = max(0, x - r), min(w, x + r + 1)
+        y0, y1 = max(0, y - r), min(h, y + r + 1)
+        roi = img[y0:y1, x0:x1]
+
+        valid = roi[roi > 0]          # 0 代表無效（NaN/超出範圍已在上游歸零）
+        if valid.size == 0:
+            return None
+        return float(np.median(valid)) / 10.0     # 公釐 -> 公分
+
+    # -------------------- ZED IMU --------------------
+    def _zed_imu_cb(self, msg: ZedImu) -> None:
+        """/zed_imu/data 的回呼，來源是 zed_imu_node。"""
+        self.zed_imu_rpy = [msg.roll, msg.pitch, msg.yaw]
+        self.zed_imu_abs_rpy = [msg.abs_roll, msg.abs_pitch, msg.abs_yaw]
+        self.zed_gyro = list(msg.angular_velocity)
+        self.zed_accel = list(msg.linear_acceleration)
+        self.zed_imu_zeroed = bool(msg.zeroed)
+
+    def sendZedSensorReset(self) -> None:
+        """將 ZED IMU 目前的姿態設為零點。
+
+        與 sendSensorReset()（Arduino IMU）互不影響，兩顆感測器各自歸零。
+        歸零後 zed_imu_rpy 會變成 0，zed_imu_abs_rpy 則維持絕對值不變。
+        """
+        msg = SensorSet()
+        msg.reset = True
+        self.zed_imu_reset_pub.publish(msg)
+
+    # -------------------- ZED 里程計 --------------------
+    def _odom_cb(self, msg: Odometry) -> None:
+        """/zed/zed_node/odom 的回呼，把位移換算成公分、朝向換算成度。"""
+        p = msg.pose.pose.position
+        self.odom_xyz = [p.x * 100.0, p.y * 100.0, p.z * 100.0]
+
+        q = msg.pose.pose.orientation
+        siny = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        self.odom_yaw = math.degrees(math.atan2(siny, cosy))
+
+    def sendOdomReset(self) -> None:
+        """把 ZED 視覺里程計歸零（呼叫 /zed/zed_node/reset_odometry）。
+
+        非阻塞：服務尚未就緒時只記錄警告，不會卡住策略主迴圈。
+        """
+        if not self.odom_reset_cli.service_is_ready():
+            self.get_logger().warn("[odom] reset_odometry 服務尚未就緒")
+            return
+        self.odom_reset_cli.call_async(Trigger.Request())
 
     def sendSensorReset(self, status: bool) -> None:
         """
@@ -867,7 +1109,7 @@ class API(Node):
             >>> api.sendSensorReset(True)
         """
         rst = SensorSet()
-        rst.reset = status
+        rst.reset = bool(status)
         self.imu_reset_pub.publish(rst)
 
     def sendbodyAuto(self, generate: int) -> None:
@@ -896,10 +1138,10 @@ class API(Node):
             >>> api.sendbodyAuto(1)
         """
         m = Int16()
-        m.data = generate
+        m.data = int(generate)
         self.generate_pub.publish(m)
 
-    def sendContinuousValue(self, x: int, y: int, theta: int, walking_mode: int = 0) -> None:
+    def sendContinuousValue(self, x: float, y: float, theta: float, walking_mode: int = 0) -> None:
         """
         發送連續移動步長數值。
 
@@ -908,9 +1150,9 @@ class API(Node):
         與 **[sendBodyAutoCmd]** 不同，此函式不會發送啟動步態訊號，僅更新底層緩存的步長數值。
 
         Args:
-            x (int): 前後移動步長。
-            y (int): 左右移動步長。
-            theta (int): 旋轉角度。
+            x (float): 前後移動步長。
+            y (float): 左右移動步長。
+            theta (float): 旋轉角度。
             walking_mode (int, optional): 步態模式編號。預設為 0。
 
         Returns:
@@ -918,15 +1160,17 @@ class API(Node):
 
         Note:
             * **依賴性**：呼叫此函式前，通常需要先透過 **[sendbodyAuto(1)]** 啟動步態，機器人才會根據這些參數開始移動。
+            * **可以給小數**：三個步長皆為浮點數，整數傳入也沒問題，函式內部會自行轉型。
 
         Example:
             >>> # 1.先啟動步態引擎 (原地踏步)
             >>> api.sendbodyAuto(1)
-            >>> # 2. 給予移動步長
-            >>> api.sendContinuousValue(x=300, y=-100, theta=3)
+            >>> # 2. 給予移動步長（可用小數微調）
+            >>> api.sendContinuousValue(x=300, y=-100, theta=2.5)
         """
         m = Interface()
-        m.x, m.y, m.theta = x, y, theta
+        # float()：訊息欄位是 float64，rclpy 不接受 int
+        m.x, m.y, m.theta = float(x), float(y), float(theta)
         m.walking_mode = walking_mode # 寫入
         self.continous_pub.publish(m)
 
@@ -951,7 +1195,7 @@ class API(Node):
 
         """
         m = Int16()
-        m.data = sector
+        m.data = int(sector)
         self.sector_pub.publish(m)
 
     def sendSingleMotor(self, ID: int, Position: int, Speed: int) -> None:
@@ -978,7 +1222,7 @@ class API(Node):
             >>> api.sendSingleMotor(9,50,15)
         """
         m = SingleMotorData()
-        m.id, m.position, m.speed = ID, Position, Speed
+        m.id, m.position, m.speed = int(ID), int(Position), int(Speed)
         self.singlemotor_pub.publish(m)
 
         
@@ -1007,7 +1251,7 @@ class API(Node):
             >>> api.sendSingleMotor(9,2048,15)
         """
         m = SingleMotorData()
-        m.id, m.position, m.speed = ID, Position, Speed
+        m.id, m.position, m.speed = int(ID), int(Position), int(Speed)
         self.SingleAbsolutePosition_pub.publish(m)        
 
     def sendHeadMotor(self, ID: int, Position: int, Speed: int) -> None:
@@ -1034,7 +1278,7 @@ class API(Node):
             >>> api.sendHeadMotor(1,2048,100)
         """
         m = HeadPackage()
-        m.id, m.position, m.speed = ID, Position, Speed
+        m.id, m.position, m.speed = int(ID), int(Position), int(Speed)
         self.head_motor_pub.publish(m)
 
     def drawImageFunction(self, cnt: int, mode: int,
@@ -1081,6 +1325,23 @@ class API(Node):
         img.thickness = int(thickness)
         self.draw_image_pub.publish(img)
 
+    def clearDrawImage(self) -> None:
+        """清除畫面上所有由 :meth:`drawImageFunction` 產生的圖形。
+
+        影像節點是以 ``cnt`` 為鍵累積繪圖資料的，策略結束後圖形會一直留在畫面上。
+        建議在策略停止時呼叫一次，以免殘留的圖形干擾下一個任務的判讀 ——
+        切換 strategy **不會**自動清除，圖形會一直保留到有人明確清掉為止。
+
+        網頁的 Clear Draw 按鈕走的是同一個介面。
+
+        Example:
+            >>> # 在策略結束前清乾淨
+            >>> api.clearDrawImage()
+        """
+        msg = Bool()
+        msg.data = True
+        self.draw_clear_pub.publish(msg)
+
     def sendWalkParameter(self,
             mode: int,
             com_y_swing: float,
@@ -1108,14 +1369,16 @@ class API(Node):
             com_height (float): 質心高度。
         """
         msg = Parameter()
-        msg.mode = mode
-        msg.com_y_swing = com_y_swing
-        msg.width_size = width_size
-        msg.period_t = period_t
-        msg.t_dsp = t_dsp
-        msg.lift_height = lift_height
-        msg.stand_height = stand_height
-        msg.com_height = com_height
+        # 這幾個是 float64 欄位，rclpy 不收 int。策略很自然會寫 com_y_swing=0，
+        # 沒有這層轉型會直接 AssertionError
+        msg.mode = int(mode)
+        msg.com_y_swing = float(com_y_swing)
+        msg.width_size = float(width_size)
+        msg.period_t = int(period_t)
+        msg.t_dsp = float(t_dsp)
+        msg.lift_height = float(lift_height)
+        msg.stand_height = float(stand_height)
+        msg.com_height = float(com_height)
         self.walkparameter_pub.publish(msg)
 
     def sendLCWalkParameter(self,

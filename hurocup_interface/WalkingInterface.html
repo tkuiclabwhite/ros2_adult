@@ -14,7 +14,7 @@
     	    	padding: 10px;
         		margin: 10px;
 				width: 31%;
-				height: 500px;
+				height: 600px;
 				border: 2px black solid;
 				color: white;
        		}
@@ -136,6 +136,12 @@
 			name: '/locationBack',
 			messageType: 'tku_msgs/msg/Location'
 		});
+		// /locationBack 由 image_node 與 walking_web_bridge 各發一次，內容相同但到達
+		// 順序不保證。延遲一小段再重讀參數：既可合併兩則重複訊息，也確保
+		// walking_web_bridge 已經把 current_save_path 切到新策略的參數檔。
+		var lastLoadedLocation = null;
+		var locationReloadTimer = null;
+
 		locationBack_Subscriber.subscribe(function (msg) {
 			console.log("locationBack:", msg.data);
 			let loc = msg.data;
@@ -161,6 +167,19 @@
 					}
 				}
 			}
+
+			// 切換 strategy 等於換了參數檔，數值必須重讀。
+			// 原本只有 sr <-> 非sr 之間（上面那條 ContinuousFun 路徑）才會重讀，
+			// ar -> bb 這種同類切換完全不會觸發。
+			const data = msg.data;
+			if (locationReloadTimer) { clearTimeout(locationReloadTimer); }
+			locationReloadTimer = setTimeout(function () {
+				if (data !== lastLoadedLocation) {
+					lastLoadedLocation = data;
+					console.log("strategy 切換，重讀走路參數:", data);
+					Load();
+				}
+			}, 300);
 		});
 
 		var SendBodyAuto_Topic = new ROSLIB.Topic({
@@ -262,6 +281,25 @@
 			reset: false,
 		});
 
+		// ZED 視覺里程計（驗證用）。注意這是「相機」的位移，而相機在頭部雲台上，
+		// 只轉頭不移動時數值也會變化 —— 目前僅供觀察，尚未做頭部補償。
+		var ZedOdom_Subscriber = null;
+		var ZedOdomReset_Client = new ROSLIB.Service({
+			ros: ros,
+			name: '/zed/zed_node/reset_odometry',
+			serviceType: 'std_srvs/Trigger'
+		});
+
+		// ZED IMU 歸零：沿用與上面同一個 SensorSet 型別，只是走不同 topic
+		var ZedSensorSet_Publisher = new ROSLIB.Topic({
+			ros: ros,
+			name: '/zed_sensorset',
+			messageType: 'tku_msgs/SensorSet'
+		});
+		var ZedSensorSet_msg = new ROSLIB.Message({
+			reset: false,
+		});
+
 		var LoadWalkingGaitParameterClient = new ROSLIB.Service({
 			ros: ros,
 			name: '/web/LoadWalkingGaitParameter',
@@ -273,6 +311,7 @@
 
 		//-----
 		var SensorPackage_Subscriber = null;
+		var ZedImu_Subscriber = null;
 
 		var connectFlag = false;
 		var myAddress = window.ROBOT_CONFIG.ip;
@@ -328,6 +367,68 @@
 				document.getElementById("Pitch").value = parseInt(msg.pitch);
 				document.getElementById("Yaw").value   = parseInt(msg.yaw);
 			});
+
+			// ZED 內建 IMU（zed_imu_node 已降頻到 20Hz，這裡直接照收）
+			try {
+			if(ZedImu_Subscriber != null)
+			{
+				ZedImu_Subscriber.unsubscribe();
+			}
+			ZedImu_Subscriber = new ROSLIB.Topic({
+			ros: ros,
+			name: '/zed_imu/data',
+			messageType: 'tku_msgs/ZedImu'
+			});
+			ZedImu_Subscriber.subscribe(function (msg)
+			{
+				// 全程包 try/catch：ZED IMU 是附加功能，它出問題不該影響
+				// 同一條 websocket 上的其他 topic（例如 /locationBack）
+				try {
+					var setv = function(id, v) {
+						var el = document.getElementById(id);
+						if (el) { el.value = v; }
+					};
+					setv("ZedRoll",  msg.roll.toFixed(1));
+					setv("ZedPitch", msg.pitch.toFixed(1));
+					setv("ZedYaw",   msg.yaw.toFixed(1));
+					setv("ZedGyroX", msg.angular_velocity[0].toFixed(1));
+					setv("ZedGyroY", msg.angular_velocity[1].toFixed(1));
+					setv("ZedGyroZ", msg.angular_velocity[2].toFixed(1));
+					setv("ZedAccX",  msg.linear_acceleration[0].toFixed(2));
+					setv("ZedAccY",  msg.linear_acceleration[1].toFixed(2));
+					setv("ZedAccZ",  msg.linear_acceleration[2].toFixed(2));
+				} catch (e) {
+					console.warn("ZedImu 更新失敗:", e);
+				}
+			});
+			} catch (e) {
+				console.warn("ZedImu 訂閱失敗（tku_msgs 是否已重新 build？）:", e);
+			}
+
+			try {
+			if(ZedOdom_Subscriber != null) { ZedOdom_Subscriber.unsubscribe(); }
+			ZedOdom_Subscriber = new ROSLIB.Topic({
+			ros: ros,
+			name: '/zed/zed_node/odom',
+			messageType: 'nav_msgs/Odometry',
+			throttle_rate: 100
+			});
+			ZedOdom_Subscriber.subscribe(function (msg) {
+				try {
+					var p = msg.pose.pose.position, q = msg.pose.pose.orientation;
+					var siny = 2.0 * (q.w * q.z + q.x * q.y);
+					var cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+					var yaw = Math.atan2(siny, cosy) * 180.0 / Math.PI;
+					var setv = function(id, v) { var e = document.getElementById(id); if (e) { e.value = v; } };
+					setv("OdomX",   (p.x * 100).toFixed(1));
+					setv("OdomY",   (p.y * 100).toFixed(1));
+					setv("OdomZ",   (p.z * 100).toFixed(1));
+					setv("OdomYaw", yaw.toFixed(1));
+				} catch (e) { console.warn("Odom 更新失敗:", e); }
+			});
+			} catch (e) {
+				console.warn("Odom 訂閱失敗:", e);
+			}
 
 		}
 
@@ -449,13 +550,20 @@
 			SendBodyAutoFun();
 		}
 
+		// IMU_Control 選單若被註解掉就取不到，回傳 0 (No_IMU) 作為預設
+		function getIMUControlMode() {
+			var el = document.getElementById("IMU_Control");
+			return el ? el.value : 0;
+		}
+
 		function ChangeContinuousValueFun() {
 			Walkinggait_topic.x = Number(Xvaluetmp);
 			Walkinggait_topic.y = Number(Yvaluetmp);
 			Walkinggait_topic.z = 0;
 			Walkinggait_topic.theta = Number(Thetavaluetmp);
 			Walkinggait_topic.walking_mode = Number(statetype);
-			Walkinggait_topic.sensor_mode = Number(document.getElementById("IMU_Control").value);
+			// IMU_Control 選單目前被註解掉了，元素不存在時退回 0 (No_IMU) 而非拋錯
+			Walkinggait_topic.sensor_mode = Number(getIMUControlMode());
 			console.log(Walkinggait_topic.sensor_mode);
 			ChangeContinuousValue_Topic.publish(Walkinggait_topic);
 		}
@@ -466,7 +574,8 @@
 			Walkinggait_topic.z = 0;
 			Walkinggait_topic.theta = Number(Thetavaluetmp);
 			Walkinggait_topic.walking_mode = Number(statetype);
-			Walkinggait_topic.sensor_mode = Number(document.getElementById("IMU_Control").value);
+			// IMU_Control 選單目前被註解掉了，元素不存在時退回 0 (No_IMU) 而非拋錯
+			Walkinggait_topic.sensor_mode = Number(getIMUControlMode());
 			console.log(Walkinggait_topic.sensor_mode);
 			SendBodyAuto_Topic.publish(Walkinggait_topic);
 		}
@@ -524,12 +633,14 @@
 		}
 
 		function Load() {
-			if (document.getElementById("Continuousback").checked) {
-				Continuousback_msg.data = true;
-			} else {
-				Continuousback_msg.data = false;
+			// Continuousback 這個 checkbox 目前被註解掉了，getElementById 會回 null。
+			// 這裡若丟出例外，會中斷 ros 'connection' 的 listener 鏈，
+			// 讓頁面載入時排隊的 subscribe（例如 /locationBack）永遠送不出去。
+			var cb = document.getElementById("Continuousback");
+			if (cb) {
+				Continuousback_msg.data = cb.checked;
+				Continuousback_Topic.publish(Continuousback_msg);
 			}
-			Continuousback_Topic.publish(Continuousback_msg);
 
 			WalkingGaitParameter_request.mode = Number(statetype);
 
@@ -793,18 +904,18 @@
 		}
 		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 		
-		function changeContinuousback() 
-		{
-			if (document.getElementById("Continuousback").checked) {
-				Continuousback_msg.data = true;
-				console.log("checked");
-			}
-			else {
-				Continuousback_msg.data = false;
-				console.log("unchecked");
-			}
-			Continuousback_Topic.publish(Continuousback_msg);
-		}
+		// function changeContinuousback() 
+		// {
+		// 	if (document.getElementById("Continuousback").checked) {
+		// 		Continuousback_msg.data = true;
+		// 		console.log("checked");
+		// 	}
+		// 	else {
+		// 		Continuousback_msg.data = false;
+		// 		console.log("unchecked");
+		// 	}
+		// 	Continuousback_Topic.publish(Continuousback_msg);
+		// }
 
 		function SendSensorSet()
 		{
@@ -814,6 +925,20 @@
 			{
 				SensorSet_msg.reset = false;
 			}
+		}
+
+		function SendZedSensorSet()
+		{
+			ZedSensorSet_msg.reset = true;
+			ZedSensorSet_Publisher.publish(ZedSensorSet_msg);
+			ZedSensorSet_msg.reset = false;
+		}
+
+		function SendOdomReset()
+		{
+			ZedOdomReset_Client.callService(new ROSLIB.ServiceRequest({}), function (res) {
+				console.log("reset_odometry:", res.success, res.message);
+			});
 		}
 		window.addEventListener('DOMContentLoaded', function () {
 			let loc = window.currentStrategy || "";
@@ -910,14 +1035,14 @@
 			</table>
 		</div>
 		<div id="control" align="center" >
-			<section id="SensorValue" align="center" style="margin-left:calc(50% - 430px); float: left; min-width: 180px; max-width: 200px; width: 20%;">
+			<section id="SensorValue" align="center" style="margin-left:calc(50% - 430px); float: left; min-width: 205px; max-width: 210px; width: 20%;">
 				<b><h align="center"style="font-size: 23px">Sensor_Value</h></b>
-				<table>
+				<table style="width: 184px; text-align: left;">
 					<tr>
-						<td style="color:#888;font-size: 18px">IMU:</td>
+						<td style="color:#888;font-size: 18px" colspan="4">IMU:</td>
 					</tr>
 					<tr>
-						<td>Roll:</td>
+						<td style="width: 52px">Roll:</td>
 						<td><input type="text" name="Roll" id="Roll" value="0" style="width: 70px"></td>
 					</tr>
 					<tr>
@@ -931,7 +1056,65 @@
 				</table>
 				<button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 5px;display: inline-block;" onclick="SendSensorSet()">IMU reset</button>
 				</table>
-				
+
+				<!-- ZED 內建 IMU：獨立區塊，資料來自 zed_imu_node（僅 camera_source:=zed 時啟動）。
+				     Arduino IMU 只送 yaw/pitch/roll，沒有角速度與線加速度，故兩區欄位不對稱。 -->
+				<table style="width: 184px; text-align: left; margin-top: 12px;">
+					<tr>
+						<td style="color:#888;font-size: 18px" colspan="4">ZED:</td>
+					</tr>
+					<tr>
+						<td style="width: 52px">Roll:</td>
+						<td colspan="3"><input type="text" name="ZedRoll" id="ZedRoll" value="0" style="width: 70px"></td>
+					</tr>
+					<tr>
+						<td>Pitch:</td>
+						<td colspan="3"><input type="text" name="ZedPitch" id="ZedPitch" value="0" style="width: 70px"></td>
+					</tr>
+					<tr>
+						<td>Yaw:</td>
+						<td colspan="3"><input type="text" name="ZedYaw" id="ZedYaw" value="0" style="width: 70px"></td>
+					</tr>
+					<tr>
+						<td style="font-size: 13px">Gyro:</td>
+						<td><input type="text" id="ZedGyroX" value="0" style="width: 42px" title="deg/s X"></td>
+						<td><input type="text" id="ZedGyroY" value="0" style="width: 42px" title="deg/s Y"></td>
+						<td><input type="text" id="ZedGyroZ" value="0" style="width: 42px" title="deg/s Z"></td>
+					</tr>
+					<tr>
+						<td style="font-size: 13px">Accel:</td>
+						<td><input type="text" id="ZedAccX" value="0" style="width: 42px" title="m/s^2 X"></td>
+						<td><input type="text" id="ZedAccY" value="0" style="width: 42px" title="m/s^2 Y"></td>
+						<td><input type="text" id="ZedAccZ" value="0" style="width: 42px" title="m/s^2 Z"></td>
+					</tr>
+				</table>
+				<button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 5px;display: inline-block;" onclick="SendZedSensorSet()">ZED reset</button>
+
+				<!-- ZED 視覺里程計：驗證用。這是相機的位移，相機在頭部雲台上，
+				     只轉頭不走路數值也會變，且走路晃動會影響精度。勿讓策略依賴。 -->
+				<table style="width: 184px; text-align: left; margin-top: 12px;">
+					<tr>
+						<td style="color:#888;font-size: 18px" colspan="4">Odom:</td>
+					</tr>
+					<tr>
+						<td style="width: 52px">X:</td>
+						<td colspan="3"><input type="text" id="OdomX" value="0" style="width: 70px" title="公分"></td>
+					</tr>
+					<tr>
+						<td>Y:</td>
+						<td colspan="3"><input type="text" id="OdomY" value="0" style="width: 70px" title="公分"></td>
+					</tr>
+					<tr>
+						<td>Z:</td>
+						<td colspan="3"><input type="text" id="OdomZ" value="0" style="width: 70px" title="公分"></td>
+					</tr>
+					<tr>
+						<td>Yaw:</td>
+						<td colspan="3"><input type="text" id="OdomYaw" value="0" style="width: 70px" title="度"></td>
+					</tr>
+				</table>
+				<button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 5px;display: inline-block;" onclick="SendOdomReset()">Odom reset</button>
+
 			</section>
 			<section id="walkinggaitcontrol" style="float: left; margin-left: 0%; min-width: 320px; max-width: 400px; width: 35%;">
 				<form action="">
@@ -976,19 +1159,19 @@
 					<br>
 					<button type="button" style="width: 85px;height: 40px; margin: 2px; display: inline-block;" onclick="BackwardFun()">Backward</button>
 					<br>
-					<form>
+					<!-- <form>
 						<select id="IMU_Control" style="width: 80px;height: 25px;float: right;margin-top: 40px;">
 							<option value="0">No_IMU</option>
 							<option value="1">Y_IMU</option>
 							<option value="2">X_IMU</option>
 							<option value="3">ALL_IMU</option>
 						</select>
-					</form>
+					</form> -->
 				</form>
 			</section>
 			<section id="continuousstep" style="float: left; margin-left: 0%;  min-width: 300px; max-width: 350px; width: 33%;">
 				<b style="font-size: 25px;">Continuous Step</b>
-				&nbsp;&nbsp; <input type="checkbox" name="Continuousback" id="Continuousback" onclick="changeContinuousback()">Back
+				<!-- &nbsp;&nbsp; <input type="checkbox" name="Continuousback" id="Continuousback" onclick="changeContinuousback()">Back -->
 				<br /><br />
 				<table>
 					<tr>

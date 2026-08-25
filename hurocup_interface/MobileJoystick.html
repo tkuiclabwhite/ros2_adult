@@ -128,7 +128,7 @@
     object-fit: contain;
   }
 
-  #cameraToggleBtn {
+  #cameraSelect {
     position: fixed;
     top: 42px; right: 10px;
     z-index: 40;
@@ -140,7 +140,7 @@
     font-size: 13px;
   }
 
-  #cameraToggleBtn:active { opacity: 0.7; }
+  #cameraSelect:active { opacity: 0.7; }
 
   /* ---------- 開啟步態（常用，移到主畫面）+ 目前步長顯示 ---------- */
   #topLeftBar {
@@ -516,7 +516,13 @@
   <div id="cameraWrap">
     <img id="cameraImg" alt="camera stream">
   </div>
-  <button id="cameraToggleBtn">切換鏡頭</button>
+  <select id="cameraSelect">
+    <option value="0" selected>原始畫面</option>
+    <option value="1">色模</option>
+    <option value="2">深度</option>
+    <option value="3">深度處理</option>
+    <option value="4">疊合</option>
+  </select>
 
   <div id="topLeftBar">
     <button id="generateMainBtn">開啟步態</button>
@@ -696,37 +702,76 @@
     });
 
     // ===================================================================
-    // 相機畫面（zoom_in / processed_image 切換）
+    // 相機畫面：五路影像用下拉選單切換
+    //
+    //   stream  = web_video_server 要播的 topic
+    //   capture = 按拍照時要存的 topic。「原始畫面」看的是裁切放大後的 zoom_in，
+    //             但存檔要存真正未裁切的原圖，所以兩者不同。
+    //             'camera1/image_raw' 是 photo_capture_node 的別名，
+    //             usb / zed 兩種相機來源都會對應到各自正確的原始 topic。
     // ===================================================================
-    var cameraStreams = ['/zoom_in', '/processed_image'];
-    var cameraStreamNames = ['原始畫面', '色模'];
+    var CAMERA_VIEWS = [
+      { name: '原始畫面',   stream: '/zoom_in',                capture: 'camera1/image_raw' },
+      { name: '色模',       stream: '/processed_image',        capture: '/processed_image' },
+      { name: '深度',       stream: '/depth_view',             capture: '/depth_view' },
+      { name: '深度處理',   stream: '/depth_processed_image',  capture: '/depth_processed_image' },
+      { name: '疊合',       stream: '/overlap_image',          capture: '/overlap_image' }
+    ];
     var cameraIndex = 0;
 
-    function setCameraStream() {
-      var img = document.getElementById('cameraImg');
-      // 加時間戳讓每次切換的網址都不一樣，強迫瀏覽器當成全新資源重新連線
-      // （直接改 src 成同一個曾經用過的網址，有些瀏覽器會沿用舊的 MJPEG 連線狀態）
-      var url = 'http://' + window.ROBOT_CONFIG.ip + ':8080/stream?topic=' + cameraStreams[cameraIndex] + '&_=' + Date.now();
-      img.src = url;
-      document.getElementById('cameraModeName').textContent = '(' + cameraStreamNames[cameraIndex] + ')';
+    // 1x1 透明 GIF：拿來把 <img> 停在一個「已完成」的狀態
+    var BLANK_IMG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    var camSwitchTimer = null;
+
+    // MJPEG 是一條永遠不會結束的 HTTP 回應，所以「換掉 src」不保證瀏覽器會把
+    // 上一條連線收乾淨。連續快速切換時舊連線會一條條累積，一旦達到瀏覽器對
+    // 單一主機的並行上限（Chrome 是 6），之後所有新的影像請求都只會排隊等待，
+    // 畫面就再也不會出現 —— 這就是「切太快之後整個切不動」的原因。
+    // 把整個 <img> 節點換成新的才會確實中止舊請求。
+    function resetCameraImg() {
+      var old = document.getElementById('cameraImg');
+      old.onerror = null;
+      old.src = BLANK_IMG;
+      var fresh = old.cloneNode(false);
+      fresh.src = BLANK_IMG;
+      old.parentNode.replaceChild(fresh, old);
+      return fresh;
     }
-    document.getElementById('cameraToggleBtn').onclick = function () {
-      cameraIndex = (cameraIndex + 1) % cameraStreams.length;
+
+    function setCameraStream() {
+      var view = CAMERA_VIEWS[cameraIndex];
+      var img = resetCameraImg();
+      document.getElementById('cameraModeName').textContent = '(' + view.name + ')';
+
+      // 連線延後一拍再開，而且用同一個 timer。連按十次只會真的開一條連線，
+      // 也給瀏覽器時間把前一條收掉。
+      clearTimeout(camSwitchTimer);
+      camSwitchTimer = setTimeout(function () {
+        // 時間戳讓每次的網址都不一樣，避免瀏覽器沿用舊的 MJPEG 連線狀態
+        img.onerror = function () {
+          // 節點還在畫面上才重試，否則表示使用者又切走了
+          if (img.parentNode) setTimeout(setCameraStream, 1000);
+        };
+        img.src = 'http://' + window.ROBOT_CONFIG.ip + ':8080/stream?topic='
+                + view.stream + '&_=' + Date.now();
+      }, 150);
+    }
+
+    document.getElementById('cameraSelect').onchange = function () {
+      cameraIndex = Number(this.value) || 0;
       setCameraStream();
     };
     setCameraStream();
 
-    // 拍照：交給機器人上的 photo_capture_node.py 存檔。
-    // 畫面上看的是 zoom_in／processed_image，但拍照不要用 zoom_in，
-    // 「原始畫面」模式改成存 camera1/image_raw 這個真正的原始影像。
-    var captureTopics = ['camera1/image_raw', '/processed_image'];
+    // 拍照：交給機器人上的 photo_capture_node.py 存檔
     var CapturePhoto_Topic = new ROSLIB.Topic({
       ros: ros,
       name: '/capture_photo',
       messageType: 'std_msgs/String'
     });
     document.getElementById('takePhotoBtn').onclick = function () {
-      CapturePhoto_Topic.publish(new ROSLIB.Message({ data: captureTopics[cameraIndex] }));
+      CapturePhoto_Topic.publish(
+        new ROSLIB.Message({ data: CAMERA_VIEWS[cameraIndex].capture }));
       showPhotoToast('已送出拍照指令');
     };
 

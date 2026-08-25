@@ -8,7 +8,7 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Int16, Int16MultiArray, String
 
 from tku_msgs.msg import InterfaceSend2Sector, SaveMotion, SingleMotorData
-from tku_msgs.srv import CheckSector, ReadMotion
+from tku_msgs.srv import CheckSector, ReadMotion, TorqueState
 from rcl_interfaces.msg import SetParametersResult
 
 import configparser
@@ -31,6 +31,17 @@ class MotionNode(Node):
         # Publishers
         self.cmd_pub = self.create_publisher(JointState, '/joint_commands', 10)
         self.torque_pub = self.create_publisher(Int16MultiArray, '/set_torque', 10)
+
+        # 扭力狀態快取：訂閱 /set_torque 而非掛在封包解碼處，這樣連
+        # ImageProcessInterface 直接發布的頭部扭力指令也記錄得到。
+        # 開機時 driver_node 為了寫入 indirect address 必定會關閉每顆馬達的扭力，
+        # 故初始值全部視為 OFF。這是指令快取，不是硬體實際狀態。
+        self.MOTOR_ID_MAX = 29
+        self.torque_states = [0] * self.MOTOR_ID_MAX
+        self.torque_state_sub = self.create_subscription(
+            Int16MultiArray, '/set_torque', self.cb_torque_state, 10)
+        self.torque_state_srv = self.create_service(
+            TorqueState, '/package/GetTorqueState', self.cb_get_torque_state)
 
         # Subscribers
         self.joint_sub = self.create_subscription(JointState, '/joint_states', self.joint_state_cb, 10)
@@ -400,12 +411,33 @@ class MotionNode(Node):
     # ==========================================================
     # Read / Save / Callbacks
     # ==========================================================
+    def cb_torque_state(self, msg: Int16MultiArray):
+        """記錄每次扭力開關的結果。ID 0 代表全部馬達。"""
+        if len(msg.data) < 2:
+            return
+        motor_id, state = int(msg.data[0]), 1 if int(msg.data[1]) else 0
+        if motor_id == 0:
+            self.torque_states = [state] * self.MOTOR_ID_MAX
+        elif 1 <= motor_id <= self.MOTOR_ID_MAX:
+            self.torque_states[motor_id - 1] = state
+
+    def cb_get_torque_state(self, request, response):
+        """回傳扭力狀態快取，供網頁開啟時初始化介面。"""
+        del request
+        response.states = list(self.torque_states)
+        return response
+
     def cb_read_motion(self, request, response):
         home_path = os.path.expanduser("~")
         strategy_ini_path = os.path.join(home_path, "ros2_adult/src/strategy/strategy/strategy.ini")
 
+        # request.strategy 指定時，只是「借讀」別的策略的檔案（例如 Import Sector），
+        # 不應該切換本節點的策略，也不該觸發重載 —— 直接沿用 location_folder 以外的路徑即可。
+        borrow_strategy = (getattr(request, "strategy", "") or "").strip().strip("/")
+
+        # 借讀時完全不碰 strategy.ini，避免誤判成策略切換而觸發整批重載
         try:
-            if os.path.exists(strategy_ini_path):
+            if not borrow_strategy and os.path.exists(strategy_ini_path):
                 with open(strategy_ini_path, 'r', encoding='utf-8') as f:
                     content = f.read().strip()
 
@@ -445,7 +477,10 @@ class MotionNode(Node):
         if read_state == 1:
             base_path = self.stand_dir
         else:
-            base_path = os.path.join(home_path, "ros2_adult/src/strategy/strategy", self.location_folder, "Parameter")
+            folder = borrow_strategy or self.location_folder
+            if borrow_strategy:
+                self.get_logger().info(f"[Read] 借讀策略 '{borrow_strategy}'（不切換目前策略）")
+            base_path = os.path.join(home_path, "ros2_adult/src/strategy/strategy", folder, "Parameter")
 
         full_path = os.path.join(base_path, f"{filename}.ini")
         self.get_logger().info(f"[Read] 嘗試讀取檔案: {full_path}")

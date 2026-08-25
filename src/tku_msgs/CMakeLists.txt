@@ -32,6 +32,11 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Zoom.msg"
   "msg/OpenCvOrder.msg"
   "msg/YUVValue.msg"
+  "msg/DepthValue.msg"
+  "msg/OverlapValue.msg"
+  "msg/ZedCamera.msg"
+  "msg/ZedCameraSave.msg"
+  "msg/ZedImu.msg"
   ##########  walkingparameter/msg  ################
   "msg/Parameter.msg"
   "msg/Interface.msg"
@@ -60,8 +65,14 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SaveHSV.srv"
   "srv/Add.srv"
   "srv/CameraInfo.srv"
+  "srv/DepthInfo.srv"
+  "srv/OverlapInfo.srv"
+  "srv/ZedCameraInfo.srv"
+  "srv/SaveParam.srv"
+  "srv/BuildParam.srv"
   ##########  motionpackage/srv  ################
   "srv/ReadMotion.srv"
+  "srv/TorqueState.srv"
   "srv/CheckSector.srv"
   "srv/SendHandSpeed.srv"
   ##########  walkingparameter/srv  ################

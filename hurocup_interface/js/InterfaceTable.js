@@ -120,7 +120,7 @@ function NewRelativeSpeed() {
     .getElementsByClassName('inthesmallbox2')
     .length + 1;
 
-  // 定義要用到的 specialCols
+  // 欄位 i 對應馬達 ID + 1，故此清單即大顆馬達 ID 16~19、22~25
   var specialCols = [17, 18, 19, 20, 23, 24, 25, 26];
 
   // clamp helper
@@ -157,7 +157,8 @@ function NewRelativeSpeed() {
     if (i === 1) {
       input.value = -1;
     } else if (specialCols.includes(i)) {
-      input.value = 50;
+      // 大顆馬達（ID 16~19、22~25，欄位 i = ID + 1）預設速度較高
+      input.value = 3478;
     } else {
       input.value = 50;
     }
@@ -332,10 +333,9 @@ function NewAbsoluteSpeed() {
       // 原本第 2 欄 (i==1) 預設 -1
       input.value = -1;
     } else if (specialCols.includes(i)) {
-      // 在 specialCols 裡面的，設為 1000
-      input.value = 50;
+      // 大顆馬達（ID 16~19、22~25，欄位 i = ID + 1）預設速度較高
+      input.value = 3478;
     } else {
-      // 其餘欄位維持預設 10
       input.value = 50;
     }
 
@@ -693,18 +693,8 @@ for (let i = 1; i <= 27; i++) {
  * @param {number} id 馬達編號
  */
 function toggleTorqueAtPosition(id) {
-    motorTorqueStates[id] = motorTorqueStates[id] === 0 ? 1 : 0;
-    let newState = motorTorqueStates[id];
-
-    const btn = document.getElementById(`pos-btn-${id}`);
-    if (btn) {
-        if (newState === 1) {
-            btn.classList.add('torque-on');
-        } else {
-            btn.classList.remove('torque-on');
-        }
-    }
-
+    // 畫面更新統一由 SetSingleTorque 內的 refreshTorqueUI 負責，這裡只決定目標狀態
+    const newState = motorTorqueStates[id] === 1 ? 0 : 1;
     document.getElementById("single_motor_id").value = id;
     SetSingleTorque(newState);
 }

@@ -159,39 +159,41 @@
 			position: 511,
 			speed: 10
 		});
+		// ZED 相機參數：走 camera_param_bridge_node，由它轉成 /zed/zed_node 的 ROS parameter。
+		// ZED X Mini 不支援 brightness / contrast / hue，故改用下面這組。
 		var SaveCamera = new ROSLIB.Topic({
 			ros: ros,
-			name: '/Camera_Save',
-			messageType: 'tku_msgs/msg/CameraSave',   // ✅ 改成 ROS2 介面格式
+			name: '/ZedCamera_Save',
+			messageType: 'tku_msgs/msg/ZedCameraSave',
 			compress: false
 		});
 
 		var SaveCameraMsg = new ROSLIB.Message({
-			brightness: 0.5,
-			contrast: 0.5,
-			saturation: 0.5,
-			whitebalance: 0.5,
-			autowhitebalance: false,
-			auto_exposure: false,
-			zoomin : 1.0
-			// 如果你的 msg 裡有其他欄位記得補齊
+			auto_exposure_gain: true,
+			exposure: 80,
+			gain: 80,
+			auto_whitebalance: true,
+			whitebalance_temperature: 42,
+			saturation: 4,
+			denoising: 50,
+			gamma: 8,
+			zoomin: 1.0
 		});
-
 
 		var Camera = new ROSLIB.Topic({
 			ros: ros,
-			name: '/Camera_Topic',
-			messageType: 'tku_msgs/Camera'
+			name: '/ZedCamera_Topic',
+			messageType: 'tku_msgs/msg/ZedCamera'
 		});
 		var CameraMsg = new ROSLIB.Message({
-			brightness: 0.5,
-			contrast: 0.5,
-			saturation: 0.5,
-			whitebalance: 0.5,
-			autowhitebalance: false,
-			auto_exposure: false,
-			zoomin: 1.0
-			// autoBacklightCompensation: false
+			auto_exposure_gain: true,
+			exposure: 80,
+			gain: 80,
+			auto_whitebalance: true,
+			whitebalance_temperature: 42,
+			saturation: 4,
+			denoising: 50,
+			gamma: 8
 		});
 
 		var WebStart_Topic = new ROSLIB.Topic({
@@ -263,12 +265,92 @@
 
 		var CameraInfoClient = new ROSLIB.Service({
 			ros: ros,
-			name: '/CameraInfo',
-			serviceType: 'tku_msgs/CameraInfo'
+			name: '/ZedCameraInfo',
+			serviceType: 'tku_msgs/ZedCameraInfo'
 		});
 		var LoadCamerareqrest = new ROSLIB.ServiceRequest({
 			load: true
 		});
+
+		// ================= 深度模式 =================
+		var DepthBuildStatus_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/DepthBuildStatus',
+			messageType: 'std_msgs/Int16'
+		});
+		var DepthBuildStatus_msg = new ROSLIB.Message({ data: 0 });
+
+		var DepthValue_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/DepthValue_Topic',
+			messageType: 'tku_msgs/msg/DepthValue'
+		});
+		var DepthValue_msg = new ROSLIB.Message({ dmin: 10, dmax: 1000 });
+
+		var DepthClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/LoadDepthInfo',
+			serviceType: 'tku_msgs/DepthInfo'
+		});
+		var Depthreqrest = new ROSLIB.ServiceRequest({ distancelabel: "D1" });
+
+		var SaveDepthClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/SaveDepth',
+			serviceType: 'tku_msgs/SaveParam'
+		});
+		var BuildDepthClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/BuildDepthModel',
+			serviceType: 'tku_msgs/BuildParam'
+		});
+
+		// ================= 疊合模式 =================
+		var OverlapBuildStatus_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/OverlapBuildStatus',
+			messageType: 'std_msgs/Int16'
+		});
+		var OverlapBuildStatus_msg = new ROSLIB.Message({ data: 0 });
+
+		var OverlapValue_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/OverlapValue_Topic',
+			messageType: 'tku_msgs/msg/OverlapValue'
+		});
+		var OverlapValue_msg = new ROSLIB.Message({
+			setid: 1, color: "orange", distance: "D1", enable: false
+		});
+
+		var OverlapClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/LoadOverlapInfo',
+			serviceType: 'tku_msgs/OverlapInfo'
+		});
+		var Overlapreqrest = new ROSLIB.ServiceRequest({ setid: 1 });
+
+		var SaveOverlapClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/SaveOverlap',
+			serviceType: 'tku_msgs/SaveParam'
+		});
+		var BuildOverlapClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/BuildOverlapModel',
+			serviceType: 'tku_msgs/BuildParam'
+		});
+
+		var SaveParamreqrest = new ROSLIB.ServiceRequest({ save: true });
+		var BuildParamreqrest = new ROSLIB.ServiceRequest({ build: true });
+
+		// 清除影像上所有繪圖。影像節點是以 cnt 為鍵累積的，
+		// 策略停掉後圖形會一直留著，需要一個明確的清除入口。
+		var ClearDraw_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/drawimage/clear',
+			messageType: 'std_msgs/Bool'
+		});
+		var ClearDraw_msg = new ROSLIB.Message({ data: false });
 
 		var ZoomInTopic = new ROSLIB.Topic({
 			ros: ros,
@@ -293,13 +375,25 @@
 		var bmin = 0;
 		var bmax = 255;
 
-		var CamBrightnessValue = 1;
-		var CamContrastValue = 100;
-		var CamSaturationValue = 50;
-		var CamWhiteBalanceValue = 4000;
+		// ZED 相機參數目前值（whitebalance_temperature 為 28~65，ZED SDK 內部 x100）
+		var CamAutoExpGainValue = true;
+		var CamExposureValue = 80;
+		var CamGainValue = 80;
+		var CamAutoWBValue = true;
+		var CamWBTempValue = 42;
+		var CamSaturationValue = 4;
+		var CamDenoisingValue = 50;
+		var CamGammaValue = 8;
 		var ZoomIn = 1;
-		var CamautowhitebalanceValue = false;
-		var Camauto_exposureValue = false;
+
+		// 深度 / 疊合目前編輯中的對象
+		var DistanceSelect = "D1";
+		var dmin = 10;
+		var dmax = 1000;
+		var SetSelect = 1;
+		var SetColor = "orange";
+		var SetDistance = "D1";
+		var SetEnable = false;
 		var CamZoomInValue = 1.0;
 
 		function enterAddress() {
@@ -325,12 +419,12 @@
 			}						
 
 			// 所有影像流都改用 myAddress（不要再用 0.0.0.0）
-			document.getElementById("orign_image").src = "http://" + myAddress + ":8080/stream?topic=/zoom_in";
+			// 由切換函式依下拉選單目前的值決定 topic，避免兩邊寫死不同步
+			changeLeftView(document.getElementById("left-view-select").value);
+			changeRightView(document.getElementById("right-view-select").value);
 			// document.getElementById("orign_image").src = "http://" + myAddress + ":8080/stream?topic=/camera1/image_raw";
 			// document.getElementById("orign_image").src = "http://" + myAddress + ":8080/stream?topic=/zed/zed_node/rgb_raw/image_raw_color";
 			
-			// document.getElementById("filter_image").src = "http://" + myAddress + ":8080/stream?topic=/build_image";
-			document.getElementById("color_image").src = "http://" + myAddress + ":8080/stream?topic=/processed_image";
 
 			// document.getElementById("zoomin_image").src = "http://" + myAddress + ":8080/stream?topic=/zoom_in";
 			
@@ -360,40 +454,7 @@
     		// }
 			// loadOpenCvToUI();
 			// 这里可以根据需要发送请求或执行其他操作
-			CameraInfoClient.callService(LoadCamerareqrest, function (LoadCameraresult) {
-				console.log("white_balance: ", LoadCameraresult.white_balance);
-				console.log("auto_white_balance: ", LoadCameraresult.auto_white_balance);
-				console.log("auto_exposure: ", LoadCameraresult.auto_exposure);
-				console.log("zoom_in:",LoadCameraresult.zoomin);
-				console.log("LoadCameraresult: ", LoadCameraresult);
-				CamBrightnessValue = LoadCameraresult.brightness;
-				CamContrastValue = LoadCameraresult.contrast;
-				CamSaturationValue = LoadCameraresult.saturation;
-				CamWhiteBalanceValue = LoadCameraresult.white_balance;
-				CamautowhitebalanceValue = LoadCameraresult.auto_white_balance;
-				Camauto_exposureValue = LoadCameraresult.auto_exposure;
-				CamZoomInValue = parseFloat(parseFloat(LoadCameraresult.zoomin).toFixed(1));
-				document.getElementById("CamBrightness").value = CamBrightnessValue;
-				document.getElementById("CamBrightnessValue").value = CamBrightnessValue;
-				document.getElementById("CamContrast").value = CamContrastValue;
-				document.getElementById("CamContrastValue").value = CamContrastValue;
-				document.getElementById("CamSaturation").value = CamSaturationValue;
-				document.getElementById("CamSaturationValue").value = CamSaturationValue;
-				document.getElementById("CamWhiteBalance").value = CamWhiteBalanceValue;
-				document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
-				document.getElementById("AutoWhitBlance").checked = CamautowhitebalanceValue;
-				document.getElementById("auto_exposure").checked = Camauto_exposureValue;
-				document.getElementById("ZoomIn").value = CamZoomInValue;
-				document.getElementById("ZoomInValue").value = CamZoomInValue;
-				CameraMsg.brightness = Number(CamBrightnessValue);
-				CameraMsg.contrast = Number(CamContrastValue);
-				CameraMsg.saturation = Number(CamSaturationValue);
-				CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-				CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-				CameraMsg.auto_exposure = Camauto_exposureValue;
-				SaveCameraMsg.zoomin = Number(CamZoomInValue);
-				Camera.publish(CameraMsg);
-			});
+			CameraInfoClient.callService(LoadCamerareqrest, applyCameraInfo);
 		}
 
 		// function locationBack(){
@@ -408,43 +469,50 @@
 		
 		// http://0.0.0.0:8080/stream_viewer?topic=/image_raw
 
+		// 把 /ZedCameraInfo 回來的值套進 UI 與訊息，再推一次給相機
+		function applyCameraInfo(r) {
+			console.log("ZedCameraInfo:", r);
+			CamAutoExpGainValue = r.auto_exposure_gain;
+			CamExposureValue    = r.exposure;
+			CamGainValue        = r.gain;
+			CamAutoWBValue      = r.auto_whitebalance;
+			CamWBTempValue      = r.whitebalance_temperature;
+			CamSaturationValue  = r.saturation;
+			CamDenoisingValue   = r.denoising;
+			CamGammaValue       = r.gamma;
+			CamZoomInValue      = parseFloat(parseFloat(r.zoomin).toFixed(1));
+
+			const pairs = [
+				["CamExposure",   "CamExposureValue",   CamExposureValue],
+				["CamGain",       "CamGainValue",       CamGainValue],
+				["CamWBTemp",     "CamWBTempValue",     CamWBTempValue],
+				["CamSaturation", "CamSaturationValue", CamSaturationValue],
+				["CamDenoising",  "CamDenoisingValue",  CamDenoisingValue],
+				["CamGamma",      "CamGammaValue",      CamGammaValue],
+				["ZoomIn",        "ZoomInValue",        CamZoomInValue],
+			];
+			// 用 null 檢查而非直接存取：任何一項被註解隱藏時都不該拋錯，
+			// 否則會中斷 ros connection 的 listener 鏈，害其他訂閱送不出去
+			for (const [slider, text, value] of pairs) {
+				const sEl = document.getElementById(slider);
+				const tEl = document.getElementById(text);
+				if (sEl) { sEl.value = value; }
+				if (tEl) { tEl.value = value; }
+			}
+			document.getElementById("AutoExposureGain").checked = CamAutoExpGainValue;
+			document.getElementById("AutoWhitBlance").checked = CamAutoWBValue;
+			document.getElementById("CamExposure").disabled = CamAutoExpGainValue;
+			document.getElementById("CamGain").disabled = CamAutoExpGainValue;
+			document.getElementById("CamWBTemp").disabled = CamAutoWBValue;
+
+			publishCamera();
+		}
+
 		function LoadCamera(){
 			changecolorlabel(document.getElementById("colorlabel").value);
-			// changeYUVcolorlabel(document.getElementById("yuv_colorlabel").value)
-			// 这里可以根据需要发送请求或执行其他操作
-			CameraInfoClient.callService(LoadCamerareqrest, function (LoadCameraresult) {
-				console.log("white_balance: ", LoadCameraresult.white_balance);
-				console.log("auto_white_balance: ", LoadCameraresult.auto_white_balance);
-				console.log("auto_exposure: ", LoadCameraresult.auto_exposure);
-				console.log("LoadCameraresult: ", LoadCameraresult);
-				CamBrightnessValue = LoadCameraresult.brightness;
-				CamContrastValue = LoadCameraresult.contrast;
-				CamSaturationValue = LoadCameraresult.saturation;
-				CamWhiteBalanceValue = LoadCameraresult.white_balance;
-				CamautowhitebalanceValue = LoadCameraresult.auto_white_balance;
-				Camauto_exposureValue = LoadCameraresult.auto_exposure;
-				CamZoomInValue = parseFloat(parseFloat(LoadCameraresult.zoomin).toFixed(1));
-				document.getElementById("CamBrightness").value = CamBrightnessValue;
-				document.getElementById("CamBrightnessValue").value = CamBrightnessValue;
-				document.getElementById("CamContrast").value = CamContrastValue;
-				document.getElementById("CamContrastValue").value = CamContrastValue;
-				document.getElementById("CamSaturation").value = CamSaturationValue;
-				document.getElementById("CamSaturationValue").value = CamSaturationValue;
-				document.getElementById("CamWhiteBalance").value = CamWhiteBalanceValue;
-				document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
-				document.getElementById("AutoWhitBlance").checked = CamautowhitebalanceValue;
-				document.getElementById("auto_exposure").checked = Camauto_exposureValue;
-				document.getElementById("ZoomIn").value = CamZoomInValue;
-				document.getElementById("ZoomInValue").value = CamZoomInValue;
-				CameraMsg.brightness = Number(CamBrightnessValue);
-				CameraMsg.contrast = Number(CamContrastValue);
-				CameraMsg.saturation = Number(CamSaturationValue);
-				CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-				CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-				CameraMsg.auto_exposure = Camauto_exposureValue;
-				CameraMsg.zoomin = CamZoomInValue;
-				Camera.publish(CameraMsg);
-			});
+			changedistancelabel(document.getElementById("distancelabel").value);
+			changesetlabel(document.getElementById("setlabel").value);
+			CameraInfoClient.callService(LoadCamerareqrest, applyCameraInfo);
 		}
 
 		function SelectBuildFunction(){
@@ -579,35 +647,32 @@
 				// document.getElementById("你的按鈕ID").style.backgroundColor = "red";
 			}
 		}
+		function ClearDrawImage() {
+			ClearDraw_msg.data = true;
+			ClearDraw_Topic.publish(ClearDraw_msg);
+			ClearDraw_msg.data = false;
+			console.log("ClearDrawImage");
+		}
+
 		function CameraSave() {
 			console.log("CameraSave");
-			document.getElementById("CamBrightness").value = CamBrightnessValue;
-			document.getElementById("CamBrightnessValue").value = CamBrightnessValue;
-			document.getElementById("CamContrast").value = CamContrastValue;
-			document.getElementById("CamContrastValue").value = CamContrastValue;
-			document.getElementById("CamSaturation").value = CamSaturationValue;
-			document.getElementById("CamSaturationValue").value = CamSaturationValue;
-			document.getElementById("CamWhiteBalance").value = CamWhiteBalanceValue;
-			document.getElementById("CamWhiteBalanceValue").value = CamWhiteBalanceValue;
-			document.getElementById("AutoWhitBlance").checked = CamautowhitebalanceValue;
-			document.getElementById("auto_exposure").checked = Camauto_exposureValue;			
-			document.getElementById("ZoomIn").value = CamZoomInValue;
-			document.getElementById("ZoomInValue").value = CamZoomInValue;
-			SaveCameraMsg.brightness = Number(CamBrightnessValue);
-			SaveCameraMsg.contrast = Number(CamContrastValue);
+			SaveCameraMsg.auto_exposure_gain = CamAutoExpGainValue;
+			SaveCameraMsg.exposure = Number(CamExposureValue);
+			SaveCameraMsg.gain = Number(CamGainValue);
+			SaveCameraMsg.auto_whitebalance = CamAutoWBValue;
+			SaveCameraMsg.whitebalance_temperature = Number(CamWBTempValue);
 			SaveCameraMsg.saturation = Number(CamSaturationValue);
-			SaveCameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			SaveCameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			SaveCameraMsg.auto_exposure = Camauto_exposureValue;
+			SaveCameraMsg.denoising = Number(CamDenoisingValue);
+			SaveCameraMsg.gamma = Number(CamGammaValue);
 			SaveCameraMsg.zoomin = Number(CamZoomInValue);
-			console.log("Publish /Camera_Save:", SaveCameraMsg);
+			console.log("Publish /ZedCamera_Save:", SaveCameraMsg);
 			SaveCamera.publish(SaveCameraMsg);
 		}
 		function saveAll(){
 			CameraSave();
-			// SaveYUVColorModelFunction();
 			SaveColorModelFunction();
-			// opencvSave();
+			SaveDepthModelFunction();
+			SaveOverlapModelFunction();
 		}
 		
 		function changebuild(newValue) {
@@ -797,105 +862,61 @@
 			//HSVValuecmd.vmin = Number(bmin);
 			HSVValue_Topic.publish(HSVValuecmd);
 		}
-		function showCamBrightness(newValue) {
-			document.getElementById("CamBrightnessValue").value = newValue;
-			CamBrightnessValue = newValue;
-			CameraMsg.brightness = Number(CamBrightnessValue);
-			CameraMsg.contrast = Number(CamContrastValue);
+		// ---------- ZED 相機參數：任一控制項變動就整包送出 ----------
+		function publishCamera() {
+			CameraMsg.auto_exposure_gain = CamAutoExpGainValue;
+			CameraMsg.exposure = Number(CamExposureValue);
+			CameraMsg.gain = Number(CamGainValue);
+			CameraMsg.auto_whitebalance = CamAutoWBValue;
+			CameraMsg.whitebalance_temperature = Number(CamWBTempValue);
 			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			CameraMsg.auto_exposure = Camauto_exposureValue;
+			CameraMsg.denoising = Number(CamDenoisingValue);
+			CameraMsg.gamma = Number(CamGammaValue);
 			Camera.publish(CameraMsg);
+		}
 
+		// 滑桿與數字框互相同步後送出。slider/text 兩個 id 成對。
+		function setCamValue(slider, text, value, assign) {
+			const sEl = document.getElementById(slider);
+			const tEl = document.getElementById(text);
+			if (sEl) { sEl.value = value; }
+			if (tEl) { tEl.value = value; }
+			assign(value);
+			publishCamera();
 		}
-		function rangeCamBrightnessValue(newValue) {
-			document.getElementById("CamBrightness").value = newValue;
-			CamBrightnessValue = newValue;
-			CameraMsg.brightness = Number(CamBrightnessValue);
-			CameraMsg.contrast = Number(CamContrastValue);
-			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			CameraMsg.auto_exposure = Camauto_exposureValue;
-			Camera.publish(CameraMsg);
-		}
-		function showCamContrast(newValue) {
-			document.getElementById("CamContrastValue").value = newValue;
-			CamContrastValue = newValue;
-			CameraMsg.brightness = Number(CamBrightnessValue);
-			CameraMsg.contrast = Number(CamContrastValue);
-			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			CameraMsg.auto_exposure = Camauto_exposureValue;
-			Camera.publish(CameraMsg);
 
-		}
-		function rangeCamContrastValue(newValue) {
-			document.getElementById("CamContrast").value = newValue;
-			CamContrastValue = newValue;
-			CameraMsg.brightness = Number(CamBrightnessValue);
-			CameraMsg.contrast = Number(CamContrastValue);
-			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			CameraMsg.auto_exposure = Camauto_exposureValue;
-			Camera.publish(CameraMsg);
-		}
-		function showCamSaturation(newValue) {
-			document.getElementById("CamSaturationValue").value = newValue;
-			CamSaturationValue = newValue;
-			CameraMsg.brightness = Number(CamBrightnessValue);
-			CameraMsg.contrast = Number(CamContrastValue);
-			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			CameraMsg.auto_exposure = Camauto_exposureValue;
-			Camera.publish(CameraMsg);
+		function showCamExposure(v)   { setCamValue("CamExposure", "CamExposureValue", v, x => CamExposureValue = x); }
+		function rangeCamExposure(v)  { setCamValue("CamExposure", "CamExposureValue", v, x => CamExposureValue = x); }
+		function showCamGain(v)       { setCamValue("CamGain", "CamGainValue", v, x => CamGainValue = x); }
+		function rangeCamGain(v)      { setCamValue("CamGain", "CamGainValue", v, x => CamGainValue = x); }
+		function showCamWBTemp(v)     { setCamValue("CamWBTemp", "CamWBTempValue", v, x => CamWBTempValue = x); }
+		function rangeCamWBTemp(v)    { setCamValue("CamWBTemp", "CamWBTempValue", v, x => CamWBTempValue = x); }
+		function showCamSaturation(v) { setCamValue("CamSaturation", "CamSaturationValue", v, x => CamSaturationValue = x); }
+		function rangeCamSaturation(v) { setCamValue("CamSaturation", "CamSaturationValue", v, x => CamSaturationValue = x); }
+		function showCamDenoising(v)  { setCamValue("CamDenoising", "CamDenoisingValue", v, x => CamDenoisingValue = x); }
+		function rangeCamDenoising(v) { setCamValue("CamDenoising", "CamDenoisingValue", v, x => CamDenoisingValue = x); }
+		function showCamGamma(v)      { setCamValue("CamGamma", "CamGammaValue", v, x => CamGammaValue = x); }
+		function rangeCamGamma(v)     { setCamValue("CamGamma", "CamGammaValue", v, x => CamGammaValue = x); }
 
+		function changeAutoExposureGain() {
+			CamAutoExpGainValue = document.getElementById("AutoExposureGain").checked;
+			// 自動曝光開啟時 exposure/gain 不生效，把滑桿停用以免誤導
+			document.getElementById("CamExposure").disabled = CamAutoExpGainValue;
+			document.getElementById("CamGain").disabled = CamAutoExpGainValue;
+			publishCamera();
 		}
-		function rangeCamSaturationValue(newValue) {
-			document.getElementById("CamSaturation").value = newValue;
-			CamSaturationValue = newValue;
-			CameraMsg.brightness = Number(CamBrightnessValue);
-			CameraMsg.contrast = Number(CamContrastValue);
-			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			CameraMsg.auto_exposure = Camauto_exposureValue;
-			Camera.publish(CameraMsg);
-		}
-		function showCamWhiteBalance(newValue) {
-			document.getElementById("CamWhiteBalanceValue").value = newValue;
-			CamWhiteBalanceValue = newValue;
-			CameraMsg.brightness = Number(CamBrightnessValue);
-			CameraMsg.contrast = Number(CamContrastValue);
-			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			CameraMsg.auto_exposure = Camauto_exposureValue;
-			Camera.publish(CameraMsg);
 
-		}
-		function rangeCamWhiteBalanceValue(newValue) {
-			document.getElementById("CamWhiteBalance").value = newValue;
-			CamWhiteBalanceValue = newValue;
-			CameraMsg.brightness = Number(CamBrightnessValue);
-			CameraMsg.contrast = Number(CamContrastValue);
-			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			CameraMsg.auto_exposure = Camauto_exposureValue;
-			Camera.publish(CameraMsg);
+		function changeAutoWhitBlance() {
+			CamAutoWBValue = document.getElementById("AutoWhitBlance").checked;
+			document.getElementById("CamWBTemp").disabled = CamAutoWBValue;
+			publishCamera();
 		}
 
 		function showZoomIn(newValue) {
 			document.getElementById("ZoomInValue").value = newValue;
 			ZoomIn = newValue;
-			// ★ 限制到小數點後 1 位
-			CamZoomInValue = parseFloat(parseFloat(newValue).toFixed(1)); 
-			
+			// 限制到小數點後 1 位
+			CamZoomInValue = parseFloat(parseFloat(newValue).toFixed(1));
 			ZoomInMsg.zoomin = Number(CamZoomInValue);
 			ZoomInTopic.publish(ZoomInMsg);
 		}
@@ -903,40 +924,185 @@
 		function rangeZoomIn(newValue) {
 			document.getElementById("ZoomIn").value = newValue;
 			ZoomIn = newValue;
-			// ★ 限制到小數點後 1 位[cite: 7]
-			CamZoomInValue = parseFloat(parseFloat(newValue).toFixed(1)); 
-			
+			CamZoomInValue = parseFloat(parseFloat(newValue).toFixed(1));
 			ZoomInMsg.zoomin = Number(CamZoomInValue);
 			ZoomInTopic.publish(ZoomInMsg);
 		}
-		function changeAutoWhitBlance() {
-			if (document.getElementById("AutoWhitBlance").checked) {
-				CamautowhitebalanceValue = true;
-			} else {
-				CamautowhitebalanceValue = false;
-			}
-			CameraMsg.brightness = Number(CamBrightnessValue);
-			CameraMsg.contrast = Number(CamContrastValue);
-			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			CameraMsg.auto_exposure = Camauto_exposureValue;
-			Camera.publish(CameraMsg);
+
+		// ================= 畫面切換 =================
+		function streamUrl(topic) {
+			return "http://" + myAddress + ":8080/stream?topic=" + topic;
 		}
-		function changeauto_exposure() {
-			if (document.getElementById("auto_exposure").checked) {
-				Camauto_exposureValue = true;
-			} else {
-				Camauto_exposureValue = false;
-			}
-			CameraMsg.brightness = Number(CamBrightnessValue);
-			CameraMsg.contrast = Number(CamContrastValue);
-			CameraMsg.saturation = Number(CamSaturationValue);
-			CameraMsg.whitebalance = Number(CamWhiteBalanceValue);
-			CameraMsg.autowhitebalance = CamautowhitebalanceValue;
-			CameraMsg.auto_exposure = Camauto_exposureValue;
-			Camera.publish(CameraMsg);
+
+		function changeLeftView(value) {
+			const topic = (value === "depth") ? "/depth_view" : "/zoom_in";
+			document.getElementById("orign_image").src = streamUrl(topic);
+			console.log("left view ->", topic);
 		}
+
+		// 右側畫面與下方控制面板連動
+		function changeRightView(value) {
+			const map = {
+				overlap: ["/overlap_image", "Overlap_Range"],
+				color:   ["/processed_image", "HSV_Range"],
+				depth:   ["/depth_processed_image", "Depth_Range"],
+			};
+			const [topic, panel] = map[value] || map.overlap;
+			document.getElementById("color_image").src = streamUrl(topic);
+			for (const id of ["HSV_Range", "Depth_Range", "Overlap_Range"]) {
+				document.getElementById(id).style.display = (id === panel) ? "inline" : "none";
+			}
+			console.log("right view ->", topic);
+		}
+
+		// ================= 深度模式 =================
+		function changedepthbuild(newValue) {
+			DepthBuildStatus_msg.data = (newValue === "Single_distance_build") ? 1 : 0;
+			DepthBuildStatus_Topic.publish(DepthBuildStatus_msg);
+			console.log("DepthBuildStatus:", DepthBuildStatus_msg.data);
+		}
+
+		function changedistancelabel(newValue) {
+			DistanceSelect = newValue;
+			Depthreqrest.distancelabel = newValue;
+			DepthClient.callService(Depthreqrest, function (r) {
+				dmin = r.dmin;
+				dmax = r.dmax;
+				document.getElementById("dminRange").value = dmin;
+				document.getElementById("dminValue").value = dmin;
+				document.getElementById("dmaxRange").value = dmax;
+				document.getElementById("dmaxValue").value = dmax;
+				console.log("LoadDepthInfo", newValue, dmin, dmax);
+			});
+		}
+
+		function publishDepthValue() {
+			DepthValue_msg.dmin = Number(dmin);
+			DepthValue_msg.dmax = Number(dmax);
+			DepthValue_Topic.publish(DepthValue_msg);
+		}
+
+		function setDepthBound(which, value) {
+			const v = Number(value);
+			if (which === "min") { dmin = v; } else { dmax = v; }
+			document.getElementById("d" + which + "Range").value = v;
+			document.getElementById("d" + which + "Value").value = v;
+			publishDepthValue();
+		}
+
+		function showdminValue(v)  { setDepthBound("min", v); }
+		function rangedminValue(v) { setDepthBound("min", v); }
+		function showdmaxValue(v)  { setDepthBound("max", v); }
+		function rangedmaxValue(v) { setDepthBound("max", v); }
+
+		function ResetDepthModelFunction() {
+			setDepthBound("min", 10);
+			setDepthBound("max", 1000);
+			console.log("ResetDepthModelFunction");
+		}
+
+		// 上下限都歸零 = 此距離區間視為未設定，depth_process_node 會直接跳過
+		function CloseDepthModelFunction() {
+			setDepthBound("min", 0);
+			setDepthBound("max", 0);
+			console.log("CloseDepthModelFunction");
+		}
+
+		function SaveDepthModelFunction() {
+			console.log("SaveDepthModelFunction");
+			document.getElementById("SaveDepthModel").disabled = "disabled";
+			SaveDepthClient.callService(SaveParamreqrest, function (r) {
+				if (r.already == true) {
+					document.getElementById("SaveDepthModel").disabled = false;
+				}
+			});
+		}
+
+		function BuildDepthModelFunction() {
+			console.log("BuildDepthModelFunction");
+			document.getElementById("BuildDepthModel").disabled = "disabled";
+			BuildDepthClient.callService(BuildParamreqrest, function (r) {
+				if (r.already == true) {
+					document.getElementById("BuildDepthModel").disabled = false;
+				}
+			});
+		}
+
+		// ================= 疊合模式 =================
+		function changeoverlapbuild(newValue) {
+			OverlapBuildStatus_msg.data = (newValue === "Single_overlap_build") ? 1 : 0;
+			OverlapBuildStatus_Topic.publish(OverlapBuildStatus_msg);
+			console.log("OverlapBuildStatus:", OverlapBuildStatus_msg.data);
+		}
+
+		function changesetlabel(newValue) {
+			SetSelect = Number(newValue);
+			Overlapreqrest.setid = SetSelect;
+			OverlapClient.callService(Overlapreqrest, function (r) {
+				SetColor = r.color;
+				SetDistance = r.distance;
+				SetEnable = r.enable;
+				document.getElementById("setcolor").value = SetColor;
+				document.getElementById("setdistance").value = SetDistance;
+				document.getElementById("setenable").checked = SetEnable;
+				console.log("LoadOverlapInfo", SetSelect, SetColor, SetDistance, SetEnable);
+			});
+		}
+
+		function publishOverlapValue() {
+			OverlapValue_msg.setid = Number(SetSelect);
+			OverlapValue_msg.color = SetColor;
+			OverlapValue_msg.distance = SetDistance;
+			OverlapValue_msg.enable = SetEnable;
+			OverlapValue_Topic.publish(OverlapValue_msg);
+		}
+
+		function changesetcolor(v)    { SetColor = v; publishOverlapValue(); }
+		function changesetdistance(v) { SetDistance = v; publishOverlapValue(); }
+		function changesetenable() {
+			SetEnable = document.getElementById("setenable").checked;
+			publishOverlapValue();
+		}
+
+		function ResetOverlapModelFunction() {
+			SetColor = "orange";
+			SetDistance = "D1";
+			SetEnable = true;
+			document.getElementById("setcolor").value = SetColor;
+			document.getElementById("setdistance").value = SetDistance;
+			document.getElementById("setenable").checked = SetEnable;
+			publishOverlapValue();
+			console.log("ResetOverlapModelFunction");
+		}
+
+		// 停用此 Set = All_overlap 不再疊它
+		function CloseOverlapModelFunction() {
+			SetEnable = false;
+			document.getElementById("setenable").checked = false;
+			publishOverlapValue();
+			console.log("CloseOverlapModelFunction");
+		}
+
+		function SaveOverlapModelFunction() {
+			console.log("SaveOverlapModelFunction");
+			document.getElementById("SaveOverlapModel").disabled = "disabled";
+			SaveOverlapClient.callService(SaveParamreqrest, function (r) {
+				if (r.already == true) {
+					document.getElementById("SaveOverlapModel").disabled = false;
+				}
+			});
+		}
+
+		function BuildOverlapModelFunction() {
+			console.log("BuildOverlapModelFunction");
+			document.getElementById("BuildOverlapModel").disabled = "disabled";
+			BuildOverlapClient.callService(BuildParamreqrest, function (r) {
+				if (r.already == true) {
+					document.getElementById("BuildOverlapModel").disabled = false;
+				}
+			});
+		}
+
 		function WebStart() {
 			if (B_Start_Flag) {
 				document.getElementById("B_Start").value = "Finsh";
@@ -1052,29 +1218,44 @@
 		#container {
 			background-color: #333;
 			border: 2px black solid;
-			width: 850px;
-			height: 730px;
+			width: 1000px;
+			height: 840px;
 			margin: 20px auto;
 			overflow: visible;
 			color: white;
 		}
 
-		#div_orign_image {
-			width: 320px;
-			height: 240px;
-			border: 1px #FFF solid;
-			margin: 25px 32px 24px 32px;
+		/* 畫面切換下拉 + 影像，包成一組浮動面板 */
+		#left_panel {
+			width: 482px;
+			margin: 16px 6px 8px 6px;
 			float: left;
-			display: inline;
+		}
+
+		#right_panel {
+			width: 482px;
+			margin: 16px 6px 8px 6px;
+			float: right;
+		}
+
+		.view-select {
+			width: 482px;
+			height: 26px;
+			margin-bottom: 6px;
+		}
+
+		/* 480x300 與 ZED 發布的 960x600 同為 8:5，且是乾淨的 2:1 降取樣；
+		   480 也正好等於 /overlap_image 的發布寬度，該路不需縮放 */
+		#div_orign_image {
+			width: 480px;
+			height: 300px;
+			border: 1px #FFF solid;
 		}
 
 		#div_color_image {
-			width: 320px;
-			height: 240px;
+			width: 480px;
+			height: 300px;
 			border: 1px #FFF solid;
-			margin: 25px 32px 24px 32px;
-			float: right;
-			display: inline;
 		}
 
 		/* #div_filter_image {
@@ -1086,19 +1267,22 @@
 			display: inline;
 		} */
 
-		#HSV_Range {
-			width: 320px;
-			height: 400px;
+		/* 右下三個控制面板疊在同一位置，由上方下拉選單決定顯示哪一個 */
+		#HSV_Range,
+		#Depth_Range,
+		#Overlap_Range {
+			width: 480px;
+			height: 460px;
 			border: 1px #FFF solid;
-			margin: 10px 32px 0px 32px;/*上右下左*/
+			margin: 10px 6px 0px 6px;/*上右下左*/
 			float: right;
 			display: inline;
 		}
 
 		#select {
-			width: 320px;
-			height: 400px;
-			margin: 10px 32px 0px 32px;
+			width: 480px;
+			height: 490px;
+			margin: 10px 6px 0px 6px;
 			float: left;
 			display: inline;
 		}
@@ -1129,14 +1313,28 @@
 		}
 
 		.Range {
-			width: 225px;
+			width: 370px;
 			height: 10px;
 			margin: 6px 2px 6px 2px;
 
 		}
 
+		/* 480px 的面板：Torque 佔左半，Clear Draw 與 Camera Save 平分右半。
+		   .Button 的 margin-left 在這裡會造成溢出，所以歸零。 */
+		#B_ColorModelForm,
+		#B_ClearDraw,
+		#B_Camera {
+			height: 25px;
+			margin: 0;
+		}
+
 		#B_ColorModelForm {
-			width: 200px;
+			width: 232px;
+		}
+
+		#B_ClearDraw,
+		#B_Camera {
+			width: 112px;
 		}
 
 		#Camera {
@@ -1152,8 +1350,8 @@
 
 <script>
 	window.addEventListener('DOMContentLoaded', function () {
-		document.getElementById('orign_image').src = 'http://' + window.ROBOT_CONFIG.ip + ':8080/stream?topic=/zoom_in';
-		document.getElementById('color_image').src = 'http://' + window.ROBOT_CONFIG.ip + ':8080/stream?topic=/processed_image';
+		changeLeftView(document.getElementById('left-view-select').value);
+		changeRightView(document.getElementById('right-view-select').value);
 		let loc = window.currentStrategy || "";
 		console.log('Raw loaded strategy:', loc);
 		
@@ -1254,14 +1452,18 @@
 			<!-- <div id="div_orign_image"> -->
 				<!-- <img id="orign_image" style="-webkit-user-select: none; display:inline;" src="http://0.0.0.0:8080/stream_viewer?topic=/image_raw"> -->
 				<!-- <img id="orign_image" style="-webkit-user-select: none; display:inline;" src="http://localhost:8080/stream_viewer?topic=/zed/zed_node/left/image_rect_color/compressed"/> -->
-			<div id="div_orign_image">
-				<img
-					id="orign_image"
-					style="width:320px; height:240px; display:inline-block;"
-					src=""
-				/>
-				<!-- src="http://0.0.0.0:8080/stream?topic=/zed/zed_node/right/image_rect_color&image_transport=compressed"					 -->
-
+			<div id="left_panel">
+				<select id="left-view-select" class="view-select" onChange="changeLeftView(this.value)">
+					<option value="left">左眼畫面</option>
+					<option value="depth">深度畫面</option>
+				</select>
+				<div id="div_orign_image">
+					<img
+						id="orign_image"
+						style="width:480px; height:300px; display:inline-block;"
+						src=""
+					/>
+				</div>
 			</div>
 			<!-- </div> -->
 
@@ -1269,27 +1471,36 @@
 			<!-- <div id="div_color_image">
 				<img id="color_image" style="-webkit-user-select: none; display:inline;" src="">
 			</div> -->
-			<div id="div_color_image">
-				<img
-					id="color_image"
-					style="width:320px; height:240px; display:inline-block;"
-					src=""
-					alt="Processed Image Stream"
-				/>
+			<div id="right_panel">
+				<select id="right-view-select" class="view-select" onChange="changeRightView(this.value)">
+					<option value="overlap">疊合</option>
+					<option value="color">色模</option>
+					<option value="depth">深度</option>
+				</select>
+				<div id="div_color_image">
+					<img
+						id="color_image"
+						style="width:480px; height:300px; display:inline-block;"
+						src=""
+						alt="Processed Image Stream"
+					/>
+				</div>
 			</div>
 
 
 
-			<div id="HSV_Range">
+			<div id="HSV_Range" style="display:none;">
 				<style>
 				table.control { border-collapse: collapse; width: auto; }
 				table.control td { padding: 4px; vertical-align: middle; }
-				td.label { width: 110px; white-space: nowrap; }   
-				td.controls { width: 230px; }                     
+				td.label { width: 110px; white-space: nowrap; }
+				/* 375 加上 label 的 110 已超過面板寬度，會把 Reset/Close 擠出去 */
+				td.controls { width: 200px; }
 				td.actions  { white-space: nowrap; }              
 				p.text { margin: 0; }
-				.select-lg { height: 26px; width: 100px; }        
-				.select-sm { height: 26px; width: 80px; }        
+				/* Single_distance / Single_overlap 這類字串在 100px 會被截斷 */
+				.select-lg { height: 26px; width: 150px; }
+				.select-sm { height: 26px; width: 100px; }
 				.Button { height: 26px; margin-left: 6px; }
 				</style>
 
@@ -1332,7 +1543,7 @@
 						<td>
 							<p class="text">Hue:</p>
 						</td>
-						<td><img src="./picture/HSVS255.jpg" width="230" height="20">
+						<td><img src="./picture/HSVS255.jpg" width="370" height="20">
 						</td>
 					</tr>
 					<tr>
@@ -1370,13 +1581,148 @@
 						<td><input class="Range" id="bmaxRange" name="bmaxRange" type="range" min="0" max="255" value="255" oninput="showbmaxValue(this.value)" /></td>
 					</tr>
 				</table>
-				<table width="320">
+				<table width="480">
 					<tr>
 						<td align="center">
-							<input type="button" class="Button" id="SaveColorModel" value="Save" onClick="SaveColorModelFunction()" style="width:100px; height:30px"></input>
+							<input type="button" class="Button" id="SaveColorModel" value="Save" onClick="SaveColorModelFunction()" style="width:150px; height:45px"></input>
 						</td>
 						<td align="center">
-							<input type="button" class="Button" id="BuildColorModel" value="Build" onClick="BuildColorModelFunction()" style="width:100px;height:30px"></input>
+							<input type="button" class="Button" id="BuildColorModel" value="Build" onClick="BuildColorModelFunction()" style="width:150px;height:45px"></input>
+						</td>
+					</tr>
+				</table>
+			</div>
+
+			<!-- 深度模式：架構比照色模，維度從顏色換成距離（單位公分） -->
+			<div id="Depth_Range" style="display:none;">
+				<table class="control">
+				<tr>
+					<td class="label"><p class="text">Build Status:</p></td>
+					<td class="controls">
+					<select id="depth-build-select" class="select-lg" onChange="changedepthbuild(this.value)">
+						<option value="All_distance_build">All_distance</option>
+						<option value="Single_distance_build">Single_distance</option>
+					</select>
+					</td>
+				</tr>
+				<tr>
+					<td class="label"><p class="text">Distance Select :</p></td>
+					<td class="controls">
+					<select id="distancelabel" class="select-sm" onChange="changedistancelabel(this.value)">
+						<option value="D1">D1</option>
+						<option value="D2">D2</option>
+						<option value="D3">D3</option>
+						<option value="D4">D4</option>
+						<option value="D5">D5</option>
+						<option value="D6">D6</option>
+						<option value="D7">D7</option>
+						<option value="D8">D8</option>
+					</select>
+					</td>
+					<td class="actions">
+					<input type="button" class="Button" value="Reset" onClick="ResetDepthModelFunction()"><input type="button" class="Button" value="Close" onClick="CloseDepthModelFunction()">
+					</td>
+				</tr>
+				</table>
+
+				<table>
+					<tr>
+						<td colspan="3"><p class="text">Distance Range (cm):</p></td>
+					</tr>
+					<tr>
+						<td rowspan="2"><input type="text" class="ValueText" id="dminValue" size="12" value="10" onchange="rangedminValue(this.value)" /></td>
+						<td><input class="Range" id="dminRange" name="dminRange" type="range" min="10" max="1000" value="10" oninput="showdminValue(this.value)" /></td>
+						<td rowspan="2"><input type="text" class="ValueText" id="dmaxValue" size="12" value="1000" onchange="rangedmaxValue(this.value)" /></td>
+					</tr>
+					<tr>
+						<td><input class="Range" id="dmaxRange" name="dmaxRange" type="range" min="10" max="1000" value="1000" oninput="showdmaxValue(this.value)" /></td>
+					</tr>
+				</table>
+
+				<table width="480">
+					<tr>
+						<td align="center">
+							<input type="button" class="Button" id="SaveDepthModel" value="Save" onClick="SaveDepthModelFunction()" style="width:150px; height:45px"></input>
+						</td>
+						<td align="center">
+							<input type="button" class="Button" id="BuildDepthModel" value="Build" onClick="BuildDepthModelFunction()" style="width:150px;height:45px"></input>
+						</td>
+					</tr>
+				</table>
+			</div>
+
+			<!-- 疊合模式：色彩 mask 與距離 mask 取交集，Set1~Set8 顯示色固定不可選 -->
+			<div id="Overlap_Range">
+				<table class="control">
+				<tr>
+					<td class="label"><p class="text">Build Status:</p></td>
+					<td class="controls">
+					<select id="overlap-build-select" class="select-lg" onChange="changeoverlapbuild(this.value)">
+						<option value="All_overlap_build">All_overlap</option>
+						<option value="Single_overlap_build">Single_overlap</option>
+					</select>
+					</td>
+				</tr>
+				<tr>
+					<td class="label"><p class="text">Overlap Select :</p></td>
+					<td class="controls">
+					<select id="setlabel" class="select-sm" onChange="changesetlabel(this.value)">
+						<option value="1">Set1</option>
+						<option value="2">Set2</option>
+						<option value="3">Set3</option>
+						<option value="4">Set4</option>
+						<option value="5">Set5</option>
+						<option value="6">Set6</option>
+						<option value="7">Set7</option>
+						<option value="8">Set8</option>
+					</select>
+					</td>
+					<td class="actions">
+					<input type="button" class="Button" value="Reset" onClick="ResetOverlapModelFunction()"><input type="button" class="Button" value="Close" onClick="CloseOverlapModelFunction()">
+					</td>
+				</tr>
+				<tr>
+					<td class="label"><p class="text">Color :</p></td>
+					<td class="controls">
+					<select id="setcolor" class="select-sm" onChange="changesetcolor(this.value)">
+						<option value="orange">Orange</option>
+						<option value="yellow">Yellow</option>
+						<option value="blue">Blue</option>
+						<option value="green">Green</option>
+						<option value="black">Black</option>
+						<option value="red">Red</option>
+						<option value="white">White</option>
+						<option value="others">Others</option>
+					</select>
+					</td>
+				</tr>
+				<tr>
+					<td class="label"><p class="text">Distance :</p></td>
+					<td class="controls">
+					<select id="setdistance" class="select-sm" onChange="changesetdistance(this.value)">
+						<option value="D1">D1</option>
+						<option value="D2">D2</option>
+						<option value="D3">D3</option>
+						<option value="D4">D4</option>
+						<option value="D5">D5</option>
+						<option value="D6">D6</option>
+						<option value="D7">D7</option>
+						<option value="D8">D8</option>
+					</select>
+					</td>
+					<td class="actions">
+					<input type="checkbox" id="setenable" onclick="changesetenable()">Enable
+					</td>
+				</tr>
+				</table>
+
+				<table width="480">
+					<tr>
+						<td align="center">
+							<input type="button" class="Button" id="SaveOverlapModel" value="Save" onClick="SaveOverlapModelFunction()" style="width:150px; height:45px"></input>
+						</td>
+						<td align="center">
+							<input type="button" class="Button" id="BuildOverlapModel" value="Build" onClick="BuildOverlapModelFunction()" style="width:150px;height:45px"></input>
 						</td>
 					</tr>
 				</table>
@@ -1384,24 +1730,28 @@
 
 			<div id="select">
 				<div>
-					<table width="320">
+					<table width="480">
 						<tr>
 							<!-- <td>
 								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_Start" value="Start" onClick="WebStart()"></input>
 							</td> -->
-							<td>
-								<input style="margin-right: 10px; height:25px;" type="button" class="Button" id="B_ColorModelForm" value=" No Torque?  Push me ʕ•ᴥ•ʔ  "
+							<td align="center" style="width:50%">
+								<input type="button" class="Button" id="B_ColorModelForm" value=" No Torque?  Push me ʕ•ᴥ•ʔ  "
 								 onClick="HeadTorqueSwitch()"></input>
 							</td>
-							<td>
-								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_Camera" value="Camera Save"
+							<td align="center" style="width:25%">
+								<input type="button" class="Button" id="B_ClearDraw" value="Clear Draw"
+								 onClick="ClearDrawImage()"></input>
+							</td>
+							<td align="center" style="width:25%">
+								<input type="button" class="Button" id="B_Camera" value="Camera Save"
 								 onClick="CameraSave()"></input>
 							</td>
 						</tr>
 					</table>
 				</div>
 				<div>
-					<table width="320">
+					<table width="480">
 						<tr>
 							<td colspan="3">
 								<p class="text" style="font-size: 15px;">Horizontal:</p>
@@ -1434,74 +1784,74 @@
 						</tr>
 					</table>
 				</div>
+				<!-- ZED X Mini 不支援 brightness / contrast / hue，改用 ZED SDK 實際可調的參數 -->
 				<div id="Camera">
 					<div style="float:left; margin-left:8px;">
-						<input type="checkbox" name="AutoWhitBlance" id="AutoWhitBlance" onclick="changeAutoWhitBlance()">Auto White_blance
+						<input type="checkbox" name="AutoExposureGain" id="AutoExposureGain" onclick="changeAutoExposureGain()">Auto Exposure/Gain
 					</div>
 					<div style="float:right; margin-right:12px;">
-						<input type="checkbox" name="auto_exposure" id="auto_exposure" onclick="changeauto_exposure()">Auto Exposure
+						<input type="checkbox" name="AutoWhitBlance" id="AutoWhitBlance" onclick="changeAutoWhitBlance()">Auto WhiteBalance
 					</div>
-					<table width="320">
+					<table width="480">
 						<tr>
-							<td colspan="3">
-								<p class="text">Camera Brightness:</p>
-							</td>
+							<td colspan="3"><p class="text">Exposure:</p></td>
 						</tr>
 						<tr>
 							<td width="25"></td>
-							<td><input class="Range" id="CamBrightness" name="CamBrightness" type="range" min="-60" max="60" value="-15"
-								 oninput="showCamBrightness(this.value)" /></td>
-							<td><input type="text" class="ValueText" id="CamBrightnessValue" size="12" value="50" onchange="rangeCamBrightnessValue(this.value)" /></td>
+							<td><input class="Range" id="CamExposure" name="CamExposure" type="range" min="0" max="100" value="80" oninput="showCamExposure(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamExposureValue" size="12" value="80" onchange="rangeCamExposure(this.value)" /></td>
 						</tr>
 						<tr>
-							<td colspan="3">
-								<p class="text">Camera Contrast:</p>
-							</td>
+							<td colspan="3"><p class="text">Gain:</p></td>
 						</tr>
 						<tr>
 							<td width="25"></td>
-							<td><input class="Range" id="CamContrast" name="CamContrast" type="range" min="0" max="200" value="50" oninput="showCamContrast(this.value)" /></td>
-							<td><input type="text" class="ValueText" id="CamContrastValue" size="12" value="5" onchange="rangeCamContrastValue(this.value)" /></td>
+							<td><input class="Range" id="CamGain" name="CamGain" type="range" min="0" max="100" value="80" oninput="showCamGain(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamGainValue" size="12" value="80" onchange="rangeCamGain(this.value)" /></td>
 						</tr>
 						<tr>
-							<td colspan="3">
-								<p class="text">Camera Saturation:</p>
-							</td>
-						</tr>
-						<tr>
-							<td width="25"></td>
-							<td><input class="Range" id="CamSaturation" name="CamSaturation" type="range" min="0" max="100" value="50"
-								 oninput="showCamSaturation(this.value)" /></td>
-							<td><input type="text" class="ValueText" id="CamSaturationValue" size="12" value="50" onchange="rangeCamSaturationValue(this.value)" /></td>
-						</tr>
-						<tr>
-							<td colspan="3">
-								<p class="text">Camera WhiteBalance:</p>
-							</td>
+							<td colspan="3"><p class="text">WhiteBalance Temperature:</p></td>
 						</tr>
 						<tr>
 							<td width="25"></td>
-							<td><input class="Range" id="CamWhiteBalance" name="CamWhiteBalance" type="range" min="0" max="8000" value="4000"
-								 oninput="showCamWhiteBalance(this.value)" /></td>
-							<td><input type="text" class="ValueText" id="CamWhiteBalanceValue" size="12" value="4000" onchange="rangeCamWhiteBalanceValue(this.value)" /></td>
+							<td><input class="Range" id="CamWBTemp" name="CamWBTemp" type="range" min="28" max="65" value="42" oninput="showCamWBTemp(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamWBTempValue" size="12" value="42" onchange="rangeCamWBTemp(this.value)" /></td>
 						</tr>
 						<tr>
-							<td colspan="3">
-								<p class="text">Zoom_in:</p>
-							</td>
+							<td colspan="3"><p class="text">Saturation:</p></td>
 						</tr>
 						<tr>
 							<td width="25"></td>
-							<td>
-							<input class="Range" id="ZoomIn" name="ZoomIn" type="range"
-									min="1" max="5" step="0.1" value="1"
-									oninput="showZoomIn(this.value)" />
-							</td>
-							<td>
-							<input type="text" class="ValueText" id="ZoomInValue" size="12"
-									min="1" max="5" step="0.1" value="1"
-									onchange="rangeZoomIn(this.value)" />
-							</td>
+							<td><input class="Range" id="CamSaturation" name="CamSaturation" type="range" min="0" max="8" value="4" oninput="showCamSaturation(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamSaturationValue" size="12" value="4" onchange="rangeCamSaturation(this.value)" /></td>
+						</tr>
+						<!-- Denoising 效果在網頁預覽上看不太出來，先隱藏。
+						     參數本身仍會照 ZedCameraSet.ini 的值送給相機，只是不提供介面調整。
+						     要開回來把這段註解拿掉即可，JS 那邊已經寫成元素不存在也不會出錯。
+						<tr>
+							<td colspan="3"><p class="text">Denoising:</p></td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="CamDenoising" name="CamDenoising" type="range" min="0" max="100" value="50" oninput="showCamDenoising(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamDenoisingValue" size="12" value="50" onchange="rangeCamDenoising(this.value)" /></td>
+						</tr>
+						-->
+						<tr>
+							<td colspan="3"><p class="text">Gamma:</p></td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="CamGamma" name="CamGamma" type="range" min="1" max="9" value="8" oninput="showCamGamma(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="CamGammaValue" size="12" value="8" onchange="rangeCamGamma(this.value)" /></td>
+						</tr>
+						<tr>
+							<td colspan="3"><p class="text">Zoom_in:</p></td>
+						</tr>
+						<tr>
+							<td width="25"></td>
+							<td><input class="Range" id="ZoomIn" name="ZoomIn" type="range" min="1" max="5" step="0.1" value="1" oninput="showZoomIn(this.value)" /></td>
+							<td><input type="text" class="ValueText" id="ZoomInValue" size="12" min="1" max="5" step="0.1" value="1" onchange="rangeZoomIn(this.value)" /></td>
 						</tr>
 					</table>
 				</div>

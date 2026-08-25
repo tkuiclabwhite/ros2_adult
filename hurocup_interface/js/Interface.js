@@ -1681,11 +1681,10 @@ function SpeedReverse(){
 }
 
 // 全域變數記住狀態
+const TOTAL_MOTORS = 29;   // 全身馬達數，總開關以「全部都開」為開啟狀態
 var isTorqueOn = false; 
 
 function TorqueSwitch() {
-  document.getElementById('label').innerHTML = "Switching Torque (1~27)...";
-
   var targetState = isTorqueOn ? 0 : 1;
 
   console.log("執行扭力切換: " + (targetState == 1 ? "ON" : "OFF"));
@@ -1693,26 +1692,13 @@ function TorqueSwitch() {
   SendPackage.package = fullPackage;
   interface.publish(SendPackage);
 
-  console.log("已發送全體扭力指令 (ID=0)");
-
-  isTorqueOn = !isTorqueOn;
-  var statusText = isTorqueOn ? "Torque is ON" : "Torque is OFF";
-  document.getElementById('label').innerHTML = statusText;
-  console.log(statusText);
-
-  for (let i = 1; i <= 29; i++) {
+  for (let i = 1; i <= TOTAL_MOTORS; i++) {
     motorTorqueStates[i] = targetState;
-    const btn = document.getElementById(`pos-btn-${i}`);
-    if (btn) {
-      if (targetState === 1) {
-        btn.classList.add('torque-on');
-      } else {
-        btn.classList.remove('torque-on');
-      }
-    }
   }
-}
+  refreshTorqueUI();
 
+  document.getElementById('label').innerHTML = targetState ? "Torque is ON" : "Torque is OFF";
+}
 
 // =======   馬達刻度   ========
 /**
@@ -1730,6 +1716,8 @@ const robotConfig = {
     'waist':      [ { id: 15 }],
     'left_leg':   [ { id: 16 }, { id: 17 }, { id: 18 }, { id: 19 }, { id: 20 }, { id: 21 } ],
     'right_leg':  [ { id: 22 }, { id: 23 }, { id: 24 }, { id: 25 }, { id: 26 }, { id: 27 } ],
+    // 頭部：driver_node 的 head_map 把邏輯 1/2 對應到實體 28/29
+    'head':       [ { id: 28 }, { id: 29 } ],
 };
 
 // 紀錄目前哪些部位正在被「觀察/調整」
@@ -1739,6 +1727,7 @@ let activeParts = {
     'waist': false,
     'left_leg': false,
     'right_leg': false,
+    'head': false,
 };
 // function Update_Motor_Input_Values(motorValues) {
 //     // 遍歷所有部位
@@ -1788,42 +1777,70 @@ function Update_Motor_Input_Values(motorValues) {
 // =================================================================
 // 輔助函式：整組開關扭力
 // =================================================================
-function Torque_Choose(partName, buttonID) {
-    const targetButton = document.getElementById(buttonID);
-    if (!targetButton) return;
-
-    const isEnteringAdjustMode = !targetButton.classList.contains('button_active');
-
-    let targetState = 0;
-
-    if (isEnteringAdjustMode) {
-        targetButton.classList.add('button_active');
-        activeParts[partName] = true;
-        SetGroupTorque(partName, 0);
-        targetState = 0;
-    } else {
-        targetButton.classList.remove('button_active');
-        activeParts[partName] = false;
-        SetGroupTorque(partName, 1);
-        targetState = 1;
+// =================================================================
+// 扭力狀態的單一真實來源
+//
+// motorTorqueStates（InterfaceTable.js 宣告）是唯一的狀態，三個入口
+// （部位按鈕 / 單顆開關 / 全身開關）都只負責送指令並更新它，
+// 畫面一律由 refreshTorqueUI() 統一重繪，避免各自塗色而互相不同步。
+// =================================================================
+function refreshTorqueUI() {
+    // 步驟一：人形圖上的單顆按鈕
+    for (let id = 1; id <= TOTAL_MOTORS; id++) {
+        const btn = document.getElementById(`pos-btn-${id}`);
+        if (!btn) continue;
+        btn.classList.toggle('torque-on', motorTorqueStates[id] === 1);
     }
 
-    const motors = robotConfig[partName];
-    if (motors) {
-        motors.forEach(motor => {
-            const id = motor.id;
-            motorTorqueStates[id] = targetState;
-            const btn = document.getElementById(`pos-btn-${id}`);
-            if (btn) {
-                if (targetState === 1) {
-                    btn.classList.add('torque-on');
-                } else {
-                    btn.classList.remove('torque-on');
-                }
-            }
-        });
+    // 步驟二：部位按鈕，該部位「全部洩力」才算處於調整中
+    for (const partName in robotConfig) {
+        const motors = robotConfig[partName];
+        const allOff = motors.every(m => motorTorqueStates[m.id] !== 1);
+        activeParts[partName] = allOff;
+        const btn = document.getElementById('btn_' + partName);
+        if (btn) btn.classList.toggle('button_active', allOff);
+    }
+
+    // 步驟三：全身按鈕。只有「全部都開著」才算開啟狀態 ——
+    // 只要有任何一顆沒開，按鈕就是關閉樣式，按下去會把全身都打開。
+    let onCount = 0;
+    for (let id = 1; id <= TOTAL_MOTORS; id++) {
+        if (motorTorqueStates[id] === 1) onCount++;
+    }
+    isTorqueOn = (onCount === TOTAL_MOTORS);
+    const allBtn = document.getElementById('TorqueButton');
+    if (allBtn) {
+        // 文字仍細分三種，才看得出目前實際開了幾顆
+        if (onCount === 0)                 allBtn.innerText = '扭力已關閉';
+        else if (onCount === TOTAL_MOTORS) allBtn.innerText = '扭力已開啟';
+        else                               allBtn.innerText = '扭力部分開啟 (' + onCount + '/' + TOTAL_MOTORS + ')';
+        allBtn.classList.toggle('active', isTorqueOn);
+    }
+
+    // 步驟四：單顆 ON/OFF 的高亮，跟著目前輸入的 ID 走
+    const idInput = document.getElementById('single_motor_id');
+    const btnOn = document.getElementById('btn_single_on');
+    const btnOff = document.getElementById('btn_single_off');
+    if (idInput && btnOn && btnOff) {
+        const cur = motorTorqueStates[parseInt(idInput.value)] === 1;
+        btnOn.classList.toggle('active', cur);
+        btnOff.classList.toggle('active', !cur);
     }
 }
+
+function Torque_Choose(partName, buttonID) {
+    const motors = robotConfig[partName];
+    if (!motors) return;
+
+    // 目前「全部洩力」就代表在調整中，再按一次要鎖回去；否則就是要洩力
+    const allOff = motors.every(m => motorTorqueStates[m.id] !== 1);
+    const targetState = allOff ? 1 : 0;
+
+    SetGroupTorque(partName, targetState);
+    motors.forEach(m => { motorTorqueStates[m.id] = targetState; });
+    refreshTorqueUI();
+}
+
 // =================================================================
 // 輔助函式：單顆開關扭力
 // =================================================================
@@ -1842,29 +1859,11 @@ function SetSingleTorque(state) {
         SendPackage.package = dataPackage;
         interface.publish(SendPackage);
 
-        const btnOn = document.getElementById('btn_single_on');
-        const btnOff = document.getElementById('btn_single_off');
-
-        if (state === 1) {
-            btnOn.classList.add('active');
-            btnOff.classList.remove('active');
-        } else {
-            btnOff.classList.add('active');
-            btnOn.classList.remove('active');
-        }
-
         const stateText = state === 1 ? "ON (鎖死)" : "OFF (洩力)";
         document.getElementById('label').innerHTML = `Motor ID: ${motorID} Torque is ${stateText}`;
 
         motorTorqueStates[motorID] = state;
-        const posBtn = document.getElementById(`pos-btn-${motorID}`);
-        if (posBtn) {
-            if (state === 1) {
-                posBtn.classList.add('torque-on');
-            } else {
-                posBtn.classList.remove('torque-on');
-            }
-        }
+        refreshTorqueUI();
     }
 }
 function SetGroupTorque(partName, state) {

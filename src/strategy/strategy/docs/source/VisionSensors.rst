@@ -3,6 +3,7 @@
 .. currentmodule:: API
 
 .. automethod:: API.sendSensorReset
+.. automethod:: API.setZoomIn
 .. automethod:: API.drawImageFunction
 .. automethod:: API.get_objects
 .. autoattribute:: API.imu_rpy

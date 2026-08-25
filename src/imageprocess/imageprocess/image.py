@@ -3,6 +3,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2, time
+import math
 import numpy as np
 import json
 import configparser
@@ -10,7 +11,7 @@ from tku_msgs.msg import HSVValue, Location, Zoom,DrawImage
 # from tku_msgs.msg import YUVValue, OpenCvOrder
 from tku_msgs.srv import HSVInfo,SaveHSV,BuildModel
 # from tku_msgs.srv import YUVInfo,SaveYUV,OpenCvInfo,SaveOpenCv
-from std_msgs.msg import String,Int16
+from std_msgs.msg import String,Int16,Bool
 from dataclasses import dataclass
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from pathlib import Path
@@ -100,6 +101,15 @@ class ImageNode(Node):
             "OthersLabel":  {"label": 8, "color": [255,   0, 128]},   # 紫粉
         }
 
+        # label 編號 -> BGR 的查表，用於一次把 label_map 轉成偽彩色影像
+        # （取代原本每色一次的 numpy fancy indexing，實測是最大的熱點）
+        self.color_lut = np.zeros((1, 256, 3), dtype=np.uint8)   # 未定義的 label 一律黑
+        for meta in self.color_labels.values():
+            self.color_lut[0, int(meta["label"])] = np.array(meta["color"], dtype=np.uint8)
+
+        # label 編號 -> 該編號的常數填充圖，供 cv2.copyTo 使用；依影像尺寸延遲配置
+        self._label_fill_cache = {}
+
         # # 顏色參數表
         self.HSVColorRange = {label: ColorRange(LabelName=label) for label in self.labels}
         # self.YUVColorRange = {label: YUVColorRange(YUVLabelName=label) for label in self.labels}
@@ -114,10 +124,17 @@ class ImageNode(Node):
             depth=1,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
-        qos_img = 10
+        # depth=1：影像鏈路只留最新一幀。預設的 10 會讓 publisher 與 subscriber
+        # 各堆到 10 幀，下游一慢就累積出數百 ms 延遲。
+        # 注意 label_matrix 維持 depth=10 不動，那是策略層在用的。
+        qos_img = QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=1,
+                             reliability=ReliabilityPolicy.RELIABLE,
+                             durability=DurabilityPolicy.VOLATILE)
         self.info_pub = self.create_publisher(String, 'object_info', qos_latest)
         # self.yuv_info_pub = self.create_publisher(String, 'yuv_object_info', qos_latest)
         self.label_pub = self.create_publisher(Image, 'label_matrix', 10)
+        # 顏色 class 標籤圖：0=背景，1~8=color_labels 的 label 編號，供 overlap_node 取交集
+        self.color_label_pub = self.create_publisher(Image, 'color_label_map', qos_latest)
         # self.yuv_label_pub = self.create_publisher(Image, 'yuv_label_matrix', 10)
         # 每個顏色各一個 Publisher：detections/<label>
         self.det_pubs = {
@@ -146,8 +163,40 @@ class ImageNode(Node):
         self.declare_parameter('zoom_in', 1.0)
         self.zoom = float(self.get_parameter('zoom_in').value)
 
+        # 相機來源：決定 zoomin 存放於哪個 ini
+        #   usb -> CameraSet.ini（usb_cam 擁有）  zed -> ZedCameraSet.ini（bridge node 擁有）
+        self.declare_parameter('camera_source', 'zed')
+        self.camera_source = str(self.get_parameter('camera_source').value).strip().lower()
+
+        # usb 相機是 960x540（16:9），ZED 是 960x600（16:10）。usb 模式下先把影像
+        # 上下補黑成 960x600，讓裁切放大、對外座標、網頁顯示框都只有一套規格。
+        self.declare_parameter('pad_to_height', 600)
+        self._pad_top = 0            # 這一幀上緣補了幾列（輸入座標）
+        self._pad_bottom = 0         # 下緣補了幾列
+        self._pad_out_top = 0        # 裁切放大「之後」上緣還有幾列是補黑區
+        self._pad_out_bot_start = None   # 之後從第幾列起是補黑區；None 表示沒有
+
+        # 連通元件的最小面積門檻（960x600 下等價於原本 320x240 的 50）
+        # 可用 ros2 param set /image_node min_blob_area <n> 即時調整
+        self.declare_parameter('min_blob_area', 375)
+
+        # 色模去雜訊的形態學 kernel 大小。960x600 的線性尺度是舊 320x240 的 3 倍，
+        # 所以等價於舊版 OPEN:3 的是 9。設 <3 則完全不做形態學。
+        self.declare_parameter('morph_kernel', 9)
+        self._morph_kernel = None
+
         self.bridge = CvBridge()
-        self.subscription = self.create_subscription(Image, '/camera1/image_raw', self.image_callback, qos_img)
+        # 影像來源 topic 依相機分流。原本寫死 ZED 的 topic，usb 模式下沒有任何節點
+        # 在發，image_callback 一次都不會被呼叫，整個色模就是黑的。
+        CAMERA_TOPICS = {
+            'usb': '/camera1/image_raw',
+            'zed': '/zed/zed_node/left/image_rect_color',
+        }
+        self.declare_parameter('image_topic', '')     # 非空字串時蓋過 camera_source
+        override = str(self.get_parameter('image_topic').value).strip()
+        self.image_topic = override or CAMERA_TOPICS.get(self.camera_source, CAMERA_TOPICS['zed'])
+        self.get_logger().info(f"[image] camera_source={self.camera_source} topic={self.image_topic}")
+        self.subscription = self.create_subscription(Image, self.image_topic, self.image_callback, qos_img)
         self.zoom_in = self.create_publisher(Image, 'zoom_in', qos_img)
 
         self.ZoomSub = self.create_subscription(Zoom, '/Zoom_In_Topic', self.zoomValue, qos_img)
@@ -236,7 +285,20 @@ class ImageNode(Node):
             self.draw_image_callback, 
             qos_img
         )
+        # 繪圖是以 cnt 為 key 累積的，策略停掉之後圖形會一直留在畫面上。
+        # 提供一個明確的清除入口給網頁按鈕與策略（API.clearDrawImage）使用。
+        self.draw_clear_sub = self.create_subscription(
+            Bool, '/drawimage/clear', self.draw_clear_callback, 10
+        )
 
+
+    def draw_clear_callback(self, msg):
+        """清除所有已累積的繪圖。收到 data=False 時不動作，方便當開關用。"""
+        if not msg.data:
+            return
+        n = len(self.draw_image_array)
+        self.draw_image_array.clear()
+        self.get_logger().info(f"[DrawImage] 已清除 {n} 個圖形")
 
     def draw_image_callback(self, msg):
         # 尋找是否有相同編號的圖形
@@ -1012,28 +1074,42 @@ class ImageNode(Node):
         )
 
     def load_zoomin_from_camera_ini(self):
-        if getattr(self, "location", None):
-            p = Path(self.location)
-            ini_path = p if p.suffix else (p / "CameraSet.ini")
+        # zoomin 依相機來源分家：usb 由 usb_cam 寫 CameraSet.ini，
+        # zed 由 camera_param_bridge_node 寫 ZedCameraSet.ini，兩者互斥啟動不會打架。
+        # zed 模式下 ZedCameraSet.ini 若尚未建立，退回讀 CameraSet.ini，
+        # 讓既有的 zoom 設定能自動沿用（第一次 Camera Save 後就會有自己的檔）
+        if self.camera_source == "usb":
+            candidates = [("CameraSet.ini", "Camera Set Parameter")]
         else:
-            ini_path = Path(self.path_dir) / "CameraSet.ini"
+            candidates = [
+                ("ZedCameraSet.ini", "ZED Camera Set Parameter"),
+                ("CameraSet.ini", "Camera Set Parameter"),
+            ]
 
-        cfg = configparser.ConfigParser()
-        read_ok = cfg.read(str(ini_path))
-        if not read_ok:
-            self.get_logger().warn(f"[CameraSet INI] not found, keep zoom={self.zoom}: {ini_path}")
-            return
+        base = Path(self.location) if getattr(self, "location", None) else Path(self.path_dir)
 
-        section = "Camera Set Parameter"
-        if section not in cfg:
-            self.get_logger().warn(f"[CameraSet INI] section '{section}' missing, keep zoom={self.zoom}")
-            return
+        for filename, section in candidates:
+            ini_path = base if base.suffix else (base / filename)
 
-        try:
-            self.zoom = float(cfg[section].get("zoomin", str(self.zoom)))
-            self.get_logger().info(f"[CameraSet INI] zoom={self.zoom} from {ini_path}")
-        except ValueError as e:
-            self.get_logger().error(f"[CameraSet INI] invalid zoomin value: {e}")
+            cfg = configparser.ConfigParser()
+            if not cfg.read(str(ini_path)):
+                self.get_logger().warn(f"[{filename}] not found: {ini_path}")
+                continue
+            if section not in cfg:
+                self.get_logger().warn(f"[{filename}] section '{section}' missing")
+                continue
+            if "zoomin" not in cfg[section]:
+                self.get_logger().warn(f"[{filename}] key 'zoomin' missing")
+                continue
+
+            try:
+                self.zoom = float(cfg[section]["zoomin"])
+                self.get_logger().info(f"[{filename}] zoom={self.zoom} from {ini_path}")
+                return
+            except ValueError as e:
+                self.get_logger().error(f"[{filename}] invalid zoomin value: {e}")
+
+        self.get_logger().warn(f"[zoomin] no usable ini found, keep zoom={self.zoom}")
 
     # def init_yuv_from_ini(self, active_label: str = None):
     #     ini_path = str(self._resolve_yuv_path())
@@ -1098,9 +1174,17 @@ class ImageNode(Node):
         
     def init_opencv_from_ini(self):
         # self.OpenCvOrders = ["ERODE:3", "DILATE:5"]
-        self.OpenCvOrders = ["OPEN:3"]
-        # self.OpenCvOrders = []
-        self.get_logger().info(f"[OpenCV] default orders: {self.OpenCvOrders}")
+        self._morph_kernel = None      # 強制下次 refresh 重建
+        self.refresh_opencv_orders()
+
+    def refresh_opencv_orders(self):
+        """依 morph_kernel 參數重建處理順序，kernel 沒變就不做事（每幀呼叫）。"""
+        k = int(self.get_parameter('morph_kernel').value)
+        if k == self._morph_kernel:
+            return
+        self._morph_kernel = k
+        self.OpenCvOrders = [f"OPEN:{k}"] if k >= 3 else []
+        self.get_logger().info(f"[OpenCV] orders -> {self.OpenCvOrders}")
 
         # ini_path = str(self._resolve_opencv_path())
         # cfg = configparser.ConfigParser()
@@ -1212,7 +1296,10 @@ class ImageNode(Node):
     
     def image_callback(self, msg):
         try:
+            self.refresh_opencv_orders()
             cv_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            # usb 模式先補黑成 960x600，之後所有邏輯都當作只有一種尺寸
+            cv_img = self._pad_frame(cv_img)
             height, width = cv_img.shape[:2]
 
             new_w = int(width / self.zoom)
@@ -1221,6 +1308,9 @@ class ImageNode(Node):
             y1 = (height - new_h) // 2
             x2 = x1 + new_w
             y2 = y1 + new_h
+
+            # 補黑區在放大後落在哪幾列，色模要據此排除
+            self._update_pad_rows(y1, new_h, height)
 
             cropped = cv_img[y1:y2, x1:x2]
             zoomed_frame = cv2.resize(cropped, (width, height), interpolation=cv2.INTER_LINEAR)
@@ -1260,8 +1350,8 @@ class ImageNode(Node):
                 self.zoom_in.publish(zoom_msg)
                 self._last_img_pub["zoom_in"] = now
 
-            proc_w, proc_h = 320, 240
-            proc_frame = cv2.resize(zoomed_frame, (proc_w, proc_h), interpolation=cv2.INTER_LINEAR)
+            # 色模直接在放大後的原尺寸（960x600）上運算，與深度圖同一座標系
+            proc_frame = zoomed_frame
             hsv_proc = cv2.cvtColor(proc_frame, cv2.COLOR_BGR2HSV)
             # yuv_proc = cv2.cvtColor(proc_frame, cv2.COLOR_BGR2YCrCb)
 
@@ -1318,6 +1408,9 @@ class ImageNode(Node):
             # 形態學清雜訊（只在一般情況下做，避免把「全選」變稀疏）
             mask = self.process_by_order(mask, self.OpenCvOrders,"a")
             # mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.kernel3, iterations=2)
+
+        # usb 補黑區不算物體（放在特殊情況之後，「全選」也要一併排除）
+        mask = self._strip_pad(mask)
 
         # 後處理與發佈：保持你原本的流程
         mask_msg = self.bridge.cv2_to_imgmsg(mask, encoding='mono8')
@@ -1393,14 +1486,87 @@ class ImageNode(Node):
     #     return vis_msg, mask_msg
 
 
+    # ---------------- usb 相機的補黑（pad）處理 ----------------
+    def _pad_frame(self, img):
+        """usb 相機的 960x540 上下補黑，補成與 ZED 相同的 960x600。
+
+        統一尺寸之後，裁切放大邏輯、對外座標、網頁顯示框都不用分兩套。
+        zed 模式或高度本來就達標時原樣返回，不產生任何複製成本。
+        """
+        self._pad_top = self._pad_bottom = 0
+        if self.camera_source != 'usb':
+            return img
+
+        target_h = int(self.get_parameter('pad_to_height').value)
+        h = img.shape[0]
+        if h >= target_h:
+            return img
+
+        top = (target_h - h) // 2
+        bottom = target_h - h - top
+        self._pad_top, self._pad_bottom = top, bottom
+        return cv2.copyMakeBorder(img, top, bottom, 0, 0,
+                                  cv2.BORDER_CONSTANT, value=(0, 0, 0))
+
+    def _update_pad_rows(self, y1, new_h, out_h):
+        """算出補黑區在「裁切放大後」的影像裡佔哪幾列，供色模排除。
+
+        裁切是置中的，所以只要 zoom 超過 600/540≈1.11，補黑區就整個被裁掉了，
+        這時算出來會是 0 —— 也就是說多數放大情況下根本不需要排除。
+        """
+        self._pad_out_top = 0
+        self._pad_out_bot_start = None
+        if self._pad_top <= 0 and self._pad_bottom <= 0:
+            return
+
+        scale = out_h / float(max(new_h, 1))      # 輸入 1 列 → 輸出幾列
+
+        if self._pad_top > 0:
+            top = math.ceil((self._pad_top - y1) * scale)
+            self._pad_out_top = max(0, min(out_h, int(top)))
+
+        if self._pad_bottom > 0:
+            # 輸入座標中，補黑區從這一列開始（out_h 同時也是補黑後的輸入高度）
+            bot_in = out_h - self._pad_bottom
+            start = math.floor((bot_in - y1) * scale)
+            start = max(0, min(out_h, int(start)))
+            if start < out_h:
+                self._pad_out_bot_start = start
+
+    def _strip_pad(self, mask):
+        """把補黑區那幾列從 mask 清成 0。
+
+        補黑區是人工加上去的，不是真的畫面。960x30 = 28800 px 遠大於
+        min_blob_area(375)，不清掉的話上下會各多一個橫跨整個畫面寬度的假物體，
+        而且永遠都在 —— 策略挑「面積最大的物體」時一定會中招。
+        """
+        if self._pad_out_top > 0:
+            mask[:self._pad_out_top, :] = 0
+        if self._pad_out_bot_start is not None:
+            mask[self._pad_out_bot_start:, :] = 0
+        return mask
+
+    def _label_fill(self, label_id: int, h: int, w: int) -> np.ndarray:
+        """取得填滿 label_id 的 mono8 常數圖，供 cv2.copyTo 當來源用（快取，尺寸變才重配）。"""
+        key = (label_id, h, w)
+        buf = self._label_fill_cache.get(key)
+        if buf is None:
+            buf = np.full((h, w), label_id, dtype=np.uint8)
+            self._label_fill_cache[key] = buf
+        return buf
+
     def build_all_hsv_table(self, hsv, resized, stamp):
         h, w = hsv.shape[:2]
         total_mask = np.zeros((h, w), dtype=np.uint8)     # 純黑白二值化
-        color_mask = np.zeros((h, w, 3), dtype=np.uint8)  # BGR 偽彩色輸出
+        label_map = np.zeros((h, w), dtype=np.uint8)      # 0=背景，1~8=顏色 class 編號
+        # 偽彩色不在迴圈內逐色填，改在最後用 label_map 查表產生（省掉 8 次三通道 fancy indexing）
 
         # 全色偵測結果（精簡）
         detections_all = {label: [] for label in self.HSVColorRange.keys()}
         H_MAX, S_MAX, V_MAX = 179, 255, 255
+
+        # 每幀讀一次，讓 ros2 param set 能即時生效
+        min_area = int(self.get_parameter('min_blob_area').value)
 
         for label, color_obj in self.HSVColorRange.items():
             h_low, h_high = int(color_obj.HueMin), int(color_obj.HueMax)
@@ -1425,15 +1591,14 @@ class ImageNode(Node):
                 mask_i = cv2.bitwise_or(mask1, mask2)          
             mask_i = self.process_by_order(mask_i, self.OpenCvOrders,"a")
             # mask_i = cv2.morphologyEx(mask_i, cv2.MORPH_OPEN, self.kernel3, iterations=2)
+            mask_i = self._strip_pad(mask_i)   # usb 補黑區不算物體
 
             total_mask = cv2.bitwise_or(total_mask, mask_i)
 
             label_key = label.capitalize() + "Label"
-            bgr_color = np.array(
-                self.color_labels.get(label_key, {"color": [255, 255, 255]})["color"],
-                dtype=np.uint8
-            )
-            color_mask[mask_i > 0] = bgr_color
+            entry = self.color_labels.get(label_key, {"label": 0, "color": [255, 255, 255]})
+            # 用 OpenCV 的遮罩複製取代 numpy fancy indexing，兩者語意相同但快一個數量級
+            cv2.copyTo(self._label_fill(int(entry.get("label", 0)), h, w), mask_i, label_map)
 
             # vis_msg_all = self.bridge.cv2_to_imgmsg(color_mask, encoding='bgr8')
             # self.processed_image.publish(vis_msg_all)
@@ -1442,7 +1607,7 @@ class ImageNode(Node):
             color_list_compact = []
             for i in range(1, num):  # 0 是背景
                 x, y, w_box, h_box, area = stats[i]
-                if area < 50:
+                if area < min_area:
                     continue
                 cx, cy = centroids[i]
                 item = {
@@ -1497,8 +1662,13 @@ class ImageNode(Node):
             self.label_pub.publish(img_msg)
             self._last_hsv_img_pub["mask_image"] = now
 
-        # === 彩色可視化影像（把 color_mask 套 total_mask，影像節流） ===
-        vis_all = cv2.bitwise_and(color_mask, color_mask, mask=total_mask)
+            # === 顏色 class 標籤圖，供 overlap_node 與距離標籤圖取交集 ===
+            lbl_msg = self.bridge.cv2_to_imgmsg(label_map, encoding='mono8')
+            lbl_msg.header.stamp = img_msg.header.stamp
+            self.color_label_pub.publish(lbl_msg)
+
+        # === 彩色可視化影像：由 label_map 查表產生（背景 label 0 對到黑，等同原本套 total_mask） ===
+        vis_all = cv2.LUT(cv2.cvtColor(label_map, cv2.COLOR_GRAY2BGR), self.color_lut)
         vis_msg_all = self.bridge.cv2_to_imgmsg(vis_all, encoding='bgr8')
         try:
             vis_msg_all.header.stamp.sec = int(stamp.get('sec', 0))

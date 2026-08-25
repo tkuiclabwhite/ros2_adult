@@ -27,6 +27,7 @@ setup(
             # 其他的也要確認有沒有在裡面：
             'walking_web_bridge = walking.walking_web_bridge:main',
             'imu_node = walking.imu_node:main', 
+            'zed_imu_node = walking.zed_imu_node:main',
         ],
     },
 )

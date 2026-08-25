@@ -8,7 +8,6 @@
 .. autoattribute:: API.roll
 .. autoattribute:: API.pitch
 .. autoattribute:: API.yaw
-.. autoattribute:: API.pose
 
 .. autoattribute:: API.lm_fps_ema
 .. autoattribute:: API.label_matrix_stamp
@@ -20,7 +19,6 @@
 .. automethod:: API._clamp
 
 .. automethod:: API.imu
-.. automethod:: API.Yolo_Zed
 .. autoattribute:: API.latest_objects
 .. autoattribute:: API.label_matrix
 .. autoattribute:: API.label_matrix_flatten
