@@ -1,1 +1,1 @@
-window.currentStrategy = "nstc/Parameter";
+window.currentStrategy = "ar/Parameter";

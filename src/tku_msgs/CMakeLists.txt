@@ -53,6 +53,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SaveMotionVector.msg"
   "msg/SensorPackage.msg"
   "msg/SensorSet.msg"
+  "msg/XsensImu.msg"
   "msg/SingleMotorData.msg"
   "msg/Walkingmessage.msg"
   #########     vision/srv    ##################

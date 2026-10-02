@@ -28,6 +28,9 @@ setup(
             'walking_web_bridge = walking.walking_web_bridge:main',
             'imu_node = walking.imu_node:main', 
             'zed_imu_node = walking.zed_imu_node:main',
+            # IMU：xsens_bridge 與 imu_node 都發 /package/sensorpackage，只能擇一啟動
+            # （camera.launch.py 用 imu_source 參數選，預設 xsens）
+            'xsens_bridge = walking.xsens_bridge:main',
         ],
     },
 )

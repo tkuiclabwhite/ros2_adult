@@ -14,7 +14,7 @@
     	    	padding: 10px;
         		margin: 10px;
 				width: 31%;
-				height: 600px;
+				height: 680px;
 				border: 2px black solid;
 				color: white;
        		}
@@ -310,8 +310,8 @@
 		});
 
 		//-----
-		var SensorPackage_Subscriber = null;
 		var ZedImu_Subscriber = null;
+		var XsensImu_Subscriber = null;
 
 		var connectFlag = false;
 		var myAddress = window.ROBOT_CONFIG.ip;
@@ -352,21 +352,54 @@
 		}
 
 		function createTopics() {
-			if(SensorPackage_Subscriber != null)
+			// Xsens MTi：xsens_bridge 除了餵 /package/sensorpackage（walking_node 與
+			// 策略吃的那條，與 Arduino IMU 共用），另外發一份完整資料到 /xsens_imu/data。
+			// rate_hz / alive 是判斷「IMU 到底有沒有活著」的依據 —— 排線鬆脫時
+			// SensorPackage 會靜靜卡在舊值，只有這裡看得出來。
+			try {
+			if(XsensImu_Subscriber != null)
 			{
-				SensorPackage_Subscriber.unsubscribe();
+				XsensImu_Subscriber.unsubscribe();
 			}
-			SensorPackage_Subscriber = new ROSLIB.Topic({
+			XsensImu_Subscriber = new ROSLIB.Topic({
 			ros: ros,
-			name: '/package/sensorpackage',
-			messageType: 'tku_msgs/SensorPackage'
+			name: '/xsens_imu/data',
+			messageType: 'tku_msgs/XsensImu'
 			});
-			SensorPackage_Subscriber.subscribe(function (msg)
-			{		
-				document.getElementById("Roll").value  = parseInt(msg.roll);
-				document.getElementById("Pitch").value = parseInt(msg.pitch);
-				document.getElementById("Yaw").value   = parseInt(msg.yaw);
+			XsensImu_Subscriber.subscribe(function (msg)
+			{
+				// 與 ZED 同樣全程包 try/catch：Xsens 掛掉不該讓同一條 websocket 上
+				// 的其他 topic（例如 /locationBack）跟著停擺
+				try {
+					var setv = function(id, v) {
+						var el = document.getElementById(id);
+						if (el) { el.value = v; }
+					};
+					setv("XsensRoll",  msg.roll.toFixed(1));
+					setv("XsensPitch", msg.pitch.toFixed(1));
+					setv("XsensYaw",   msg.yaw.toFixed(1));
+					setv("XsensGyroX", msg.angular_velocity[0].toFixed(1));
+					setv("XsensGyroY", msg.angular_velocity[1].toFixed(1));
+					setv("XsensGyroZ", msg.angular_velocity[2].toFixed(1));
+					setv("XsensAccX",  msg.free_acceleration[0].toFixed(2));
+					setv("XsensAccY",  msg.free_acceleration[1].toFixed(2));
+					setv("XsensAccZ",  msg.free_acceleration[2].toFixed(2));
+
+					// 狀態列：alive 為 false 時染紅，走路中排線鬆脫要一眼看得出來
+					var st = document.getElementById("XsensStatus");
+					if (st) {
+						st.value = msg.rate_hz.toFixed(0) + "Hz "
+							+ (msg.alive ? "OK" : "NO DATA")
+							+ (msg.zeroed ? " zeroed" : "");
+						st.style.backgroundColor = msg.alive ? "#d8f5d8" : "#f5d8d8";
+					}
+				} catch (e) {
+					console.warn("XsensImu 更新失敗:", e);
+				}
 			});
+			} catch (e) {
+				console.warn("XsensImu 訂閱失敗（tku_msgs 是否已重新 build？）:", e);
+			}
 
 			// ZED 內建 IMU（zed_imu_node 已降頻到 20Hz，這裡直接照收）
 			try {
@@ -990,6 +1023,7 @@
                 <li><a target="_blank" href="miniDRC.html">miniDRC</a></li>
                 <li><a target="_blank" href="RobotViewer.html">RobotViewer</a></li>
 				<li><a target="_blank" href="WaveformMonitor.html">WaveformMonitor</a></li>
+				<li><a target="_blank" href="ImuMonitor.html">ImuMonitor</a></li>
                 <li><a target="_blank" href="arm_control.html">arm_control</a></li>
             </ul>
         </li>
@@ -1037,25 +1071,45 @@
 		<div id="control" align="center" >
 			<section id="SensorValue" align="center" style="margin-left:calc(50% - 430px); float: left; min-width: 205px; max-width: 210px; width: 20%;">
 				<b><h align="center"style="font-size: 23px">Sensor_Value</h></b>
+
+				<!-- Xsens MTi：資料來自 xsens_bridge（/xsens_imu/data），含小數、角速度、
+				     free acceleration 與 alive/rate_hz watchdog。
+				     下方 IMU reset 發 /sensorset —— 與策略裡 api.sendSensorReset(True) 同一條，
+				     xsens_bridge 收到後把目前姿態設為零點，/package/sensorpackage 也跟著歸零 -->
 				<table style="width: 184px; text-align: left;">
 					<tr>
-						<td style="color:#888;font-size: 18px" colspan="4">IMU:</td>
+						<td style="color:#888;font-size: 18px" colspan="4">Xsens:</td>
 					</tr>
 					<tr>
 						<td style="width: 52px">Roll:</td>
-						<td><input type="text" name="Roll" id="Roll" value="0" style="width: 70px"></td>
+						<td colspan="3"><input type="text" name="XsensRoll" id="XsensRoll" value="0" style="width: 70px" title="度，已歸零"></td>
 					</tr>
 					<tr>
 						<td>Pitch:</td>
-						<td><input type="text" name="Pitch" id="Pitch" value="0" style="width: 70px"></td>
+						<td colspan="3"><input type="text" name="XsensPitch" id="XsensPitch" value="0" style="width: 70px" title="度，已歸零"></td>
 					</tr>
 					<tr>
 						<td>Yaw:</td>
-						<td><input type="text" name="Yaw" id="Yaw" value="0" style="width: 70px"></td>
+						<td colspan="3"><input type="text" name="XsensYaw" id="XsensYaw" value="0" style="width: 70px" title="度，已歸零"></td>
+					</tr>
+					<tr>
+						<td style="font-size: 13px">Gyro:</td>
+						<td><input type="text" id="XsensGyroX" value="0" style="width: 42px" title="deg/s X"></td>
+						<td><input type="text" id="XsensGyroY" value="0" style="width: 42px" title="deg/s Y"></td>
+						<td><input type="text" id="XsensGyroZ" value="0" style="width: 42px" title="deg/s Z"></td>
+					</tr>
+					<tr>
+						<td style="font-size: 13px">Accel:</td>
+						<td><input type="text" id="XsensAccX" value="0" style="width: 42px" title="free acceleration m/s^2 X（已扣除重力）"></td>
+						<td><input type="text" id="XsensAccY" value="0" style="width: 42px" title="free acceleration m/s^2 Y（已扣除重力）"></td>
+						<td><input type="text" id="XsensAccZ" value="0" style="width: 42px" title="free acceleration m/s^2 Z（已扣除重力）"></td>
+					</tr>
+					<tr>
+						<td style="font-size: 13px">State:</td>
+						<td colspan="3"><input type="text" id="XsensStatus" value="--" style="width: 134px" title="實測頻率 / watchdog / 是否已歸零" readonly></td>
 					</tr>
 				</table>
 				<button type="button" style="width: 100px;height: 40px; margin-left: 20px; margin-top: 5px;display: inline-block;" onclick="SendSensorSet()">IMU reset</button>
-				</table>
 
 				<!-- ZED 內建 IMU：獨立區塊，資料來自 zed_imu_node（僅 camera_source:=zed 時啟動）。
 				     Arduino IMU 只送 yaw/pitch/roll，沒有角速度與線加速度，故兩區欄位不對稱。 -->
