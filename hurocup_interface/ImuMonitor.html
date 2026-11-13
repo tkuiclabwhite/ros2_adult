@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="SHORTCUT ICON" href="./picture/icon.png">
+    <link rel="stylesheet" type="text/css" href="./css/style.css">
+    <title>IMU Monitor</title>
+    <style>
+        body {
+            width: auto;
+            min-width: 500px;
+            color: white;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        #top-bar {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            padding: 8px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-bottom: 1px solid #333;
+            flex-wrap: wrap;
+        }
+
+        .strategy-box {
+            display: inline-block;
+            background-color: #222;
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 4px 16px;
+            box-shadow: inset 0 0 10px #000;
+            text-align: center;
+        }
+        .strategy-label {
+            color: #888;
+            font-size: 11px;
+            text-transform: uppercase;
+            display: block;
+        }
+        #current-strategy-name {
+            color: #00D600;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 0 0 8px rgba(0, 214, 0, 0.5);
+        }
+
+        #ctrl-bar {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 7px 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border-bottom: 1px solid #2a2a2a;
+            flex-wrap: wrap;
+        }
+        #ctrl-bar label { color: #aaa; font-size: 13px; }
+        #ctrl-bar input[type=number] {
+            width: 58px;
+            background: #111;
+            color: #ccc;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 13px;
+        }
+        #ctrl-bar button {
+            padding: 4px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            background: transparent;
+            transition: 0.2s;
+        }
+        .btn-xsens { color: #f0c040; border: 1px solid #f0c040; }
+        .btn-xsens:hover { background: #f0c040; color: #050505; box-shadow: 0 0 8px #f0c040; }
+        .btn-zed   { color: #40c8f0; border: 1px solid #40c8f0; }
+        .btn-zed:hover { background: #40c8f0; color: #050505; box-shadow: 0 0 8px #40c8f0; }
+        #pauseBtn  { color: #03e9f4; border: 1px solid #03e9f4; }
+        #pauseBtn:hover, #pauseBtn.paused { background: #03e9f4; color: #050505; box-shadow: 0 0 8px #03e9f4; }
+        #clearBtn  { color: #ff9944; border: 1px solid #ff9944; }
+        #clearBtn:hover { background: #ff9944; color: #050505; }
+        #csvBtn    { color: #a0a0a0; border: 1px solid #666; }
+        #csvBtn:hover { background: #a0a0a0; color: #050505; }
+        .bar-sep { width: 1px; height: 20px; background: #333; }
+
+        /* ── 卡片 ── */
+        #cards-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 10px 12px 0;
+        }
+        .imu-card {
+            background: rgba(10, 14, 24, 0.92);
+            border: 1px solid #1e2e3a;
+            border-radius: 8px;
+            padding: 10px 14px 12px;
+            box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.5);
+            flex: 1;
+            min-width: 300px;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .card-title {
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .card-sub { font-size: 11px; color: #667; letter-spacing: 0; }
+
+        .pill {
+            font-size: 11px;
+            padding: 2px 9px;
+            border-radius: 10px;
+            border: 1px solid;
+            letter-spacing: 1px;
+            white-space: nowrap;
+        }
+        .pill-live { color: #00D600; border-color: #00D600; background: rgba(0, 214, 0, 0.1); }
+        .pill-dead { color: #ff4444; border-color: #ff4444; background: rgba(255, 68, 68, 0.12); }
+        .pill-warn { color: #ffcc44; border-color: #ffcc44; background: rgba(255, 204, 68, 0.1); }
+        .pill-idle { color: #666; border-color: #444; }
+
+        .card-body { display: flex; gap: 12px; flex-wrap: wrap; }
+        .adi-wrap { flex: 0 0 auto; }
+        .readouts { flex: 1; min-width: 190px; }
+
+        table.rd { width: 100%; border-collapse: collapse; font-size: 13px; }
+        table.rd th {
+            text-align: left;
+            color: #667;
+            font-weight: normal;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 5px 0 2px;
+            border-bottom: 1px solid #1e2e3a;
+        }
+        table.rd td { padding: 2px 0; color: #ccc; }
+        table.rd td.k { color: #778; width: 72px; }
+        table.rd td.v { text-align: right; font-variant-numeric: tabular-nums; }
+        table.rd td.u { color: #556; width: 42px; padding-left: 6px; font-size: 11px; }
+        .big { font-size: 17px; font-weight: bold; }
+
+        canvas { display: block; background: #070710; border: 1px solid #1a1a2e; border-radius: 4px; }
+
+        /* ── 波形 ── */
+        .wave-row { display: flex; flex-wrap: wrap; padding: 10px 12px 10px; gap: 10px; }
+        .wave-panel {
+            background: rgba(10, 14, 24, 0.92);
+            border: 1px solid #1e2e3a;
+            border-radius: 8px;
+            padding: 10px 14px 12px;
+            box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.5);
+            flex: 1;
+            min-width: 260px;
+        }
+        .wave-panel canvas { width: 100%; }
+        .wave-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+        .wave-title { font-size: 14px; font-weight: bold; letter-spacing: 3px; text-transform: uppercase; }
+        .legend { font-size: 11px; }
+        .legend span { margin-left: 10px; }
+
+        .hint {
+            padding: 0 22px 14px;
+            color: #667;
+            font-size: 12px;
+            line-height: 1.7;
+        }
+        .hint code { color: #8a9; }
+    </style>
+    <script src="./js/nav.js"></script>
+</head>
+
+<body>
+    <!-- NAV BAR（內容由 js/nav.js 產生，不要寫死）-->
+    <ul id="mainnav"></ul>
+
+    <!-- TOP BAR -->
+    <div id="top-bar">
+        <p id="connected" style="color:#00D600; display:none; font-size:18px; margin:0; text-shadow:0 0 8px #00D600;">Connected</p>
+        <div class="strategy-box">
+            <span class="strategy-label">Strategy</span>
+            <span id="current-strategy-name">---</span>
+        </div>
+        <select style="height:25px; background:#111; color:#ccc; border:1px solid #444; border-radius:4px; padding:0 8px;" id="addressSelect">
+            <option value="localhost">localhost</option>
+        </select>
+        <button type="button" style="height:25px; padding:0 14px; background:transparent; color:#00D600; border:1px solid #00D600; border-radius:4px; cursor:pointer;" onclick="enterAddress()">Connect</button>
+        <h2 style="margin:0; font-size:20px; color:white; letter-spacing:4px;">IMU MONITOR</h2>
+    </div>
+
+    <!-- CONTROL BAR -->
+    <div id="ctrl-bar">
+        <label>Time (s):</label>
+        <input type="number" id="timeWindow" value="10" min="2" max="60" step="1">
+
+        <label>Scale (°):</label>
+        <input type="number" id="yScale" value="15" min="5" max="180" step="5">
+
+        <label>Accel (m/s²):</label>
+        <input type="number" id="accScale" value="12" min="1" max="160" step="1">
+
+        <div class="bar-sep"></div>
+
+        <button class="btn-xsens" onclick="zeroXsens()">Zero Xsens</button>
+        <button class="btn-zed" onclick="zeroZed()">Zero ZED</button>
+
+        <div class="bar-sep"></div>
+
+        <button id="pauseBtn" onclick="togglePause()">Pause</button>
+        <button id="clearBtn" onclick="clearBuffers()">Clear</button>
+        <button id="csvBtn" onclick="exportCsv()">Export CSV</button>
+    </div>
+
+    <!-- CARDS -->
+    <div id="cards-row">
+
+        <!-- Xsens -->
+        <div class="imu-card">
+            <div class="card-header">
+                <span class="card-title" style="color:#f0c040;">&#9642; Xsens MTi-620
+                    <span class="card-sub">機身 · /xsens_imu/data</span></span>
+                <span>
+                    <span class="pill pill-idle" id="xsZero">未歸零</span>
+                    <span class="pill pill-idle" id="xsStatus">等待資料</span>
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="adi-wrap"><canvas id="adiXsens" width="190" height="190"></canvas></div>
+                <div class="readouts">
+                    <table class="rd">
+                        <tr><th colspan="3">姿態（已歸零）</th></tr>
+                        <tr><td class="k">Roll</td>  <td class="v big" id="xsRoll">—</td>  <td class="u">°</td></tr>
+                        <tr><td class="k">Pitch</td> <td class="v big" id="xsPitch">—</td> <td class="u">°</td></tr>
+                        <tr><td class="k">Yaw</td>   <td class="v big" id="xsYaw">—</td>   <td class="u">°</td></tr>
+                        <tr><th colspan="3">絕對姿態（未歸零）</th></tr>
+                        <tr><td class="k">Roll</td>  <td class="v" id="xsARoll">—</td>  <td class="u">°</td></tr>
+                        <tr><td class="k">Pitch</td> <td class="v" id="xsAPitch">—</td> <td class="u">°</td></tr>
+                        <tr><td class="k">Yaw</td>   <td class="v" id="xsAYaw">—</td>   <td class="u">°</td></tr>
+                        <tr><th colspan="3">角速度</th></tr>
+                        <tr><td class="k">X / Y / Z</td><td class="v" id="xsGyro">—</td><td class="u">°/s</td></tr>
+                        <tr><th colspan="3">Free Accel（已扣重力）</th></tr>
+                        <tr><td class="k">X / Y / Z</td><td class="v" id="xsAccel">—</td><td class="u">m/s²</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Xsens 加速度：直接訂 driver 的 topic，不經 xsens_bridge。
+             bridge 或 tku_msgs 還沒弄好時，這張卡照樣能確認感測器本身有沒有在出資料 -->
+        <div class="imu-card">
+            <div class="card-header">
+                <span class="card-title" style="color:#f0c040;">&#9642; Xsens 加速度
+                    <span class="card-sub">driver 直出 · 不經 bridge</span></span>
+                <span>
+                    <span class="pill pill-idle" id="accRawStatus">含重力 等待</span>
+                    <span class="pill pill-idle" id="accFreeStatus">Free 等待</span>
+                </span>
+            </div>
+            <div class="readouts">
+                <table class="rd">
+                    <tr><th colspan="3">校正加速度（含重力）· /imu/acceleration</th></tr>
+                    <tr><td class="k">X</td>  <td class="v big" id="accRawX">—</td> <td class="u">m/s²</td></tr>
+                    <tr><td class="k">Y</td>  <td class="v big" id="accRawY">—</td> <td class="u">m/s²</td></tr>
+                    <tr><td class="k">Z</td>  <td class="v big" id="accRawZ">—</td> <td class="u">m/s²</td></tr>
+                    <tr><td class="k">|a|</td><td class="v" id="accRawN">—</td>     <td class="u">m/s²</td></tr>
+                    <tr><th colspan="3">Free Accel（已扣重力）· /filter/free_acceleration</th></tr>
+                    <tr><td class="k">X</td>  <td class="v big" id="accFreeX">—</td> <td class="u">m/s²</td></tr>
+                    <tr><td class="k">Y</td>  <td class="v big" id="accFreeY">—</td> <td class="u">m/s²</td></tr>
+                    <tr><td class="k">Z</td>  <td class="v big" id="accFreeZ">—</td> <td class="u">m/s²</td></tr>
+                    <tr><td class="k">|a|</td><td class="v" id="accFreeN">—</td>     <td class="u">m/s²</td></tr>
+                    <tr><td colspan="3" style="color:#556; font-size:11px; padding:6px 0 0;">
+                        靜止時：含重力的 |a| 應接近 <b>9.81</b>、Free 的 |a| 應接近 <b>0</b>。
+                        含重力那組哪一軸是 ±9.8，就是那一軸朝上/朝下。<br>
+                        只有一邊亮：driver 活著，但裝置的輸出設定沒開那一項（MT Manager → Output Configuration）
+                    </td></tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- ZED -->
+        <div class="imu-card">
+            <div class="card-header">
+                <span class="card-title" style="color:#40c8f0;">&#9642; ZED 內建 IMU
+                    <span class="card-sub">頭部雲台 · /zed_imu/data</span></span>
+                <span>
+                    <span class="pill pill-idle" id="zdZero">未歸零</span>
+                    <span class="pill pill-idle" id="zdStatus">等待資料</span>
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="adi-wrap"><canvas id="adiZed" width="190" height="190"></canvas></div>
+                <div class="readouts">
+                    <table class="rd">
+                        <tr><th colspan="3">姿態（已歸零）</th></tr>
+                        <tr><td class="k">Roll</td>  <td class="v big" id="zdRoll">—</td>  <td class="u">°</td></tr>
+                        <tr><td class="k">Pitch</td> <td class="v big" id="zdPitch">—</td> <td class="u">°</td></tr>
+                        <tr><td class="k">Yaw</td>   <td class="v big" id="zdYaw">—</td>   <td class="u">°</td></tr>
+                        <tr><th colspan="3">絕對姿態（未歸零）</th></tr>
+                        <tr><td class="k">Roll</td>  <td class="v" id="zdARoll">—</td>  <td class="u">°</td></tr>
+                        <tr><td class="k">Pitch</td> <td class="v" id="zdAPitch">—</td> <td class="u">°</td></tr>
+                        <tr><td class="k">Yaw</td>   <td class="v" id="zdAYaw">—</td>   <td class="u">°</td></tr>
+                        <tr><th colspan="3">角速度</th></tr>
+                        <tr><td class="k">X / Y / Z</td><td class="v" id="zdGyro">—</td><td class="u">°/s</td></tr>
+                        <tr><th colspan="3">線加速度（含重力）</th></tr>
+                        <tr><td class="k">X / Y / Z</td><td class="v" id="zdAccel">—</td><td class="u">m/s²</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 診斷 -->
+        <div class="imu-card" style="min-width:250px; flex:0.75;">
+            <div class="card-header">
+                <span class="card-title" style="color:#80ff80;">&#9642; 診斷</span>
+            </div>
+            <table class="rd">
+                <tr><th colspan="3">資料流</th></tr>
+                <tr><td class="k">Xsens</td><td class="v" id="dgXsRate">—</td><td class="u">Hz</td></tr>
+                <tr><td class="k">ZED</td>  <td class="v" id="dgZdRate">—</td><td class="u">Hz</td></tr>
+                <tr><td class="k">機身姿態</td><td class="v" id="dgPkgRate">—</td><td class="u">Hz</td></tr>
+                <tr><td colspan="3" style="color:#556; font-size:11px; padding:2px 0 6px;">
+                    機身姿態 = <code>/package/sensorpackage</code>，walking_node 與策略實際吃的那條
+                </td></tr>
+
+                <tr><th colspan="3">絕對傾角差（Xsens − ZED）</th></tr>
+                <tr><td class="k">ΔRoll</td> <td class="v" id="dgDRoll">—</td> <td class="u">°</td></tr>
+                <tr><td class="k">ΔPitch</td><td class="v" id="dgDPitch">—</td><td class="u">°</td></tr>
+                <tr><td colspan="3" style="color:#556; font-size:11px; padding:2px 0 6px;">
+                    兩顆都以重力為基準，機身靜止站直時差值應該穩定。
+                    數值飄動大代表安裝鬆動或有震動
+                </td></tr>
+
+                <tr><th colspan="3">Yaw 漂移（視窗內）</th></tr>
+                <tr><td class="k">Xsens</td><td class="v" id="dgXsDrift">—</td><td class="u">°/min</td></tr>
+                <tr><td class="k">ZED</td>  <td class="v" id="dgZdDrift">—</td><td class="u">°/min</td></tr>
+                <tr><td colspan="3" style="color:#556; font-size:11px; padding:2px 0 0;">
+                    兩顆都沒有磁力計校正，靜止時仍會緩慢漂移，屬正常。
+                    請勿把 yaw 當長時間的絕對方位
+                </td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- WAVES -->
+    <div class="wave-row">
+        <div class="wave-panel">
+            <div class="wave-header">
+                <span class="wave-title" style="color:#ccc;">&#9642; Roll</span>
+                <span class="legend"><span style="color:#f0c040;">■ Xsens</span><span style="color:#40c8f0;">■ ZED</span></span>
+            </div>
+            <canvas id="canvasRoll" height="180"></canvas>
+        </div>
+        <div class="wave-panel">
+            <div class="wave-header">
+                <span class="wave-title" style="color:#ccc;">&#9642; Pitch</span>
+                <span class="legend"><span style="color:#f0c040;">■ Xsens</span><span style="color:#40c8f0;">■ ZED</span></span>
+            </div>
+            <canvas id="canvasPitch" height="180"></canvas>
+        </div>
+        <div class="wave-panel">
+            <div class="wave-header">
+                <span class="wave-title" style="color:#ccc;">&#9642; Yaw</span>
+                <span class="legend"><span style="color:#f0c040;">■ Xsens</span><span style="color:#40c8f0;">■ ZED</span></span>
+            </div>
+            <canvas id="canvasYaw" height="180"></canvas>
+        </div>
+    </div>
+
+    <!-- 加速度波形：同一軸疊兩條，含重力的那條平移量就是重力在該軸的分量 -->
+    <div class="wave-row">
+        <div class="wave-panel">
+            <div class="wave-header">
+                <span class="wave-title" style="color:#ccc;">&#9642; Accel X</span>
+                <span class="legend"><span style="color:#f0c040;">■ 含重力</span><span style="color:#ff6ec7;">■ Free</span></span>
+            </div>
+            <canvas id="canvasAccX" height="180"></canvas>
+        </div>
+        <div class="wave-panel">
+            <div class="wave-header">
+                <span class="wave-title" style="color:#ccc;">&#9642; Accel Y</span>
+                <span class="legend"><span style="color:#f0c040;">■ 含重力</span><span style="color:#ff6ec7;">■ Free</span></span>
+            </div>
+            <canvas id="canvasAccY" height="180"></canvas>
+        </div>
+        <div class="wave-panel">
+            <div class="wave-header">
+                <span class="wave-title" style="color:#ccc;">&#9642; Accel Z</span>
+                <span class="legend"><span style="color:#f0c040;">■ 含重力</span><span style="color:#ff6ec7;">■ Free</span></span>
+            </div>
+            <canvas id="canvasAccZ" height="180"></canvas>
+        </div>
+    </div>
+
+    <div class="hint">
+        歸零前請先讓機器人站直站穩。Zero Xsens 發 <code>/sensorset</code>（等同策略裡的
+        <code>api.sendSensorReset(True)</code>），Zero ZED 發 <code>/zed_sensorset</code>，兩顆互不影響。<br>
+        正負號驗證：機器人站直歸零後，手動往<b>前</b>傾 pitch 應為<b>正</b>、往<b>右</b>傾 roll 應為<b>正</b>。
+        若相反，調整 xsens_bridge 的 <code>sign_pitch</code> / <code>sign_roll</code> 參數 ——
+        正負號設錯會讓平衡補償往加深傾倒的方向作用。
+    </div>
+
+    <script src="./js/config.js"></script>
+    <script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
+    <script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+    <script>
+        // ── ROS ──
+        var ros = new ROSLIB.Ros({ url: "ws://" + window.ROBOT_CONFIG.ip + ":9090" });
+        var connectFlag = false;
+        var wasOnline = true;
+        var checkConnectionInterval;
+        var subs = {};
+        var xsensResetPub = null, zedResetPub = null;
+
+        function checkConnection() {
+            if (ros && window.navigator.onLine) {
+                document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+                if (!wasOnline) { enterAddress(); wasOnline = true; }
+            } else {
+                document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+                if (wasOnline) { enterAddress(); wasOnline = false; }
+                wasOnline = false;
+            }
+        }
+
+        window.addEventListener('online', checkConnection);
+        window.addEventListener('offline', checkConnection);
+
+        ros.on('connection', function () {
+            connectFlag = true;
+            document.getElementById('connected').style.display = 'inline';
+            checkConnectionInterval = setInterval(checkConnection, 1000);
+            subscribeTopics();
+        });
+        ros.on('error', function () {
+            clearInterval(checkConnectionInterval);
+            document.getElementById('connected').style.display = 'none';
+            document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+        });
+        ros.on('close', function () {
+            connectFlag = false;
+            clearInterval(checkConnectionInterval);
+            document.getElementById('connected').style.display = 'none';
+            document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
+        });
+
+        function enterAddress() {
+            if (connectFlag) { ros.close(); connectFlag = false; }
+            var addr = document.getElementById('addressSelect').value;
+            var state = ros.socket ? ros.socket.readyState : WebSocket.CLOSED;
+            if (state === WebSocket.OPEN || state === WebSocket.CONNECTING || state === WebSocket.CLOSING) {
+                ros.close();
+                ros.once('close', function () { ros.connect("ws://" + addr + ":9090"); });
+            } else {
+                ros.connect("ws://" + addr + ":9090");
+            }
+        }
+
+        // ── 狀態 ──
+        var MAX_POINTS = 4000;
+        var paused = false;
+        var pausedAt = null;
+
+        // 每個來源各自留一份完整取樣，Export CSV 直接吐這個
+        var records = { xsens: [], zed: [], xsens_accel: [], xsens_free_accel: [] };
+        // 畫波形用的輕量緩衝
+        var buf = {
+            xsens: { roll: [], pitch: [], yaw: [] },
+            zed:   { roll: [], pitch: [], yaw: [] }
+        };
+        // driver 直出的加速度，key 與 records 相同
+        var accBuf = {
+            xsens_accel:      { x: [], y: [], z: [] },
+            xsens_free_accel: { x: [], y: [], z: [] }
+        };
+        // 最新一筆與抵達時刻，卡片與 watchdog 用
+        var last = { xsens: null, zed: null, pkg: null, xsens_accel: null, xsens_free_accel: null };
+        // 近 2 秒的抵達時刻，用來自己算頻率（ZED 那條訊息沒有帶 rate 欄位）
+        var arrivals = { xsens: [], zed: [], pkg: [], xsens_accel: [], xsens_free_accel: [] };
+
+        function noteArrival(key, t) {
+            var a = arrivals[key];
+            a.push(t);
+            while (a.length && t - a[0] > 2000) a.shift();
+        }
+
+        function measuredHz(key) {
+            var a = arrivals[key];
+            if (a.length < 2) return 0;
+            var span = (a[a.length - 1] - a[0]) / 1000;
+            return span > 0 ? (a.length - 1) / span : 0;
+        }
+
+        function pushWave(src, roll, pitch, yaw, t) {
+            if (paused) return;
+            var b = buf[src];
+            b.roll.push({ t: t, v: roll });
+            b.pitch.push({ t: t, v: pitch });
+            b.yaw.push({ t: t, v: yaw });
+            ['roll', 'pitch', 'yaw'].forEach(function (k) {
+                if (b[k].length > MAX_POINTS) b[k].shift();
+            });
+        }
+
+        function pushAccel(src, v, t) {
+            if (paused) return;
+            var b = accBuf[src];
+            b.x.push({ t: t, v: +v.x });
+            b.y.push({ t: t, v: +v.y });
+            b.z.push({ t: t, v: +v.z });
+            ['x', 'y', 'z'].forEach(function (k) {
+                if (b[k].length > MAX_POINTS) b[k].shift();
+            });
+        }
+
+        function pushRecord(src, rec) {
+            if (paused) return;
+            var r = records[src];
+            r.push(rec);
+            if (r.length > MAX_POINTS) r.shift();
+        }
+
+        function subscribeTopics() {
+            Object.keys(subs).forEach(function (k) { if (subs[k]) subs[k].unsubscribe(); });
+
+            subs.xsens = new ROSLIB.Topic({
+                ros: ros, name: '/xsens_imu/data', messageType: 'tku_msgs/msg/XsensImu'
+            });
+            subs.xsens.subscribe(function (msg) {
+                var t = Date.now();
+                last.xsens = { t: t, m: msg };
+                noteArrival('xsens', t);
+                pushWave('xsens', +msg.roll, +msg.pitch, +msg.yaw, t);
+                pushRecord('xsens', {
+                    t: t,
+                    roll: +msg.roll, pitch: +msg.pitch, yaw: +msg.yaw,
+                    aroll: +msg.abs_roll, apitch: +msg.abs_pitch, ayaw: +msg.abs_yaw,
+                    g: msg.angular_velocity, a: msg.free_acceleration
+                });
+            });
+
+            subs.zed = new ROSLIB.Topic({
+                ros: ros, name: '/zed_imu/data', messageType: 'tku_msgs/msg/ZedImu'
+            });
+            subs.zed.subscribe(function (msg) {
+                var t = Date.now();
+                last.zed = { t: t, m: msg };
+                noteArrival('zed', t);
+                pushWave('zed', +msg.roll, +msg.pitch, +msg.yaw, t);
+                pushRecord('zed', {
+                    t: t,
+                    roll: +msg.roll, pitch: +msg.pitch, yaw: +msg.yaw,
+                    aroll: +msg.abs_roll, apitch: +msg.abs_pitch, ayaw: +msg.abs_yaw,
+                    g: msg.angular_velocity, a: msg.linear_acceleration
+                });
+            });
+
+            // Xsens 加速度：直接吃 driver 的 geometry_msgs，不依賴 tku_msgs，
+            // 所以 bridge 掛掉時仍能確認 IMU 本身有沒有在出資料
+            [['xsens_accel', '/imu/acceleration'],
+             ['xsens_free_accel', '/filter/free_acceleration']].forEach(function (pair) {
+                var key = pair[0];
+                subs[key] = new ROSLIB.Topic({
+                    ros: ros, name: pair[1], messageType: 'geometry_msgs/msg/Vector3Stamped'
+                });
+                subs[key].subscribe(function (msg) {
+                    var t = Date.now(), v = msg.vector;
+                    last[key] = { t: t, m: v };
+                    noteArrival(key, t);
+                    pushAccel(key, v, t);
+                    pushRecord(key, { t: t, a: [+v.x, +v.y, +v.z] });
+                });
+            });
+
+            // 只用來確認策略端真的收得到，數值不另外顯示
+            subs.pkg = new ROSLIB.Topic({
+                ros: ros, name: '/package/sensorpackage', messageType: 'tku_msgs/msg/SensorPackage'
+            });
+            subs.pkg.subscribe(function (msg) {
+                last.pkg = { t: Date.now(), m: msg };
+                noteArrival('pkg', last.pkg.t);
+            });
+
+            subs.loc = new ROSLIB.Topic({
+                ros: ros, name: '/locationBack', messageType: 'tku_msgs/msg/Location'
+            });
+            subs.loc.subscribe(function (msg) {
+                var loc = msg.data;
+                if (typeof loc === 'string') {
+                    var parts = loc.split('/');
+                    if (parts.length > 1 && parts[1].length > 0) loc = parts[0].trim();
+                }
+                document.getElementById('current-strategy-name').innerText = loc;
+            });
+
+            xsensResetPub = new ROSLIB.Topic({
+                ros: ros, name: '/sensorset', messageType: 'tku_msgs/msg/SensorSet'
+            });
+            zedResetPub = new ROSLIB.Topic({
+                ros: ros, name: '/zed_sensorset', messageType: 'tku_msgs/msg/SensorSet'
+            });
+        }
+
+        function zeroXsens() {
+            if (xsensResetPub) xsensResetPub.publish(new ROSLIB.Message({ reset: true }));
+        }
+        function zeroZed() {
+            if (zedResetPub) zedResetPub.publish(new ROSLIB.Message({ reset: true }));
+        }
+
+        function togglePause() {
+            paused = !paused;
+            pausedAt = paused ? Date.now() : null;
+            var btn = document.getElementById('pauseBtn');
+            btn.textContent = paused ? 'Resume' : 'Pause';
+            btn.classList.toggle('paused', paused);
+        }
+
+        function clearBuffers() {
+            ['xsens', 'zed'].forEach(function (s) {
+                buf[s] = { roll: [], pitch: [], yaw: [] };
+                records[s] = [];
+            });
+            ['xsens_accel', 'xsens_free_accel'].forEach(function (s) {
+                accBuf[s] = { x: [], y: [], z: [] };
+                records[s] = [];
+            });
+        }
+
+        // ── CSV ──
+        function exportCsv() {
+            var rows = [['source', 't_ms', 'roll_deg', 'pitch_deg', 'yaw_deg',
+                         'abs_roll_deg', 'abs_pitch_deg', 'abs_yaw_deg',
+                         'gyro_x_dps', 'gyro_y_dps', 'gyro_z_dps',
+                         'accel_x', 'accel_y', 'accel_z'].join(',')];
+            var all = [];
+            ['xsens', 'zed', 'xsens_accel', 'xsens_free_accel'].forEach(function (s) {
+                records[s].forEach(function (r) { all.push([s, r]); });
+            });
+            all.sort(function (p, q) { return p[1].t - q[1].t; });
+
+            all.forEach(function (pair) {
+                var s = pair[0], r = pair[1];
+                var g = r.g || [], a = r.a || [];
+                rows.push([s, r.t,
+                    f(r.roll), f(r.pitch), f(r.yaw),
+                    f(r.aroll), f(r.apitch), f(r.ayaw),
+                    f(g[0]), f(g[1]), f(g[2]),
+                    f(a[0]), f(a[1]), f(a[2])].join(','));
+            });
+
+            if (rows.length === 1) { alert('目前沒有資料可以匯出'); return; }
+
+            var blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'imu_' + stampName() + '.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function f(v) { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(4) : ''; }
+
+        function stampName() {
+            var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+            return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' +
+                   p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+        }
+
+        // ── 姿態儀 ──
+        // 人造地平線：roll 讓地平線轉、pitch 讓它上下平移，與飛機儀表同一套慣例。
+        // 比看三個數字更快能判斷「是不是歪了、往哪邊歪」
+        function drawAttitude(canvasId, roll, pitch, yaw, color, live) {
+            var canvas = document.getElementById(canvasId);
+            var ctx = canvas.getContext('2d');
+            var W = canvas.width, H = canvas.height;
+            var cx = W / 2, cy = H / 2;
+            var R = Math.min(W, H) / 2 - 12;
+            var pxPerDeg = R / 45;      // 圓內顯示 ±45°
+
+            ctx.clearRect(0, 0, W, H);
+            ctx.fillStyle = '#070710';
+            ctx.fillRect(0, 0, W, H);
+
+            var hasData = live !== null;
+            if (!hasData) { roll = pitch = yaw = 0; }
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, R, 0, Math.PI * 2);
+            ctx.clip();
+
+            ctx.translate(cx, cy);
+            ctx.rotate(-roll * Math.PI / 180);
+            ctx.translate(0, pitch * pxPerDeg);
+
+            var span = R * 2.2;
+            ctx.fillStyle = hasData ? '#123049' : '#12161e';   // 天
+            ctx.fillRect(-span, -span, span * 2, span);
+            ctx.fillStyle = hasData ? '#3a2a18' : '#181a20';   // 地
+            ctx.fillRect(-span, 0, span * 2, span);
+
+            ctx.strokeStyle = hasData ? '#e8e8f0' : '#333';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.moveTo(-span, 0); ctx.lineTo(span, 0); ctx.stroke();
+
+            // 俯仰刻度，每 10 度一格
+            ctx.strokeStyle = hasData ? 'rgba(232,232,240,0.55)' : '#2a2a2a';
+            ctx.fillStyle = hasData ? 'rgba(232,232,240,0.75)' : '#2a2a2a';
+            ctx.lineWidth = 1;
+            ctx.font = '9px Consolas';
+            ctx.textAlign = 'right';
+            for (var d = -40; d <= 40; d += 10) {
+                if (d === 0) continue;
+                var y = -d * pxPerDeg;
+                var w = (d % 20 === 0) ? 26 : 14;
+                ctx.beginPath(); ctx.moveTo(-w, y); ctx.lineTo(w, y); ctx.stroke();
+                if (d % 20 === 0) ctx.fillText(Math.abs(d), -w - 3, y + 3);
+            }
+            ctx.restore();
+
+            // 外框與翻滾指標
+            ctx.strokeStyle = hasData ? '#2a3a4a' : '#1a1a2e';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+
+            ctx.strokeStyle = hasData ? '#8898a8' : '#222';
+            ctx.lineWidth = 1;
+            [-30, -20, -10, 0, 10, 20, 30].forEach(function (d) {
+                var a = (-90 + d) * Math.PI / 180;
+                var r2 = (d === 0) ? R - 11 : R - 6;
+                ctx.beginPath();
+                ctx.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+                ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+                ctx.stroke();
+            });
+
+            // 翻滾指針
+            var ra = (-90 - roll) * Math.PI / 180;
+            ctx.fillStyle = hasData ? color : '#333';
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(ra) * (R - 2), cy + Math.sin(ra) * (R - 2));
+            ctx.lineTo(cx + Math.cos(ra - 0.06) * (R - 12), cy + Math.sin(ra - 0.06) * (R - 12));
+            ctx.lineTo(cx + Math.cos(ra + 0.06) * (R - 12), cy + Math.sin(ra + 0.06) * (R - 12));
+            ctx.closePath(); ctx.fill();
+
+            // 中央固定機身標記
+            ctx.strokeStyle = hasData ? '#ffdd55' : '#333';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(cx - 26, cy); ctx.lineTo(cx - 9, cy);
+            ctx.moveTo(cx + 9, cy);  ctx.lineTo(cx + 26, cy);
+            ctx.moveTo(cx, cy - 3);  ctx.lineTo(cx, cy + 3);
+            ctx.stroke();
+
+            // 底部 yaw
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 11px Consolas';
+            ctx.fillStyle = hasData ? '#99a' : '#333';
+            ctx.fillText(hasData ? ('YAW ' + yaw.toFixed(1) + '°') : 'NO DATA', cx, H - 2);
+            ctx.textAlign = 'left';
+        }
+
+        // ── 波形 ──
+        // opts.scaleId / opts.unit：加速度波形用自己的刻度輸入框與單位，預設沿用角度那組
+        function drawWave(canvasId, series, opts) {
+            opts = opts || {};
+            var canvas = document.getElementById(canvasId);
+            var ctx = canvas.getContext('2d');
+            var W = canvas.offsetWidth;
+            if (canvas.width !== W) canvas.width = W;
+            var H = canvas.height;
+
+            var yScale = parseFloat(document.getElementById(opts.scaleId || 'yScale').value) || 15;
+            var unit = (opts.unit === undefined) ? '°' : opts.unit;
+            var timeWinMs = (parseFloat(document.getElementById('timeWindow').value) || 10) * 1000;
+            var now = (paused && pausedAt !== null) ? pausedAt : Date.now();
+            var tStart = now - timeWinMs;
+
+            ctx.clearRect(0, 0, W, H);
+            ctx.fillStyle = '#070710';
+            ctx.fillRect(0, 0, W, H);
+
+            [-yScale, -yScale / 2, 0, yScale / 2, yScale].forEach(function (v) {
+                var y = valToY(v, H, yScale);
+                ctx.strokeStyle = (v === 0) ? '#2a2a44' : '#141420';
+                ctx.lineWidth = (v === 0) ? 1.5 : 1;
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+                ctx.fillStyle = '#dde0f0';
+                ctx.font = '12px Consolas';
+                ctx.fillText((v > 0 ? '+' : '') + v + unit, 3, y - 2);
+            });
+
+            series.forEach(function (s) {
+                var visible = s.buf.filter(function (p) { return p.t >= tStart; });
+                if (visible.length < 2) return;
+                ctx.strokeStyle = s.color;
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                visible.forEach(function (p, i) {
+                    var x = ((p.t - tStart) / timeWinMs) * W;
+                    var y = valToY(p.v, H, yScale);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            });
+        }
+
+        function valToY(v, H, yScale) {
+            return Math.max(2, Math.min(H - 2, H / 2 - (v / yScale) * (H / 2 - 12)));
+        }
+
+        // ── 視窗內的 yaw 漂移率 ──
+        function driftPerMin(b) {
+            var timeWinMs = (parseFloat(document.getElementById('timeWindow').value) || 10) * 1000;
+            var now = (paused && pausedAt !== null) ? pausedAt : Date.now();
+            var v = b.filter(function (p) { return p.t >= now - timeWinMs; });
+            if (v.length < 2) return null;
+            var dt = (v[v.length - 1].t - v[0].t) / 60000;
+            if (dt <= 0) return null;
+            return (v[v.length - 1].v - v[0].v) / dt;
+        }
+
+        // ── 卡片更新 ──
+        var STALE_MS = 1000;
+
+        function setPill(id, cls, text) {
+            var el = document.getElementById(id);
+            el.className = 'pill ' + cls;
+            el.textContent = text;
+        }
+
+        function fmt(v, n) {
+            return (typeof v === 'number' && isFinite(v)) ? v.toFixed(n === undefined ? 2 : n) : '—';
+        }
+        function fmt3(arr, n) {
+            if (!arr || arr.length < 3) return '—';
+            return [0, 1, 2].map(function (i) { return fmt(+arr[i], n); }).join(' / ');
+        }
+
+        function isFresh(entry) {
+            return entry !== null && (Date.now() - entry.t) < STALE_MS;
+        }
+
+        function updateCards() {
+            var now = Date.now();
+
+            // Xsens
+            var xs = last.xsens;
+            if (xs === null) {
+                setPill('xsStatus', 'pill-idle', '等待資料');
+                setPill('xsZero', 'pill-idle', '未歸零');
+            } else if (!isFresh(xs)) {
+                setPill('xsStatus', 'pill-dead',
+                        '斷線 ' + ((now - xs.t) / 1000).toFixed(0) + 's');
+            } else if (xs.m.alive === false) {
+                // bridge 還活著，但它自己收不到 driver 的資料
+                setPill('xsStatus', 'pill-dead', 'driver 無資料');
+            } else {
+                setPill('xsStatus', 'pill-live', 'LIVE ' + (+xs.m.rate_hz).toFixed(0) + ' Hz');
+            }
+            if (xs !== null) {
+                var m = xs.m;
+                setPill('xsZero', m.zeroed ? 'pill-live' : 'pill-warn',
+                        m.zeroed ? '已歸零' : '未歸零');
+                document.getElementById('xsRoll').textContent = fmt(+m.roll);
+                document.getElementById('xsPitch').textContent = fmt(+m.pitch);
+                document.getElementById('xsYaw').textContent = fmt(+m.yaw);
+                document.getElementById('xsARoll').textContent = fmt(+m.abs_roll);
+                document.getElementById('xsAPitch').textContent = fmt(+m.abs_pitch);
+                document.getElementById('xsAYaw').textContent = fmt(+m.abs_yaw);
+                document.getElementById('xsGyro').textContent = fmt3(m.angular_velocity, 1);
+                document.getElementById('xsAccel').textContent = fmt3(m.free_acceleration, 2);
+            }
+            drawAttitude('adiXsens',
+                         xs ? +xs.m.roll : 0, xs ? +xs.m.pitch : 0, xs ? +xs.m.yaw : 0,
+                         '#f0c040', isFresh(xs) ? true : null);
+
+            // ZED
+            var zd = last.zed;
+            if (zd === null) {
+                setPill('zdStatus', 'pill-idle', '等待資料');
+                setPill('zdZero', 'pill-idle', '未歸零');
+            } else if (!isFresh(zd)) {
+                setPill('zdStatus', 'pill-dead',
+                        '斷線 ' + ((now - zd.t) / 1000).toFixed(0) + 's');
+            } else {
+                setPill('zdStatus', 'pill-live', 'LIVE ' + measuredHz('zed').toFixed(0) + ' Hz');
+            }
+            if (zd !== null) {
+                var z = zd.m;
+                setPill('zdZero', z.zeroed ? 'pill-live' : 'pill-warn',
+                        z.zeroed ? '已歸零' : '未歸零');
+                document.getElementById('zdRoll').textContent = fmt(+z.roll);
+                document.getElementById('zdPitch').textContent = fmt(+z.pitch);
+                document.getElementById('zdYaw').textContent = fmt(+z.yaw);
+                document.getElementById('zdARoll').textContent = fmt(+z.abs_roll);
+                document.getElementById('zdAPitch').textContent = fmt(+z.abs_pitch);
+                document.getElementById('zdAYaw').textContent = fmt(+z.abs_yaw);
+                document.getElementById('zdGyro').textContent = fmt3(z.angular_velocity, 1);
+                document.getElementById('zdAccel').textContent = fmt3(z.linear_acceleration, 2);
+            }
+            drawAttitude('adiZed',
+                         zd ? +zd.m.roll : 0, zd ? +zd.m.pitch : 0, zd ? +zd.m.yaw : 0,
+                         '#40c8f0', isFresh(zd) ? true : null);
+
+            // Xsens 加速度（driver 直出）
+            var accSrc = [
+                { key: 'xsens_accel',      pill: 'accRawStatus',  label: '含重力', ids: ['accRawX', 'accRawY', 'accRawZ', 'accRawN'] },
+                { key: 'xsens_free_accel', pill: 'accFreeStatus', label: 'Free',   ids: ['accFreeX', 'accFreeY', 'accFreeZ', 'accFreeN'] }
+            ];
+            accSrc.forEach(function (s, i) {
+                var e = last[s.key], other = last[accSrc[1 - i].key];
+                if (e === null) {
+                    // 另一條有在流、這條從沒來過 → driver 活著，是裝置輸出設定沒開這項
+                    if (isFresh(other)) setPill(s.pill, 'pill-warn', s.label + ' 裝置未輸出');
+                    else setPill(s.pill, 'pill-idle', s.label + ' 等待');
+                    return;
+                }
+                if (!isFresh(e)) {
+                    setPill(s.pill, 'pill-dead', s.label + ' 斷線 ' + ((now - e.t) / 1000).toFixed(0) + 's');
+                } else {
+                    setPill(s.pill, 'pill-live', s.label + ' ' + measuredHz(s.key).toFixed(0) + ' Hz');
+                }
+                var v = e.m;
+                document.getElementById(s.ids[0]).textContent = fmt(+v.x, 3);
+                document.getElementById(s.ids[1]).textContent = fmt(+v.y, 3);
+                document.getElementById(s.ids[2]).textContent = fmt(+v.z, 3);
+                document.getElementById(s.ids[3]).textContent =
+                    fmt(Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z), 3);
+            });
+
+            // 診斷
+            document.getElementById('dgXsRate').textContent =
+                isFresh(xs) ? measuredHz('xsens').toFixed(1) : '—';
+            document.getElementById('dgZdRate').textContent =
+                isFresh(zd) ? measuredHz('zed').toFixed(1) : '—';
+            document.getElementById('dgPkgRate').textContent =
+                isFresh(last.pkg) ? measuredHz('pkg').toFixed(1) : '—';
+
+            var canDiff = isFresh(xs) && isFresh(zd);
+            document.getElementById('dgDRoll').textContent =
+                canDiff ? fmt(+xs.m.abs_roll - +zd.m.abs_roll) : '—';
+            document.getElementById('dgDPitch').textContent =
+                canDiff ? fmt(+xs.m.abs_pitch - +zd.m.abs_pitch) : '—';
+
+            var dx = driftPerMin(buf.xsens.yaw), dz = driftPerMin(buf.zed.yaw);
+            document.getElementById('dgXsDrift').textContent = dx === null ? '—' : fmt(dx, 1);
+            document.getElementById('dgZdDrift').textContent = dz === null ? '—' : fmt(dz, 1);
+        }
+
+        function redrawWaves() {
+            drawWave('canvasRoll', [
+                { buf: buf.xsens.roll, color: '#f0c040' },
+                { buf: buf.zed.roll,   color: '#40c8f0' }
+            ]);
+            drawWave('canvasPitch', [
+                { buf: buf.xsens.pitch, color: '#f0c040' },
+                { buf: buf.zed.pitch,   color: '#40c8f0' }
+            ]);
+            drawWave('canvasYaw', [
+                { buf: buf.xsens.yaw, color: '#f0c040' },
+                { buf: buf.zed.yaw,   color: '#40c8f0' }
+            ]);
+            ['x', 'y', 'z'].forEach(function (ax) {
+                drawWave('canvasAcc' + ax.toUpperCase(), [
+                    { buf: accBuf.xsens_accel[ax],      color: '#f0c040' },
+                    { buf: accBuf.xsens_free_accel[ax], color: '#ff6ec7' }
+                ], { scaleId: 'accScale', unit: '' });
+            });
+        }
+
+        (function loop() {
+            updateCards();
+            redrawWaves();
+            requestAnimationFrame(loop);
+        })();
+
+        window.addEventListener('DOMContentLoaded', function () {
+            var loc = window.currentStrategy || "";
+            if (typeof loc === 'string') {
+                loc = loc.replace(/^\/+/, '');
+                loc = loc.split('/')[0].trim();
+            }
+            document.getElementById('current-strategy-name').innerText = loc || '---';
+        });
+    </script>
+    <script src="../src/strategy/strategy/strategy.js"></script>
+</body>
+</html>

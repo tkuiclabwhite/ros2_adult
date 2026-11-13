@@ -26,6 +26,9 @@ NICKNAMES=(
    ["msgs"]="src/tku_msgs"
    ["usb_cam"]="src/usb_cam"
    ["walking"]="src/walking"
+   ["hand"]="src/handpackage"
+   ["linkerhand"]="src/linkerhand-ros2-sdk"
+   ["web"]="hurocup_interface"
    ["all"]="."
 )
 

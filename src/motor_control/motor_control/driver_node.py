@@ -43,13 +43,14 @@ LEN_INDIRECT_DATA_WRITE       = 8
 
 PROTOCOL_VERSION              = 2.0
 DEFAULT_BAUDRATE              = 1000000
-ALL_TARGET_IDS                = list(range(1, 30))
+ALL_TARGET_IDS                = list(range(1, 31))
 
 class DynamixelDriver(Node):
     def __init__(self):
         super().__init__('dynamixel_driver_node')
         self.declare_parameter('baudrate', DEFAULT_BAUDRATE)
         self.declare_parameter('ports', ['/dev/U2D2_P1','/dev/U2D2_P2','/dev/U2D2_P3']) 
+        # self.declare_parameter('ports', ['/dev/U2D2_P1']) 
         self.baudrate = self.get_parameter('baudrate').value
         self.port_list = self.get_parameter('ports').value
 
@@ -58,7 +59,7 @@ class DynamixelDriver(Node):
             'present': 2048, 'goal': 2048, 'velocity': 0,
             'present_velocity': 0, 'present_current': 0
         })
-        self.head_map = {1: 28, 2: 29}
+        self.head_map = {1: 28, 2: 29, 3: 30}
         self.data_lock = threading.Lock()
         self.torque_requests = []
         self.id_port_map = {} # 格式: {mid: (gw, gr, ph, is_p_series)}

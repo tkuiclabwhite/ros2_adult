@@ -237,30 +237,11 @@
 
     </style>
     <script src="../src/strategy/strategy/strategy.js"></script>
+    <script src="./js/nav.js"></script>
 </head>
 
 <body>
-    <ul>
-        <li class="logo" style="width: 226px;">
-            <a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
-        </li>
-        <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        <li><a target="_blank" class="navbarright" style="text-decoration:underline;" href="MotionControlInterface.html">Motion</a></li>
-        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-        <li class="dropdown">
-            <a class="navbarright" href="#">Tools ▾</a>
-            <ul class="dropdown-menu">
-                <li><a target="_blank" href="RecordInterface.html">RecordInterface</a></li>
-                <li><a target="_blank" href="NodeMonitor.html">NodeMonitor</a></li>
-                <li><a target="_blank" href="MotorMonitor.html">MotorMonitor</a></li>
-                <li><a target="_blank" href="API.html">ROS2API</a></li>                
-                <li><a target="_blank" href="miniDRC.html">miniDRC</a></li>
-                <li><a target="_blank" href="RobotViewer.html">RobotViewer</a></li>
-                <li><a target="_blank" href="WaveformMonitor.html">WaveformMonitor</a></li>
-                <li><a target="_blank" href="arm_control.html">arm_control</a></li>
-            </ul>
-        </li>
-    </ul>
+    <ul id="mainnav"></ul>
     <div style="padding-left: 30px; height: 100px; width: 1010px;">
         <div style="height: 30px;">
             <p id="connected" style="color:#00D600; display:none; font-size: 20px; margin: 0;">
@@ -298,7 +279,11 @@
                         <input type="checkbox" id="Locked29" value="Locked" onclick="Locked();" checked>Locked 29
                         <input type="checkbox" id="Lockedstand" value="LockedStand" onclick="Locked2()" checked>Locked Stand
                         <input type="button" id="executeButton" value="execute" onclick="execute();" style="width:80px; margin-left:5px;" disabled="disabled">
-                        <input type="button" id="standButton" value="stand" onclick="stand();" style="width:80px;" disabled="disabled">
+                        <!-- stand 與 Head 2048 上下疊，Head 2048 不依賴 Sector，所以一開始就可按 -->
+                        <span style="display: inline-flex; flex-direction: column; gap: 4px; vertical-align: top;">
+                            <input type="button" id="standButton" value="stand" onclick="stand();" style="width:80px;" disabled="disabled">
+                            <input type="button" id="headCenterButton" value="Head 2048" onclick="HeadCenter();" style="width:80px;" title="頭部三顆 (ID 28, 29, 30) 回到 2048">
+                        </span>
                     </div>
 
                     <div style="width: 800px; margin-bottom: 16px;">
@@ -644,6 +629,7 @@
                         <!-- 頭部 -->
                         <div id="pos-btn-28" class="pos-motor-btn" style="top:9%; left:47%;" onclick="toggleTorqueAtPosition(28)">28</div>
                         <div id="pos-btn-29" class="pos-motor-btn" style="top:3%; left:47%;" onclick="toggleTorqueAtPosition(29)">29</div>
+                        <div id="pos-btn-30" class="pos-motor-btn" style="top:3%; left:35%;" onclick="toggleTorqueAtPosition(30)">30</div>
                     </div>
                                     <div id="robotpic" style="margin-left: 0px; background-color: rgba(46, 58, 61, 0.637); padding: 8px; border-radius: 5px;">
                 <div style="float: left; margin-left: 70px;">
@@ -755,6 +741,18 @@
                                 <tr><td>25</td><td><input type="text" id="motor_val_25" value="0" readonly></td></tr>
                                 <tr><td>26</td><td><input type="text" id="motor_val_26" value="0" readonly></td></tr>
                                 <tr><td>27</td><td><input type="text" id="motor_val_27" value="0" readonly></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="div_wrapper_head" class="motor-group">
+                        <div class="header" id="header_head">HEAD</div>
+                        <table>
+                            <thead><tr><th>ID</th><th>Position</th></tr></thead>
+                            <tbody>
+                                <tr><td>28</td><td><input type="text" id="motor_val_28" value="0" readonly></td></tr>
+                                <tr><td>29</td><td><input type="text" id="motor_val_29" value="0" readonly></td></tr>
+                                <tr><td>30</td><td><input type="text" id="motor_val_30" value="0" readonly></td></tr>
                             </tbody>
                         </table>
                     </div>

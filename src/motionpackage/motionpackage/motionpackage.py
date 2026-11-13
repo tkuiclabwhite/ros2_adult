@@ -36,7 +36,7 @@ class MotionNode(Node):
         # ImageProcessInterface 直接發布的頭部扭力指令也記錄得到。
         # 開機時 driver_node 為了寫入 indirect address 必定會關閉每顆馬達的扭力，
         # 故初始值全部視為 OFF。這是指令快取，不是硬體實際狀態。
-        self.MOTOR_ID_MAX = 29
+        self.MOTOR_ID_MAX = 30
         self.torque_states = [0] * self.MOTOR_ID_MAX
         self.torque_state_sub = self.create_subscription(
             Int16MultiArray, '/set_torque', self.cb_torque_state, 10)

@@ -1,8 +1,6 @@
 網頁操作介面教學
 ================
 
-各節的 **▶ 開啟 DEMO** 按鈕開啟模擬版，不需連接機器人即可互動試用。
-
 點選圖片中虛線匡內可直接跳轉至該功能說明。
 
 ----
@@ -41,96 +39,320 @@
 ImageProcessInterface
 --------------------------------------
 
-.. raw:: html
+右上角的下拉選單可切換 **疊合 / 色模 / 深度** 三種檢視，
+切換時右側影像與下方的參數面板會一起換，**左半邊與頂部不受影響**\ 。
 
-   <a href="_static/ImageProcess_demo.html" target="_blank"
-      style="background:#03e9f4;color:#000;padding:5px 14px;border-radius:4px;
-             text-decoration:none;font-weight:bold;font-family:monospace;">
-     &#9654; 開啟 DEMO
-   </a>
+.. tabs::
 
-.. raw:: html
+   .. tab:: 疊合
 
-   <div class="iface-map-wrap">
-     <img src="_static/screenshots/ImageProcess.png" alt="ImageProcess 介面截圖">
+      .. raw:: html
 
-    <!-- Address(各網頁共用) -->
-    <a class="area-overlay" href="#shared-address"
-      style="top:18.5%;left:36%;width:12.75%;height:4.25%;color:#ffcc00"></a>
+         <div class="iface-map-wrap">
+           <img src="_static/screenshots/ImageProcess_overlap.png" alt="ImageProcess 介面截圖（疊合）">
 
-    <!-- 策略選擇 -->
-    <a class="area-overlay" href="#image-strategy-select"
-      style="top:18.5%;left:48.75%;width:10.75%;height:4.25%;color:#ffcc00"></a>
+           <!-- ======== 左半邊與頂部：三種檢視都一樣 ======== -->
 
-    <!-- SaveAll -->
-    <a class="area-overlay" href="#image-save-all"
-      style="top:18.5%;left:59.5%;width:5%;height:4.25%;color:#ffcc00"></a>
+           <!-- Address(各網頁共用) -->
+           <a class="area-overlay" href="#shared-address"
+           style="top:17%;left:31.5%;width:21.25%;height:3%;color:#ffcc00"></a>
 
-    <!-- 策略指撥開關 -->
-    <a class="area-overlay" href="#image-strategy-toggle"
-      style="top:22.5%;left:46%;width:8.5%;height:4.25%;color:#ffcc00"></a>
+           <!-- 策略選擇 -->
+           <a class="area-overlay" href="#image-strategy-select"
+           style="top:17%;left:52.75%;width:10.75%;height:3%;color:#ffcc00"></a>
 
-    <!-- 原始影像 -->
-    <a class="area-overlay" href="#image-camera"
-      style="top:30%;left:27.5%;width:19%;height:24.25%;color:#ffcc00"></a>
+           <!-- SaveAll -->
+           <a class="area-overlay" href="#image-save-all"
+           style="top:17%;left:63.75%;width:4.5%;height:3%;color:#ffcc00"></a>
 
-    <!-- HSV色模 -->
-    <a class="area-overlay" href="#image-model-view"
-      style="top:30%;left:53.8%;width:19%;height:24.25%;color:#ffcc00"></a>
+           <!-- 策略指撥開關 -->
+           <a class="area-overlay" href="#image-strategy-toggle"
+           style="top:20.5%;left:46%;width:8%;height:3%;color:#ffcc00"></a>
 
-    <!-- 頭部馬扭力 -->
-    <a class="area-overlay" href="#image-head-torque"
-      style="top:57%;left:27.5%;width:12.5%;height:3.5%;color:#ffcc00"></a>
+           <!-- 左邊影像 -->
+           <a class="area-overlay" href="#image-camera"
+           style="top:29%;left:21.75%;width:27.5%;height:25.75%;color:#ffcc00"></a>
 
-    <!-- 儲存相機參數 -->
-    <a class="area-overlay" href="#image-save-camera"
-      style="top:57%;left:40.5%;width:5.75%;height:3.5%;color:#ffcc00"></a>
+           <!-- 右邊影像 -->
+           <a class="area-overlay" href="#image-right-image"
+           style="top:29%;left:50.25%;width:27.5%;height:25.75%;color:#ffcc00"></a>
 
-    <!-- 頭部馬達控制 -->
-    <a class="area-overlay" href="#image-head-motor"
-      style="top:60.25%;left:27.5%;width:19%;height:14%;color:#ffcc00"></a>
+           <!-- 溫度 -->
+           <a class="area-overlay" href="#image-temperature"
+           style="top:29%;left:45.5%;width:3.75%;height:2.5%;color:#ffcc00"></a>
 
-    <!-- 相機參數設定 -->
-    <a class="area-overlay" href="#image-camera-settings"
-      style="top:73.75%;left:27.5%;width:19%;height:23.5%;color:#ffcc00"></a>
+           <!-- 頭部馬扭力 -->
+           <a class="area-overlay" href="#image-head-torque"
+           style="top:56%;left:22%;width:10%;height:3%;color:#ffcc00"></a>
 
-    <!-- Build table -->
-    <a class="area-overlay" href="#image-build-table"
-      style="top:57.25%;left:53.8%;width:19%;height:3.5%;color:#ffcc00"></a>
+           <!-- hz指令面板 -->
+           <a class="area-overlay" href="#image-hz-cmd"
+           style="top:56%;left:32.25%;width:3.25%;height:3%;color:#ffcc00"></a>         
+           <a class="area-overlay" href="#image-hz-cmd"
+           style="top:12.25%;left:76%;width:22%;height:9.5%;color:#ffcc00"></a>              
 
-    <!-- Color Select -->
-    <a class="area-overlay" href="#image-color-labels"
-      style="top:60.5%;left:53.8%;width:10.25%;height:3.5%;color:#ffcc00"></a>
+           <!-- 線條作畫清除 -->
+           <a class="area-overlay" href="#image-draw-clear"
+           style="top:56%;left:35.75%;width:6.5%;height:3%;color:#ffcc00"></a>                              
 
-    <!-- Reset/Close -->
-    <a class="area-overlay" href="#image-reset-close"
-      style="top:60.5%;left:66%;width:6.75%;height:3.5%;color:#ffcc00"></a>
+           <!-- 儲存相機參數 -->
+           <a class="area-overlay" href="#image-save-camera"
+           style="top:56%;left:42.5%;width:6.5%;height:3%;color:#ffcc00"></a>
 
-    <!-- 色模參數設定 -->
-    <a class="area-overlay" href="#image-hsv"
-      style="top:63.75%;left:53.8%;width:19%;height:20.5%;color:#ffcc00"></a>
+           <!-- 頭部馬達控制 -->
+           <a class="area-overlay" href="#image-head-motor"
+           style="top:59%;left:22%;width:27%;height:11.75%;color:#ffcc00"></a>
 
-    <!-- SaveHsv -->
-    <a class="area-overlay" href="#image-save-hsv"
-      style="top:84%;left:53.8%;width:9.5%;height:4%;color:#ffcc00"></a>
+           <!-- 相機參數設定 -->
+           <a class="area-overlay" href="#image-camera-settings"
+           style="top:70.5%;left:22%;width:27%;height:24.5%;color:#ffcc00"></a>
 
-    <!-- BuildHsv -->
-    <a class="area-overlay" href="#image-build-hsv"
-      style="top:84%;left:63.3%;width:9.5%;height:4%;color:#ffcc00"></a>
+           <!-- 檢視切換下拉（左眼畫面 / 深度畫面）-->
+           <a class="area-overlay" href="#image-left-view"
+           style="top:25.75%;left:21.75%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+           <!-- 檢視切換下拉（疊合 / 色模 / 深度）-->
+           <a class="area-overlay" href="#image-right-view"
+             style="top:25.75%;left:50.25%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+           <!-- ======== 右半邊：疊合模式 ======== -->
+           <!-- TODO: 換上實際截圖後，依實際控制項把下面兩個大框拆細 -->
+
+           <!-- Build table -->
+           <a class="area-overlay" href="#image-overlap-build-table"
+             style="top:56.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- Overlap Select -->
+           <a class="area-overlay" href="#image-overlap-select"
+             style="top:59.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>     
+
+           <!-- Color Select -->
+           <a class="area-overlay" href="#image-overlap-select"
+             style="top:62.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>        
+
+           <!-- Distance Select -->
+           <a class="area-overlay" href="#image-overlap-select"
+             style="top:65.5%;left:52%;width:23%;height:3%;color:#ffcc00"></a>   
+
+           <!-- Reset/Close -->
+           <a class="area-overlay" href="#image-reset-close"
+           style="top:59.5%;left:70%;width:6.5%;height:3%;color:#ffcc00"></a>          
+
+           <!-- SaveOverlap -->
+           <a class="area-overlay" href="#image-save-overlap"
+           style="top:68.5%;left:53%;width:9.5%;height:4%;color:#ffcc00"></a>
+
+           <!-- BuildOverlap -->
+           <a class="area-overlay" href="#image-build-overlap"
+           style="top:68.5%;left:66.5%;width:9.5%;height:4%;color:#ffcc00"></a>                                                                   
+         </div>
+
+   .. tab:: 色模
+
+      .. raw:: html
+
+         <div class="iface-map-wrap">
+           <img src="_static/screenshots/ImageProcess_color.png" alt="ImageProcess 介面截圖（色模）">
+
+           <!-- ======== 左半邊與頂部：三種檢視都一樣 ======== -->
+
+           <!-- Address(各網頁共用) -->
+           <a class="area-overlay" href="#shared-address"
+           style="top:17%;left:31.5%;width:21.25%;height:3%;color:#ffcc00"></a>
+
+           <!-- 策略選擇 -->
+           <a class="area-overlay" href="#image-strategy-select"
+           style="top:17%;left:52.75%;width:10.75%;height:3%;color:#ffcc00"></a>
+
+           <!-- SaveAll -->
+           <a class="area-overlay" href="#image-save-all"
+           style="top:17%;left:63.75%;width:4.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- 策略指撥開關 -->
+           <a class="area-overlay" href="#image-strategy-toggle"
+           style="top:20.5%;left:46%;width:8%;height:3%;color:#ffcc00"></a>
+
+           <!-- 左邊影像 -->
+           <a class="area-overlay" href="#image-camera"
+           style="top:29%;left:21.75%;width:27.5%;height:25.75%;color:#ffcc00"></a>
+
+           <!-- 右邊影像 -->
+           <a class="area-overlay" href="#image-right-image"
+           style="top:29%;left:50.25%;width:27.5%;height:25.75%;color:#ffcc00"></a>
+
+           <!-- 溫度 -->
+           <a class="area-overlay" href="#image-temperature"
+           style="top:29%;left:45.5%;width:3.75%;height:2.5%;color:#ffcc00"></a>
+
+           <!-- 頭部馬扭力 -->
+           <a class="area-overlay" href="#image-head-torque"
+           style="top:56%;left:22%;width:10%;height:3%;color:#ffcc00"></a>
+
+           <!-- hz指令面板 -->
+           <a class="area-overlay" href="#image-hz-cmd"
+           style="top:56%;left:32.25%;width:3.25%;height:3%;color:#ffcc00"></a>         
+           <a class="area-overlay" href="#image-hz-cmd"
+           style="top:12.25%;left:76%;width:22%;height:9.5%;color:#ffcc00"></a>              
+
+           <!-- 線條作畫清除 -->
+           <a class="area-overlay" href="#image-draw-clear"
+           style="top:56%;left:35.75%;width:6.5%;height:3%;color:#ffcc00"></a>                              
+
+           <!-- 儲存相機參數 -->
+           <a class="area-overlay" href="#image-save-camera"
+           style="top:56%;left:42.5%;width:6.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- 頭部馬達控制 -->
+           <a class="area-overlay" href="#image-head-motor"
+           style="top:59%;left:22%;width:27%;height:11.75%;color:#ffcc00"></a>
+
+           <!-- 相機參數設定 -->
+           <a class="area-overlay" href="#image-camera-settings"
+           style="top:70.5%;left:22%;width:27%;height:24.5%;color:#ffcc00"></a>
+
+           <!-- 檢視切換下拉（左眼畫面 / 深度畫面）-->
+           <a class="area-overlay" href="#image-left-view"
+           style="top:25.75%;left:21.75%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+           <!-- 檢視切換下拉（疊合 / 色模 / 深度）-->
+           <a class="area-overlay" href="#image-right-view"
+             style="top:25.75%;left:50.25%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+           <!-- ======== 右半邊：色模模式 ======== -->
+
+           <!-- Build table -->
+           <a class="area-overlay" href="#image-build-table"
+           style="top:56.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- Color Select -->
+           <a class="area-overlay" href="#image-color-labels"
+           style="top:59.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- Reset/Close -->
+           <a class="area-overlay" href="#image-reset-close"
+           style="top:59.5%;left:70%;width:6.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- 色模參數設定 -->
+           <a class="area-overlay" href="#image-hsv"
+           style="top:62.5%;left:50.5%;width:27.5%;height:18%;color:#ffcc00"></a>
+
+           <!-- SaveHsv -->
+           <a class="area-overlay" href="#image-save-hsv"
+           style="top:80.75%;left:53%;width:9.5%;height:4%;color:#ffcc00"></a>
+
+           <!-- BuildHsv -->
+           <a class="area-overlay" href="#image-build-hsv"
+           style="top:80.75%;left:66.5%;width:9.5%;height:4%;color:#ffcc00"></a>
 
 
-   </div>
+         </div>
+
+   .. tab:: 深度
+
+      .. raw:: html
+
+         <div class="iface-map-wrap">
+           <img src="_static/screenshots/ImageProcess_depth.png" alt="ImageProcess 介面截圖（深度）">
+
+           <!-- ======== 左半邊與頂部：三種檢視都一樣 ======== -->
+           <!-- Address(各網頁共用) -->
+           <a class="area-overlay" href="#shared-address"
+           style="top:17%;left:31.5%;width:21.25%;height:3%;color:#ffcc00"></a>
+
+           <!-- 策略選擇 -->
+           <a class="area-overlay" href="#image-strategy-select"
+           style="top:17%;left:52.75%;width:10.75%;height:3%;color:#ffcc00"></a>
+
+           <!-- SaveAll -->
+           <a class="area-overlay" href="#image-save-all"
+           style="top:17%;left:63.75%;width:4.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- 策略指撥開關 -->
+           <a class="area-overlay" href="#image-strategy-toggle"
+           style="top:20.5%;left:46%;width:8%;height:3%;color:#ffcc00"></a>
+
+           <!-- 左邊影像 -->
+           <a class="area-overlay" href="#image-camera"
+           style="top:29%;left:21.75%;width:27.5%;height:25.75%;color:#ffcc00"></a>
+
+           <!-- 右邊影像 -->
+           <a class="area-overlay" href="#image-right-image"
+           style="top:29%;left:50.25%;width:27.5%;height:25.75%;color:#ffcc00"></a>
+
+           <!-- 溫度 -->
+           <a class="area-overlay" href="#image-temperature"
+           style="top:29%;left:45.5%;width:3.75%;height:2.5%;color:#ffcc00"></a>
+
+           <!-- 頭部馬扭力 -->
+           <a class="area-overlay" href="#image-head-torque"
+           style="top:56%;left:22%;width:10%;height:3%;color:#ffcc00"></a>
+
+           <!-- hz指令面板 -->
+           <a class="area-overlay" href="#image-hz-cmd"
+           style="top:56%;left:32.25%;width:3.25%;height:3%;color:#ffcc00"></a>         
+           <a class="area-overlay" href="#image-hz-cmd"
+           style="top:12.25%;left:76%;width:22%;height:9.5%;color:#ffcc00"></a>              
+
+           <!-- 線條作畫清除 -->
+           <a class="area-overlay" href="#image-draw-clear"
+           style="top:56%;left:35.75%;width:6.5%;height:3%;color:#ffcc00"></a>                              
+
+           <!-- 儲存相機參數 -->
+           <a class="area-overlay" href="#image-save-camera"
+           style="top:56%;left:42.5%;width:6.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- 頭部馬達控制 -->
+           <a class="area-overlay" href="#image-head-motor"
+           style="top:59%;left:22%;width:27%;height:11.75%;color:#ffcc00"></a>
+
+           <!-- 相機參數設定 -->
+           <a class="area-overlay" href="#image-camera-settings"
+           style="top:70.5%;left:22%;width:27%;height:24.5%;color:#ffcc00"></a>
+
+           <!-- 檢視切換下拉（左眼畫面 / 深度畫面）-->
+           <a class="area-overlay" href="#image-left-view"
+           style="top:25.75%;left:21.75%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+           <!-- 檢視切換下拉（疊合 / 色模 / 深度）-->
+           <a class="area-overlay" href="#image-right-view"
+             style="top:25.75%;left:50.25%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+           <!-- ======== 右半邊：深度模式 ======== -->
+           <!-- TODO: 換上實際截圖後，依實際控制項把下面兩個大框拆細 -->
+
+           <!-- Build table -->
+           <a class="area-overlay" href="#image-depth-build-table"
+           style="top:56.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- Distance Select -->
+           <a class="area-overlay" href="#image-distance-select"
+           style="top:59.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- Reset/Close -->
+           <a class="area-overlay" href="#image-reset-close"
+           style="top:59.5%;left:70%;width:6.5%;height:3%;color:#ffcc00"></a>
+
+           <!-- 深度參數設定 -->
+           <a class="area-overlay" href="#image-depth-params"
+           style="top:62.5%;left:50.5%;width:27.5%;height:6%;color:#ffcc00"></a>
+
+           <!-- SaveDistance -->
+           <a class="area-overlay" href="#image-save-distance"
+           style="top:68.5%;left:53%;width:9.5%;height:4%;color:#ffcc00"></a>
+
+           <!-- BuildDistance -->
+           <a class="area-overlay" href="#image-build-distance"
+           style="top:68.5%;left:66.5%;width:9.5%;height:4%;color:#ffcc00"></a>
+         </div>
 
 .. _image-strategy-select:
 
 策略選擇
 ^^^^^^^^
 
-下拉選單，選擇目前要使用的策略模組。
+下拉選單，選擇目前要使用的策略模組。選定後點擊 ``location_load`` 按鈕，載入該策略所有參數。
 
-**可用策略：** ``us``\ （足球）、``ar``\ （射箭）、``bb``\ （籃球）、``sp``\ （競走）、``obs``\ （避障）、``sr``\ （斯巴達）、``mar``\ （馬拉松）、``pk``\ （PK）、``rc``\ （遙控）
-
-選定後點擊 ``location_load`` 按鈕，載入該策略所有參數。
+``ar``\ （射箭）、``bb``\ （籃球）、``sp``\ （競走）、``obs``\ （避障）、``sr``\ （斯巴達）、``wl``\ （舉重）、``mar``\ （馬拉松）、``pk``\ （罰踢）、``rc``\ （攀岩）
 
 .. _image-save-all:
 
@@ -155,14 +377,20 @@ SaveAll
 原始影像
 ^^^^^^^^
 
-顯示相機的原始影像，畫面大小為320*240。
+顯示相機的原始影像。
+
+畫面大小 **960 x 600**\ 。左側顯示內容可用
+:ref:`image-left-view` 在「左眼畫面」與「深度畫面」之間切換。
 
 .. _image-model-view:
 
 HSV 色模顯示
 ^^^^^^^^^^^^^
 
-顯示經過 HSV 遮罩處理後的影像，畫面大小為320*240，顯示各顏色抓取HSV遮罩的結果。
+顯示經過 HSV 遮罩處理後的影像，顯示各顏色抓取 HSV 遮罩的結果。
+
+畫面大小 **960 x 600**\ 。右側顯示的不一定是色模 ——
+見 :ref:`image-right-view` 與 :ref:`image-right-image`\ 。
 
 各顏色在 HSV 色模顯示畫面中對應的標示顏色（OpenCV BGR 轉換）：
 
@@ -225,7 +453,7 @@ HSV 色模顯示
 頭部馬達控制
 ^^^^^^^^^^^^^
 
-滑桿控制頭部相機的水平（Horizontal）與垂直（Vertical）方向。
+滑桿控制頭部相機的水平（Horizontal）與垂直（Vertical）方向。最小值與最大值為走線物理限制，非馬達刻度極限。
 
 .. list-table::
    :header-rows: 1
@@ -259,29 +487,49 @@ HSV 色模顯示
 .. _image-camera-settings:
 
 相機參數設定
-^^^^^^^^^^^^^
+^^^^^^^^^^^^
 
-即時調整相機的影像擷取參數，調整後畫面立即更新：
+調整相機的影像參數，拉動滑桿即時生效。
+
+相機是 ZED X Mini。
 
 .. list-table::
    :header-rows: 1
+   :widths: 30 24 22 24
 
    * - 參數
+     - 範圍
+     - 預設
      - 說明
-   * - ``brightness``
-     - 亮度
-   * - ``contrast``
-     - 對比度
-   * - ``saturation``
+   * - Exposure
+     - ``0`` ~ ``100``
+     - ``80``
+     - 曝光
+   * - Gain
+     - ``0`` ~ ``100``
+     - ``80``
+     - 增益
+   * - Gamma
+     - ``1`` ~ ``9``
+     - ``8``
+     - Gamma 校正
+   * - Saturation
+     - ``0`` ~ ``8``
+     - ``4``
      - 飽和度
-   * - ``white_balance``
-     - 色溫（手動白平衡值）
-   * - ``auto_white_balance``
-     - 自動白平衡開關
-   * - ``auto_exposure``
-     - 自動曝光開關
-   * - ``zoomin``
-     - 數位縮放倍率（預設 1.0）
+   * - Denoising
+     - ``0`` ~ ``100``
+     - ``50``
+     - 降噪強度
+   * - WBTemp
+     - ``28`` ~ ``65``
+     - ``42``
+     - 白平衡**色溫**\ （單位百 K，例如 42 = 4200K）
+
+.. note::
+
+   大人型**沒有** Brightness / Contrast / WhiteBalance，
+   改由 Exposure / Gain / Gamma / WBTemp 控制。
 
 .. _image-build-table:
 
@@ -358,18 +606,215 @@ BuildHsv
 
 ----
 
+.. _image-left-view:
+
+左側檢視切換
+^^^^^^^^^^^^
+
+左眼畫面上方的下拉選單，切換左側顯示的影像來源。
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 34 40
+
+   * - 選項
+     - 影像來源
+     - 說明
+   * - 左眼畫面
+     - ``/zoom_in``
+     - ZED 左眼的 RGB 畫面，受 ZoomIn 倍率影響
+   * - 深度畫面
+     - ``/depth_view``
+     - 深度圖的視覺化（顏色代表距離）
+
+切換時**只影響左側畫面**，右側與下方面板不動。
+
+.. _image-right-image:
+
+右側影像
+^^^^^^^^
+
+右側顯示處理後的影像，內容由 :ref:`image-right-view` 決定
+（疊合 ``/overlap_image`` / 色模 ``/processed_image`` / 深度 ``/depth_processed_image``\ ）。
+
+
+.. _image-temperature:
+
+相機溫度
+^^^^^^^^
+
+疊在左眼畫面右上角的Zed相機即時溫度顯示
+
+.. _image-hz-cmd:
+
+Topic Hz 指令面板
+^^^^^^^^^^^^^^^^^
+
+產生查看影像串流更新率的指令，方便直接複製到終端機執行。
+左右兩側各一個，內容會**跟著各自的檢視切換自動更新**\ ：
+
+.. code-block:: bash
+
+   ros2 topic hz /zoom_in           # 左側選「左眼畫面」時
+   ros2 topic hz /depth_view        # 左側選「深度畫面」時
+   ros2 topic hz /overlap_image     # 右側選「疊合」時
+   ros2 topic hz /processed_image   # 右側選「色模」時
+   ros2 topic hz /depth_processed_image   # 右側選「深度」時
+
+點輸入框會全選，按 **Copy** 直接複製。
+
+.. _image-draw-clear:
+
+清除繪圖
+^^^^^^^^
+
+清除影像上由策略畫上去的所有線條與框
+
+.. _image-distance-select:
+
+Distance Select
+^^^^^^^^^^^^^^^
+
+選擇目前要編輯的距離類別 **D1 ~ D8**\ ，以及 **Reset** / **Close**\ 。
+架構與色模的 :ref:`image-color-labels` 相同，只是維度從顏色換成距離。
+
+.. _image-depth-params:
+
+深度參數設定
+^^^^^^^^^^^^
+
+設定目前選取的距離類別的範圍，單位**公分**\ ：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 20 56
+
+   * - 欄位
+     - 預設
+     - 說明
+   * - Build Status
+     - ``All_distance_build``
+     - ``All_distance_build`` 一次建立全部 D1~D8；
+       ``Single_distance_build`` 只建立目前選取的那一個
+   * - Distance Range (cm)
+     - ``10`` ~ ``1000``
+     - 這個類別涵蓋的距離區間
+
+API 端的用法見 :doc:`ZedCamera` 的「深度偵測 (Depth)」。
+
+.. _image-save-distance:
+
+SaveDistance
+^^^^^^^^^^^^
+
+把目前的深度區間設定寫回策略資料夾的 ``depth.ini``\ 。
+與色模的 :ref:`image-save-hsv` 相同，**不存檔重開節點就會回到舊值**\ 。
+
+.. _image-build-distance:
+
+BuildDistance
+^^^^^^^^^^^^^
+
+依目前的設定重新建立深度模型。建立期間按鈕會變灰，完成後才恢復。
+
+.. _image-depth-build-table:
+
+Build table（深度）(大人型)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+深度模式的建立狀態選擇（``#depth-build-select``\ ）：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - 選項
+     - 說明
+   * - ``All_distance``
+     - 一次建立全部 D1~D8（預設）
+   * - ``Single_distance``
+     - 只建立目前 :ref:`image-distance-select` 選取的那一個
+
+.. _image-overlap-build-table:
+
+Build table（疊合）(大人型)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+疊合模式的建立狀態選擇：``All_overlap_build`` 一次建立 Set1~Set8，
+``Single_overlap_build`` 只建立目前選取的那一組。
+
+.. _image-overlap-select:
+
+Overlap Select
+^^^^^^^^^^^^^^
+
+選擇目前要編輯的 **Set1 ~ Set8**\ ，並設定該組要綁定的顏色與距離：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
+
+   * - 欄位
+     - 說明
+   * - Overlap Select
+     - 要編輯哪一組（1~8），以及 **Reset** / **Close**
+   * - Color
+     - 這一組綁定的顏色類別（orange / yellow / blue / green / black …）
+   * - Distance
+     - 這一組綁定的距離類別（D1~D8）
+   * - Enable
+     - 這一組要不要啟用。**取消勾選後該組就不參與偵測**\ ，
+       但綁定的顏色與距離會保留，之後再勾回來不用重設。
+       按 **Reset** 會把 Enable 復原成勾選
+
+取兩者的**交集區域**，用於「**這個顏色、而且在這個距離**」的複合條件判斷。
+各組的顯示色是固定的，不可更改。
+
+API 端的用法見 :doc:`ZedCamera` 的「疊合偵測 (Overlap)」。
+
+.. _image-save-overlap:
+
+SaveOverlap
+^^^^^^^^^^^
+
+把目前的 Set1~Set8 綁定寫回策略資料夾的 ``overlap.ini``\ 。
+
+.. _image-build-overlap:
+
+BuildOverlap
+^^^^^^^^^^^^
+
+依目前的設定重新建立疊合模型。建立期間按鈕會變灰，完成後才恢復。
+
+.. _image-right-view:
+
+檢視切換
+^^^^^^^^
+
+右側影像上方的下拉選單，切換 **疊合 / 色模 / 深度** 三種檢視。
+切換時右側的影像串流與下方的參數面板會**一起換掉**，左半邊與頂部不受影響。
+
+.. list-table::
+   :header-rows: 1
+   :widths: 16 34 50
+
+   * - 選項
+     - 影像來源
+     - 下方面板
+   * - 疊合
+     - ``/overlap_image``
+     - :ref:`image-overlap-select`
+   * - 色模
+     - ``/processed_image``
+     - :ref:`image-hsv`
+   * - 深度
+     - ``/depth_processed_image``
+     - :ref:`image-depth-params`
+
 .. _interface-motion:
 
 MotionControlInterface
 --------------------------------------
-
-.. raw:: html
-
-   <a href="_static/MotionControl_demo.html" target="_blank"
-      style="background:#03e9f4;color:#000;padding:5px 14px;border-radius:4px;
-             text-decoration:none;font-weight:bold;font-family:monospace;">
-     &#9654; 開啟 DEMO
-   </a>
 
 .. raw:: html
 
@@ -384,6 +829,8 @@ MotionControlInterface
    }
    .area-overlay:hover{background:rgba(3,233,244,0.28);}
    </style>
+
+.. raw:: html
 
    <div class="iface-map-wrap">
     <img src="_static/screenshots/MotionControl.png" alt="MotionControl 介面截圖">
@@ -520,21 +967,20 @@ History 面板與 Undo/Redo
 
 Save Stand / Read Stand / Locked
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 .. danger::
-   專題生請勿擅自使用此功能
+  專題生請勿擅自使用此功能
 
 站立姿勢（stand）的獨立儲存/讀取，檔名固定為 ``stand``，不受檔名輸入框影響：
 
-- **SaveStand**：將29.ini內的資料複製至stand.ini，請在使用前先send Sector 29。需先取消勾選 ``Locked Stand`` 才能執行，避免誤覆蓋。
+- **SaveStand**：將29.ini內的資料複製至stand.ini請在使用前先send Sector 29。需先取消勾選 ``Locked Stand`` 才能執行，避免誤覆蓋。
 - **ReadStand**：載入 stand.ini 的姿勢資料。
 - ``Locked Stand`` 勾選框：勾選時禁止 SaveStand/ReadStand，預設勾選作為保護。
 - ``Locked 29`` 勾選框：勾選時禁止 Send 使用 Sector 29，避免誤改站姿。
 
 .. note::
 
-  * ReadStand會清除目前網頁上所有資料並讀取Stand.ini，使用前請確保已存檔或另開新頁。
-  * 操作順序：取消勾選 ``Locked Stand`` → ``ReadStand`` → 調整Absolute ID29內的數值 → 取消勾選 ``Locked 29`` → send Sector 29 → execute確認調整結果 → ``SaveStand`` → 測試stand是否與Sector 29動作一致。
+  * ReadStand會清除目前網頁上所有資料並讀取Stand.ini使用前請確保已存檔或另開新頁。
+  * 操作順序：取消勾選 ``Locked Stand`` → ``ReadStand`` →調整Absolute ID29內的數值→取消勾選 ``Locked 29`` →send Sector 29→execute確認調整結果→ ``SaveStand`` →測試stand是否與Sector 29動作一致。
 
 .. _motion-reset:
 
@@ -553,7 +999,7 @@ Send / Sector
 指定 ID 與 Sector 後送出動作：
 
 - **ID**：要送出的動作序號（網頁中的號碼）。
-- **Sector**：動作 Sector 編號（程式/檔案中的號碼，Sector 29 預設被 :ref:`motion-stand-file-ops` 的 Locked 29 保護）。
+- **Sector**：動作 Sector 編號（程式/檔案中的號碼， Sector 29 預設被 :ref:`motion-stand-file-ops` 的 Locked 29 保護）。
 - **Send**：將現在ID(網頁)的內容send到Sector(檔案)。
 
 .. note::
@@ -627,8 +1073,10 @@ Merge
 CheckSum
 ^^^^^^^^
 
-輸入 ID 後顯示該列所有馬達（M1–M27）各自的數值總和，主要用於檢查MotionList。
+輸入 ID 後顯示該列所有馬達各自的數值總和，主要用於檢查MotionList。
 結果顯示在下方 CheckSum 欄位。
+
+顯示範圍：M1–M27（27 顆馬達）
 
 .. _motion-label:
 
@@ -692,7 +1140,7 @@ ID 上下調整
 馬達圖示控制
 ^^^^^^^^^^^^^
 
-機器人正面圖示（大人型），各馬達編號按鈕疊加在對應關節位置，點擊可切換單顆馬達扭力。
+機器人正面圖示，各馬達編號按鈕疊加在對應關節位置，點擊可切換單顆馬達扭力。
 按鈕綠色代表扭力 ON，紅色代表扭力 OFF。
 
 .. note::
@@ -723,6 +1171,10 @@ ID 上下調整
 X_Series / Pro_Series 換算面板
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. note::
+
+   此功能僅大人型（ADULT）介面提供。
+
 頭部馬達同時存在 X 系列與 Pro 系列，兩種系列刻度不相容。介面提供獨立的 Position 與 Speed
 欄位，輸入後可分別送出換算指令，避免直接混用刻度導致問題。
 
@@ -742,16 +1194,20 @@ X_Series / Pro_Series 換算面板
 單顆扭力控制
 ^^^^^^^^^^^^^
 
-輸入馬達 ID（1–29），點擊 ``開啟 (ON)`` 或 ``關閉 (OFF)`` 控制單顆馬達扭力，
+輸入馬達 ID，點擊 ``開啟 (ON)`` 或 ``關閉 (OFF)`` 控制單顆馬達扭力，
 同步更新 :ref:`motion-robot-visual` 圖示狀態。
+
+ID 範圍：1–29
 
 .. _motion-motor-detail:
 
 即時馬達刻度顯示
 ^^^^^^^^^^^^^^^^^
 
-訂閱 ``/joint_states`` topic，即時顯示所有馬達（ID 1–27）目前的絕對刻度。
+訂閱 ``/joint_states`` topic，即時顯示所有馬達目前的絕對刻度。
 可用於確認機器人目前姿勢，配合 :ref:`motion-create-id` 擷取當前姿勢。
+
+顯示 ID 1–27（27 顆馬達）
 
 .. _motion-create-id:
 
@@ -762,7 +1218,7 @@ X_Series / Pro_Series 換算面板
 
 1. 自動切換至 AbsolutePosition 檢視。
 2. 新增一列空白資料列。
-3. 將 :ref:`motion-motor-detail` 的即時刻度值填入該列（ID 1–27），速度預設 50。
+3. 將 :ref:`motion-motor-detail` 的即時刻度值填入該列，速度預設 50。
 
 用於快速將機器人目前姿勢記錄為一個 Absolute 動作。
 
@@ -790,83 +1246,134 @@ WalkingInterface
 
 .. raw:: html
 
-   <a href="_static/Walking_demo.html" target="_blank"
-      style="background:#03e9f4;color:#000;padding:5px 14px;border-radius:4px;
-             text-decoration:none;font-weight:bold;font-family:monospace;">
-     &#9654; 開啟 DEMO
-   </a>
-
-.. raw:: html
-
    <div class="iface-map-wrap">
      <img src="_static/screenshots/Walking.png" alt="Walking 介面截圖">
 
     <!-- 現在策略顯示(各網頁共用) -->
     <a class="area-overlay" href="#strategy"
       style="top:9%;left:0.5%;width:7.5%;height:13%;color:#ffcc00"></a>
-
+      
     <!-- Address(各網頁共用) -->
     <a class="area-overlay" href="#shared-address"
-      style="top:28.25%;left:44%;width:12%;height:5%;color:#ffcc00"></a>
+      style="top:27%;left:41.25%;width:17.5%;height:3.25%;color:#ffcc00"></a>
 
     <!-- IMU -->
     <a class="area-overlay" href="#walking-imu"
-      style="top:35%;left:27.25%;width:11%;height:53%;color:#ffcc00"></a>
+      style="top:33%;left:30%;width:10%;height:66%;color:#ffcc00"></a>
 
     <!-- Walking Mode 調整 -->
     <a class="area-overlay" href="#walking-mode"
-      style="top:35%;left:38.5%;width:21.25%;height:8.5%;color:#ffcc00"></a>
+      style="top:33%;left:40.25%;width:19%;height:10%;color:#ffcc00"></a>
 
     <!-- 步長調整 -->
     <a class="area-overlay" href="#walking-step-size"
-      style="top:43%;left:38.5%;width:21.25%;height:12.5%;color:#ffcc00"></a>
+      style="top:43%;left:40.25%;width:19%;height:12.5%;color:#ffcc00"></a>
 
     <!-- Load -->
     <a class="area-overlay" href="#walking-load"
-      style="top:55%;left:38.5%;width:10.625%;height:6.25%;color:#ffcc00"></a>
+      style="top:55%;left:40.25%;width:9.5%;height:4.25%;color:#ffcc00"></a>
 
     <!-- Generate -->
     <a class="area-overlay" href="#walking-generate"
-      style="top:55%;left:49.125%;width:10.625%;height:6.25%;color:#ffcc00"></a>
+      style="top:55%;left:49.75%;width:9.5%;height:4.25%;color:#ffcc00"></a>
 
     <!-- 方向控制 -->
     <a class="area-overlay" href="#walking-direction"
-      style="top:61%;left:38.5%;width:21.25%;height:14.25%;color:#ffcc00"></a>
+      style="top:59.25%;left:40.25%;width:19%;height:14.25%;color:#ffcc00"></a>
 
     <!-- 步態參數 -->
     <a class="area-overlay" href="#walking-params"
-      style="top:35%;left:60%;width:18.5%;height:25.5%;color:#ffcc00"></a>
+      style="top:33%;left:59.5%;width:16.5%;height:26%;color:#ffcc00"></a>
 
     <!-- Save -->
     <a class="area-overlay" href="#walking-save"
-      style="top:60.25%;left:60%;width:9.2%;height:6%;color:#ffcc00"></a>
+      style="top:59%;left:59.5%;width:8.3%;height:6%;color:#ffcc00"></a>
 
     <!-- Send -->
     <a class="area-overlay" href="#walking-send"
-      style="top:60.25%;left:69.25%;width:9.2%;height:6%;color:#ffcc00"></a>
+      style="top:59%;left:67.6%;width:8.4%;height:6%;color:#ffcc00"></a>
 
    </div>
 
 .. _walking-imu:
 
-IMU 顯示
-^^^^^^^^
+IMU
+^^^
 
-左側 Sensor_Value 區塊顯示即時 IMU 數值。
+顯示機身姿態，由步態控制用來判斷跌倒與動態平衡。
+
+**兩組 IMU 並列顯示**\ ，各自獨立、互不影響：
 
 .. list-table::
    :header-rows: 1
+   :widths: 18 34 48
+
+   * - 來源
+     - 欄位
+     - 說明
+   * - **Xsens**
+     - Roll / Pitch / Yaw
+     - 機身 IMU（MTi-620）。**數值已歸零**\ ，
+       以開機時的姿態為基準
+   * -
+     - Gyro X/Y/Z
+     - 角速度
+   * -
+     - Accel X/Y/Z
+     - 加速度
+   * -
+     - State
+     - driver 的連線狀態，掉線時會看得出來
+   * - **ZED**
+     - Roll / Pitch / Yaw
+     - ZED X Mini 內建的 IMU
+   * -
+     - Gyro X/Y/Z
+     - 角速度
+   * -
+     - Accel X/Y/Z
+     - 加速度
+   * - **odom**
+     - X / Y / Z / Yaw
+     - :ref:`walking-odom`\  ZED 的視覺里程計。
+
+.. note::
+
+   步態控制用的是 **Xsens** 那一組（發 ``/package/sensorpackage``\ ）。
+   ZED 那一組是獨立的 topic，主要拿來交叉比對 ——
+   兩組差很多時通常代表其中一顆沒鎖緊或線鬆了。
+
+   Xsens 與舊的 Arduino IMU 由 ``imu_source`` 二擇一，不會同時啟動，
+   見 :doc:`Command` 的啟動參數。
+
+.. _walking-odom:
+
+Odom（ZED 視覺里程計）(大人型)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+顯示 ZED 相機的視覺里程計，來自 ``/zed/zed_node/odom``\ （``nav_msgs/Odometry``\ ）。
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
 
    * - 欄位
      - 說明
-   * - Roll
-     - 左右傾斜角（°）
-   * - Pitch
-     - 前後傾斜角（°）
+   * - X / Y / Z
+     - 相對於起點的位移，**單位公分**\ （原始訊息是公尺，顯示時乘 100）
    * - Yaw
-     - 旋轉角（°）
+     - 相對於起點的朝向角（度）
 
-**IMU Reset** 按鈕：將 IMU 數值重置歸零。
+.. warning::
+
+   **這是「相機」的位移，不是機器人底盤的位移。**
+   相機裝在頭部雲台上，所以**只轉頭、身體沒動的時候數值也會變**\ 。
+   目前尚未做頭部補償，**僅供觀察驗證用**\ ，不要直接拿來當定位依據。
+
+歸零的方式有兩個，兩者等價（都是呼叫 ``/zed/zed_node/reset_odometry``\ ）：
+
+* 網頁上的歸零按鈕
+* 策略裡呼叫 :meth:`API.sendOdomReset`\ （服務還沒就緒時只記錄警告，不會卡住主迴圈）
 
 .. _walking-mode:
 
@@ -875,24 +1382,28 @@ Walking Mode 調整
 
 選擇步態模式的單選按鈕。切換模式後會自動呼叫 `Load`_ 重新載入對應參數。
 
+.. important::
+   模式對應的是斯巴達障礙（SR）賽項。
+
 .. list-table::
    :header-rows: 1
+   :widths: 26 18 56
 
    * - 模式
      - statetype
      - 說明
-   * - Continuous
+   * - ``Continuous``
      - 0
      - 平地連續行走（預設）
-   * - LC_up
+   * - ``SR_up``
      - 1
-     - 上樓梯步態
-   * - LC_down
+     - 上障礙物步態
+   * - ``SR_down``
      - 2
-     - 下樓梯步態
-
-.. note::
-   LC_up / LC_down 選項只有在目前策略為 ``lc`` 時才會顯示。
+     - 下障礙物步態
+   * - ``SR_Continuous``
+     - 3
+     - 障礙物上的連續行走
 
 .. _walking-step-size:
 
@@ -976,27 +1487,29 @@ Generate
 步態參數
 ^^^^^^^^
 
-參數面板依選取的 Walking Mode 顯示不同欄位組。
+參數面板依選取的 `Walking Mode 調整`_ 顯示不同欄位組。
 
-**Continuous Step（平地連續步態）：**
+Continuous Step（平地連續步態）
+"""""""""""""""""""""""""""""""
 
 .. list-table::
    :header-rows: 1
+   :widths: 26 46 28
 
    * - 參數
      - 說明
      - 預設值
    * - ``com_y_swing``
-     - 質心起步偏移（cm）
+     - 質心起步偏移（cm），正值向左
      - 0
    * - ``width_size``
-     - 腳寬（cm）
-     - 0
+     - 腳寬 / 步寬（cm）
+     - 4.5
    * - ``period_t``
-     - 週期（20一單位）
+     - 步態週期（以 20 為一單位），越小踏步越快
      - 420
    * - ``T_DSP``
-     - 雙支撐時間比例（0–1）
+     - 雙支撐時間比例（0~1）
      - 0
    * - ``lift_height``
      - 抬腳高度（cm）
@@ -1007,11 +1520,39 @@ Generate
    * - ``COM_HEIGHT``
      - 質心高度（cm）
      - 40
+   * - ``hip_roll``
+     - 髖關節 roll 補償
+     - 0
+   * - ``ankle_roll``
+     - 踝關節 roll 補償
+     - 0
 
-**LCup / LCdown Step（樓梯步態）：** 額外包含 ``Board_High`` （階梯高度）、``Clearance`` （越障餘裕）參數。
+SR Step（障礙步態）
+"""""""""""""""""""
 
-預設值：``com_height`` = 40 cm、``stand_height`` = 50 cm、
-``period_t`` = 420 ms、``lift_height`` = 5 cm。
+``SR_up`` / ``SR_down`` / ``SR_Continuous`` 共用同一組欄位：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - 參數
+     - 說明
+   * - ``com_y_swing`` / ``width_size`` / ``period_t``
+     - 同平地
+   * - ``T_DSP``\ （欄位 id 為 ``osc_lockrange``\ ）
+     - 雙支撐時間比例
+   * - ``Clearance``
+     - 越障餘裕（cm）
+   * - ``Board_High``
+     - 障礙物高度（cm）
+   * - ``STAND_HEIGHT`` / ``COM_HEIGHT``
+     - 站姿與質心高度
+
+.. important::
+
+   ``hip_roll`` / ``ankle_roll`` **只在平地那一組**\ ，障礙這一組沒有。
+   改參數前先確認自己在哪一個模式。
 
 .. _walking-save:
 
@@ -1028,7 +1569,7 @@ Save
 Send
 ^^^^
 
-將畫面上的參數即時套用至行走節點（不寫入檔案）。
+將畫面上的參數即時套用至行走節點（不寫入檔案），並執行腳寬更變。
 
 .. note::
    Send 僅更新執行中的節點，不寫入檔案。若要永久保存請改用 `Save`_。
@@ -1042,14 +1583,6 @@ miniDRC
 
 .. raw:: html
 
-   <a href="_static/miniDRC_demo.html" target="_blank"
-      style="background:#03e9f4;color:#000;padding:5px 14px;border-radius:4px;
-             text-decoration:none;font-weight:bold;font-family:monospace;">
-     &#9654; 開啟 DEMO
-   </a>
-
-.. raw:: html
-
    <div class="iface-map-wrap">
      <img src="_static/screenshots/miniDRC.png" alt="miniDRC 介面截圖">
 
@@ -1059,7 +1592,7 @@ miniDRC
 
     <!-- Address(各網頁共用) -->
     <a class="area-overlay" href="#shared-address"
-      style="top:14.5%;left:43.3%;width:13%;height:4.25%;color:#ffcc00"></a>
+      style="top:14.5%;left:43.3%;width:13%;height:4.25%;color:#ffcc00"></a>  
 
     <!-- 相機畫面 -->
     <a class="area-overlay" href="#image-camera"
@@ -1099,7 +1632,7 @@ miniDRC
 
     <!-- 執行指定motion -->
     <a class="area-overlay" href="#minidrc-sector"
-      style="top:85.5%;left:70.5%;width:23%;height:14%;color:#ffcc00"></a>
+      style="top:85.5%;left:70.5%;width:23%;height:14%;color:#ffcc00"></a>                                      
    </div>
 
 將 WalkingInterface、ImageProcessInterface 與MotionControlInterface整合成單一精簡頁面。
@@ -1150,7 +1683,7 @@ miniDRC
    .. tab:: ③ Walking Setup
 
       步態參數調整，功能與 WalkingInterface 的步態參數區塊相同。
-      :ref:`walking-params`、:ref:`walking-load`、:ref:`walking-send`。
+      :ref:`walking-params`、:ref:`walking-load`、:ref:`walking-send` 。
 
       .. image:: _static/screenshots/miniDRCWalk.png
          :width: 100%
@@ -1213,5 +1746,10 @@ miniDRC
      - 說明
    * - ``NodeMonitor.html``
      - 節點狀態監控：即時顯示所有 ROS2 節點的 ``/rosout`` log，支援節點篩選與多視窗並排
-   * - ``API.html``
-     - ROS2 API 瀏覽器：查看所有可用 topic / service / action
+..  * - ``index.html``
+..    - 主頁：策略選擇與啟動、Start/Stop、連線 IP 切換
+..  * - ``BalanceControl.html``
+..    - 平衡控制參數調整（Tilt 補償）
+..  * - ``PIDcontroll.html``
+..    - PID 參數即時調整介面
+

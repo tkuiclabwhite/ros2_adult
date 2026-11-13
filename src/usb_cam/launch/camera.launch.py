@@ -1,4 +1,10 @@
-"""完整系統 launch：啟動 usb_cam 或 ZED 相機節點及其他系統節點。"""
+"""完整系統 launch：啟動 usb_cam 或 ZED 相機節點及其他系統節點。
+
+常用參數：
+    camera_source:=usb|zed     相機來源（預設 zed）
+    imu_source:=xsens|arduino  機身 IMU（預設 xsens）
+    hands:=both|left|right|none  LinkerHand O6 雙手（預設 both）
+"""
 import os
 import sys
 from pathlib import Path
@@ -64,6 +70,19 @@ def generate_launch_description():
         default_value='/dev/ttyTHS1',
         description='Xsens MTi 的序列埠（/dev/ttyTHSx、by-id 或 /dev/ttyUSBx 皆可，symlink 會自動解析成實際裝置）'
     )
+
+    # LinkerHand O6 雙手：預設全開，跟整台機器人一起啟動。
+    # 只接一隻手就 hands:=left（或 right）—— 沒接的那隻 SDK 節點讀不到版本會退出，
+    # 不指定的話會看到一段「找不到手」的錯誤訊息（不影響其他節點）。
+    # 完全不要手就 hands:=none。
+    # include 的是 handpackage/launch/hands.launch.py，並強制 web:=false ——
+    # rosbridge(9090) 與 http_server(9999) 這邊已經起過了，重複啟動會搶同一個 port。
+    hands_arg = DeclareLaunchArgument(
+        'hands',
+        default_value='both',
+        description="要啟動哪幾隻手：'both'（預設）/ 'left' / 'right' / 'none'（不開）"
+    )
+    hands = LaunchConfiguration('hands')
 
     # ================================================================
     # 1) 相機節點
@@ -229,6 +248,47 @@ def generate_launch_description():
         output='screen',
         condition=is_zed,
     )
+    # ----------------------------------------------------------------
+    # LinkerHand O6 雙手（hands:= 不是 none 時才 include）
+    # ----------------------------------------------------------------
+    # 與 xsens 同樣的防呆：沒編 handpackage 的機器不要讓整包 launch 掛掉。
+    # CAN 介面編號、是否有壓感之類的都走 hands.launch.py 自己的 argument，
+    # 要覆蓋就直接在指令列加，例如 hands:=left left_can:=can0
+    try:
+        handpackage_share = get_package_share_directory('handpackage')
+    except Exception:
+        handpackage_share = None
+        print('Warning: 找不到 handpackage（還沒編？），hands:= 參數會沒有作用。'
+              '要用手就先編：colcon build --symlink-install --packages-select handpackage')
+
+    hands_launch = []
+    if handpackage_share is not None:
+        hands_launch = [IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(handpackage_share, 'launch', 'hands.launch.py')
+            ),
+            launch_arguments={
+                'hands': hands,
+                # 這兩個是整台機器人共用的，不能讓 hands.launch.py 再起一份
+                'web': 'false',
+            }.items(),
+            # 只認這三個值。用 != 'none' 的話打錯字（hands:=ture）會 include 進去，
+            # 結果是「handpackage 起來了但一隻手都沒有」，很難看出哪裡錯
+            condition=IfCondition(PythonExpression(
+                ["'", hands, "' in ('both', 'left', 'right')"])),
+        )]
+
+        def _warn_bad_hands(context):
+            v = hands.perform(context)
+            if v not in ('none', 'both', 'left', 'right'):
+                print('=' * 72)
+                print(f"[camera] 警告：hands:={v} 不是合法值，雙手不會啟動。")
+                print("  只接受 none / both / left / right")
+                print('=' * 72)
+            return []
+
+        hands_launch.append(OpaqueFunction(function=_warn_bad_hands))
+
     # ================================================================
     # 3) 影像處理 + 網頁
     # ================================================================
@@ -305,7 +365,7 @@ def generate_launch_description():
         output='screen',
     )
     
-    actions = camera_nodes + [zed_launch] + xsens_driver_launch + \
+    actions = camera_nodes + [zed_launch] + xsens_driver_launch + hands_launch + \
               [driver_node, walking_node, motion_node, web_bridge_node,
                xsens_bridge_node, imu_node, zed_imu_node, switch_node] + \
               [image_node, depth_process_node, overlap_node, camera_param_bridge_node,
@@ -315,5 +375,6 @@ def generate_launch_description():
     ld.add_action(camera_source_arg)
     ld.add_action(imu_source_arg)
     ld.add_action(xsens_port_arg)
+    ld.add_action(hands_arg)
     ld.add_action(GroupAction(actions=actions))
     return ld

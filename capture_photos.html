@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<!-- capture_photos.py 的拍照網頁，由 capture_photos.py 直接提供，不用另外開伺服器 -->
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拍照收集素材</title>
+<style>
+  :root {
+    --bg: #111418;
+    --panel: #1a1f25;
+    --line: #2a313a;
+    --text: #e6e9ed;
+    --muted: #8b96a3;
+    --accent: #3b9eff;
+    --ok: #3ccf7a;
+    --bad: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  body { display: flex; flex-direction: column; }
+
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+    border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .meta code { color: var(--text); }
+  .signal { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin-left: auto; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .signal.ok .dot { background: var(--ok); }
+  .signal.bad .dot { background: var(--bad); }
+  .signal.bad { color: var(--bad); }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* 左邊：即時畫面 */
+  .live { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 12px; gap: 12px; }
+  .view { position: relative; flex: 1; min-height: 0; background: #000; border-radius: 8px;
+    overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .view img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  .view .waiting { position: absolute; color: var(--muted); font-size: 15px; }
+  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  .flash.on { animation: flash .25s ease-out; }
+  @keyframes flash { from { opacity: .7; } to { opacity: 0; } }
+
+  .controls { display: flex; align-items: center; gap: 8px 16px; justify-content: center; flex-wrap: wrap; }
+  .shutter { font-size: 16px; font-weight: 600; padding: 12px 36px; border-radius: 999px;
+    border: none; background: var(--accent); color: #fff; cursor: pointer; }
+  .shutter:active { transform: scale(.97); }
+  .hint { color: var(--muted); font-size: 13px; }
+  kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+    padding: 1px 6px; font-size: 12px; color: var(--text); background: var(--panel); }
+
+  /* 右邊：已拍照片 */
+  aside { width: 300px; border-left: 1px solid var(--line); background: var(--panel);
+    display: flex; flex-direction: column; min-height: 0; }
+  aside h2 { font-size: 14px; margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  aside h2 span { color: var(--accent); }
+  .grid { flex: 1; overflow-y: auto; padding: 10px; display: grid;
+    grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; }
+  .empty { grid-column: 1 / -1; color: var(--muted); font-size: 13px; text-align: center; padding: 24px 0; }
+  .thumb { position: relative; border-radius: 6px; overflow: hidden; cursor: pointer;
+    background: #000; aspect-ratio: 16 / 10; border: 2px solid transparent; }
+  .thumb:hover { border-color: var(--accent); }
+  .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .thumb .num { position: absolute; left: 4px; bottom: 3px; font-size: 11px;
+    background: rgba(0,0,0,.6); padding: 0 4px; border-radius: 3px; }
+  .thumb .del { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px;
+    border: none; border-radius: 50%; background: rgba(0,0,0,.7); color: #fff;
+    font-size: 14px; line-height: 22px; cursor: pointer; opacity: 0; }
+  .thumb:hover .del { opacity: 1; }
+  .thumb .del:hover { background: var(--bad); }
+  @media (hover: none) { .thumb .del { opacity: 1; } }
+
+  /* 放大檢查 */
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; z-index: 10; }
+  .modal.open { display: flex; }
+  .modal img { max-width: 100%; max-height: calc(100% - 70px); object-fit: contain; }
+  .modal .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .modal .name { color: var(--muted); font-size: 13px; min-width: 220px; text-align: center; }
+  .btn { padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); cursor: pointer; font-size: 14px; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.danger { border-color: var(--bad); color: var(--bad); }
+  .btn.danger:hover { background: var(--bad); color: #fff; }
+
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--bad); color: #fff; padding: 10px 18px; border-radius: 6px;
+    font-size: 14px; display: none; z-index: 20; max-width: calc(100% - 32px); }
+  .toast.show { display: block; }
+
+  /* 窄螢幕：上下排，整頁捲動 */
+  @media (max-width: 760px) {
+    html, body { height: auto; }
+    main { flex-direction: column; }
+    .live { flex: none; height: 60vh; }
+    aside { width: auto; border-left: none; border-top: 1px solid var(--line); }
+    .grid { overflow: visible; grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>📷 拍照收集素材</h1>
+  <div class="meta">資料夾 <code id="session">-</code></div>
+  <div class="meta">topic <code id="topic">-</code></div>
+  <div class="signal" id="signal"><span class="dot"></span><span id="signalText">連線中…</span></div>
+</header>
+
+<main>
+  <section class="live">
+    <div class="view">
+      <span class="waiting" id="waiting">等待相機畫面…</span>
+      <img id="stream" alt="">
+      <div class="flash" id="flash"></div>
+    </div>
+    <div class="controls">
+      <button class="shutter" id="shutter">拍照</button>
+      <span class="hint"><kbd>空白鍵</kbd> / <kbd>S</kbd> 拍照　點縮圖放大檢查</span>
+    </div>
+  </section>
+
+  <aside>
+    <h2>已拍照片 <span id="count">0</span> 張</h2>
+    <div class="grid" id="grid"><div class="empty">還沒有照片</div></div>
+  </aside>
+</main>
+
+<div class="modal" id="modal">
+  <img id="modalImg" alt="">
+  <div class="bar">
+    <button class="btn" id="prev">← 較新</button>
+    <span class="name" id="modalName"></span>
+    <button class="btn" id="next">較舊 →</button>
+    <button class="btn danger" id="modalDel">刪除 (Del)</button>
+    <button class="btn" id="close">關閉 (Esc)</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let photos = [];          // 新的在前面，跟後端一樣
+let modalIndex = -1;      // 放大中的照片在 photos 裡的位置，-1 = 沒開
+
+// ── 即時畫面：斷線（例如程式重開）時自動重連 ───────────────────────────
+const stream = $('stream');
+function connectStream() { stream.src = '/stream?t=' + Date.now(); }
+stream.onload = () => { $('waiting').style.display = 'none'; };
+stream.onerror = () => { $('waiting').style.display = ''; setTimeout(connectStream, 2000); };
+connectStream();
+
+// ── 狀態輪詢：訊號、照片清單（終端機按鍵拍的也會同步出現）────────────────
+async function refresh() {
+  let s;
+  try {
+    s = await (await fetch('/api/state')).json();
+  } catch (e) {
+    setSignal('bad', '連不到拍照程式');
+    return;
+  }
+  $('session').textContent = s.session;
+  $('topic').textContent = s.topic;
+  if (s.signal_age === null) setSignal('bad', '還沒收到相機畫面');
+  else if (s.signal_age > s.stale_sec) setSignal('bad', `相機 ${s.signal_age.toFixed(0)} 秒沒畫面`);
+  else setSignal('ok', '相機正常');
+  if (s.photos.join() !== photos.join()) {
+    const viewing = modalIndex >= 0 ? photos[modalIndex] : null;
+    photos = s.photos;
+    renderGrid();
+    // 放大檢查中有新照片進來，維持顯示同一張，只更新位置編號
+    if (viewing !== null) {
+      const i = photos.indexOf(viewing);
+      if (i >= 0) openModal(i); else closeModal();
+    }
+  }
+}
+function setSignal(cls, text) {
+  $('signal').className = 'signal ' + cls;
+  $('signalText').textContent = text;
+}
+setInterval(refresh, 1000);
+refresh();
+
+// ── 縮圖 ───────────────────────────────────────────────────────────────
+function photoNum(name) { return name.slice(-8, -4); }
+
+function renderGrid() {
+  $('count').textContent = photos.length;
+  const grid = $('grid');
+  if (!photos.length) {
+    grid.innerHTML = '<div class="empty">還沒有照片</div>';
+    return;
+  }
+  grid.innerHTML = '';
+  photos.forEach((name, i) => {
+    const el = document.createElement('div');
+    el.className = 'thumb';
+    el.innerHTML = `<img loading="lazy" src="/thumb/${name}" alt="">
+      <span class="num">#${photoNum(name)}</span>
+      <button class="del" title="刪除">✕</button>`;
+    el.onclick = () => openModal(i);
+    el.querySelector('.del').onclick = e => { e.stopPropagation(); deletePhoto(name); };
+    grid.appendChild(el);
+  });
+}
+
+// ── 拍照 / 刪除 ────────────────────────────────────────────────────────
+async function capture() {
+  const r = await fetch('/api/capture', { method: 'POST' });
+  const data = await r.json();
+  if (!r.ok) { toast(data.error); return; }
+  const f = $('flash');
+  f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
+  refresh();
+}
+
+async function deletePhoto(name) {
+  const r = await fetch('/photo/' + name, { method: 'DELETE' });
+  if (!r.ok) { toast('刪除失敗：' + name); return; }
+  photos = photos.filter(p => p !== name);
+  renderGrid();
+  if (modalIndex >= 0) {
+    // 刪掉後停在同一個位置，也就是下一張較舊的；刪到沒有就關掉
+    if (!photos.length) closeModal();
+    else openModal(Math.min(modalIndex, photos.length - 1));
+  }
+}
+
+// 點完就取消焦點，不然之後按空白鍵會同時觸發按鈕和鍵盤，一次拍兩張
+$('shutter').onclick = e => { e.currentTarget.blur(); capture(); };
+
+// ── 放大檢查 ───────────────────────────────────────────────────────────
+function openModal(i) {
+  modalIndex = i;
+  const name = photos[i];
+  $('modalImg').src = '/photo/' + name;
+  $('modalName').textContent = `${name}　(${i + 1} / ${photos.length})`;
+  $('modal').classList.add('open');
+}
+function closeModal() {
+  modalIndex = -1;
+  $('modal').classList.remove('open');
+}
+function step(d) {
+  const i = modalIndex + d;
+  if (i >= 0 && i < photos.length) openModal(i);
+}
+$('prev').onclick = () => step(-1);
+$('next').onclick = () => step(1);
+$('close').onclick = closeModal;
+$('modalDel').onclick = () => deletePhoto(photos[modalIndex]);
+$('modal').onclick = e => { if (e.target === $('modal')) closeModal(); };
+
+// ── 鍵盤 ───────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (modalIndex >= 0) {
+    if (e.key === 'Escape') closeModal();
+    else if (e.key === 'ArrowLeft') step(-1);
+    else if (e.key === 'ArrowRight') step(1);
+    else if (e.key === 'Delete' || e.key === 'Backspace') deletePhoto(photos[modalIndex]);
+    else return;
+    e.preventDefault();
+    return;
+  }
+  if (e.key === ' ' || e.key === 's' || e.key === 'S') {
+    e.preventDefault();          // 空白鍵不要捲動頁面或重複按到按鈕
+    if (!e.repeat) capture();    // 按住不放只拍一張
+  }
+});
+
+// ── 錯誤提示 ───────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>

@@ -6,5 +6,5 @@
 # 若 motionpackage 單獨重啟而 driver_node 未重啟，快取會歸零但硬體可能仍為 ON。
 bool query
 ---
-# index 0 對應 ID 1，index 28 對應 ID 29；1 = ON（鎖死），0 = OFF（洩力）
+# index 0 對應 ID 1，index 29 對應 ID 30；1 = ON（鎖死），0 = OFF（洩力）
 int16[] states

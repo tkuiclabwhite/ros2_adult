@@ -88,6 +88,13 @@ var StandExecuteTopic = new ROSLIB.Topic({
   messageType: 'std_msgs/Bool'
 });
 
+// 頭部直接走 driver_node 的 Head_Topic，邏輯 id 1/2/3 對應實體 28/29/30
+var HeadTopic = new ROSLIB.Topic({
+  ros: ros,
+  name: '/Head_Topic',
+  messageType: 'tku_msgs/HeadPackage'
+});
+
 var InterfaceSaveMotionData = new ROSLIB.Topic({
   ros: ros,
   name: '/package/InterfaceSaveMotion',
@@ -119,16 +126,16 @@ JointStateListener.subscribe(function(message) {
   
   // 我們需要把這些亂序的資料，整理成我們函式看得懂的陣列 (Index 0 = ID 1)
   
-  // 1. 先建立一個全空的陣列 (假設最大到 ID 22)
-  var formattedData = new Array(27).fill(0);
+  // 1. 先建立一個全空的陣列 (含頭部 28~30)
+  var formattedData = new Array(TOTAL_MOTORS).fill(0);
 
   // 2. 把收到的資料填進去
   for(var i = 0; i < message.name.length; i++){
       var id = parseInt(message.name[i]); // 把 ID 字串 "1" 轉成數字 1
       var pos = Math.round(message.position[i]); // 確保刻度是整數
 
-      // 防呆：確保 ID 在合理範圍內 (1~22)
-      if(id >= 1 && id <= 27) {
+      // 防呆：確保 ID 在合理範圍內 (1~30)
+      if(id >= 1 && id <= TOTAL_MOTORS) {
           formattedData[id - 1] = pos; // ID 1 存到 Index 0
       }
   }
@@ -1341,6 +1348,17 @@ function stand()
 }
 
 
+// 頭部三顆回到 2048。speed 不能給 0，driver 寫入 Profile Velocity 時 0 代表全速。
+const HEAD_CENTER_POS = 2048;
+const HEAD_CENTER_SPEED = 50;
+function HeadCenter()
+{
+  for (let id = 1; id <= 3; id++) {
+    HeadTopic.publish(new ROSLIB.Message({ id: id, position: HEAD_CENTER_POS, speed: HEAD_CENTER_SPEED }));
+  }
+  document.getElementById('label').innerHTML = "Head -> " + HEAD_CENTER_POS;
+}
+
 function resetfunction()
 {
   document.getElementById('label').innerHTML = "";
@@ -1681,7 +1699,7 @@ function SpeedReverse(){
 }
 
 // 全域變數記住狀態
-const TOTAL_MOTORS = 29;   // 全身馬達數，總開關以「全部都開」為開啟狀態
+const TOTAL_MOTORS = 30;   // 全身馬達數，總開關以「全部都開」為開啟狀態
 var isTorqueOn = false; 
 
 function TorqueSwitch() {
@@ -1716,8 +1734,8 @@ const robotConfig = {
     'waist':      [ { id: 15 }],
     'left_leg':   [ { id: 16 }, { id: 17 }, { id: 18 }, { id: 19 }, { id: 20 }, { id: 21 } ],
     'right_leg':  [ { id: 22 }, { id: 23 }, { id: 24 }, { id: 25 }, { id: 26 }, { id: 27 } ],
-    // 頭部：driver_node 的 head_map 把邏輯 1/2 對應到實體 28/29
-    'head':       [ { id: 28 }, { id: 29 } ],
+    // 頭部：driver_node 的 head_map 把邏輯 1/2/3 對應到實體 28/29/30
+    'head':       [ { id: 28 }, { id: 29 } ,{ id: 30 } ],
 };
 
 // 紀錄目前哪些部位正在被「觀察/調整」
@@ -1848,8 +1866,8 @@ function SetSingleTorque(state) {
     const inputVal = document.getElementById('single_motor_id').value;
     const motorID = parseInt(inputVal);
 
-    if (isNaN(motorID) || motorID < 1 || motorID > 29) {
-        alert("請輸入有效的馬達 ID (1 ~ 29)！");
+    if (isNaN(motorID) || motorID < 1 || motorID > 30) {
+        alert("請輸入有效的馬達 ID (1 ~ 30)！");
         return;
     }
 

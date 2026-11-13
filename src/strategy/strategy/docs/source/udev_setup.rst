@@ -16,9 +16,9 @@ U2D2 是 Dynamixel 馬達的 USB 轉接器，共 3 顆，需依序號綁定固�
 
 .. code-block:: text
 
-   SUBSYSTEM=="tty", ATTRS{serial}=="<ADULT_U2D2_SERIAL_1>", SYMLINK+="U2D2_P1", GROUP="dialout", MODE="0660", RUN+="/bin/sh -c 'echo 1 > /sys/bus/usb-serial/devices/%k/latency_timer'"
-   SUBSYSTEM=="tty", ATTRS{serial}=="<ADULT_U2D2_SERIAL_2>", SYMLINK+="U2D2_P2", GROUP="dialout", MODE="0660", RUN+="/bin/sh -c 'echo 1 > /sys/bus/usb-serial/devices/%k/latency_timer'"
-   SUBSYSTEM=="tty", ATTRS{serial}=="<ADULT_U2D2_SERIAL_3>", SYMLINK+="U2D2_P3", GROUP="dialout", MODE="0660", RUN+="/bin/sh -c 'echo 1 > /sys/bus/usb-serial/devices/%k/latency_timer'"
+   SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", ATTRS{serial}=="<序號1>", SYMLINK+="U2D2_P1", MODE="0666", GROUP="dialout", ENV{ID_MM_DEVICE_IGNORE}="1", ATTR{device/latency_timer}="1"
+   SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", ATTRS{serial}=="<序號2>", SYMLINK+="U2D2_P2", MODE="0666", GROUP="dialout", ENV{ID_MM_DEVICE_IGNORE}="1", ATTR{device/latency_timer}="1"
+   SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", ATTRS{serial}=="<序號3>", SYMLINK+="U2D2_P3", MODE="0666", GROUP="dialout", ENV{ID_MM_DEVICE_IGNORE}="1", ATTR{device/latency_timer}="1"
 
 查詢 U2D2 序號（接上後執行）：
 

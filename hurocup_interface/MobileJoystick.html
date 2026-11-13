@@ -498,6 +498,7 @@
 
   #quickNavBar li { float: none; }
 </style>
+<script src="./js/nav.js"></script>
 </head>
 <body>
 
@@ -599,12 +600,7 @@
 
       <!-- 快速跳轉：只留常用的幾個，放在次要功能面板下方 -->
       <div id="quickNavBar">
-        <ul>
-          <li><a target="_blank" class="navbarright" href="HotspotManager.html">HotspotManager</a></li>
-          <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-          <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
-          <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        </ul>
+        <ul id="mainnav" data-nav="mobile"></ul>
       </div>
 
       <button id="closePanelBtn">收合</button>

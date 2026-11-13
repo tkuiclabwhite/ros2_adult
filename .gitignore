@@ -1,3 +1,22 @@
+gitignore
+# colcon
 build/
 install/
 log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# macOS（repo 裡已經有 23 個 ._* 和 .DS_Store）
+.DS_Store
+._*
+
+# 編輯器 / IDE
+*.bak
+*.bak-*
+*.orig
+*.rej
+*.swp
+.vscode/

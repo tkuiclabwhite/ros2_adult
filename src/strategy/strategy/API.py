@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding=utf-8
 import json
+import os
 import math
 from typing import Dict, List, Tuple, Optional
 
@@ -322,9 +323,9 @@ class API(Node):
 
         用於形狀判斷，可過濾掉輪廓明顯不符的雜訊：
 
-        * **約 1.0**：接近正方形或圓形（例如球）
-        * **遠小於 1**：窄而高（例如直立的桿子、門柱）
-        * **遠大於 1**：寬而扁（例如橫躺的橫桿、地面線條）
+        * **約 1.0**\ ：接近正方形或圓形（例如球）
+        * **遠小於 1**\ ：窄而高（例如直立的桿子、門柱）
+        * **遠大於 1**\ ：寬而扁（例如橫躺的橫桿、地面線條）
 
         Example:
             >>> # 只保留形狀接近圓形、且面積夠大的橘色目標
@@ -376,7 +377,7 @@ class API(Node):
 
         self.distance_cm: List[List[int]] = [[] for _ in self.DISTANCES]
         """
-        各距離類別物體的平均距離清單，單位為**公分**。
+        各距離類別物體的平均距離清單，單位為**公分**\ 。
 
         取該物體所有有效深度像素的平均值。因為物體本來就被距離區間框住，
         平均值必定落在該區間內。
@@ -408,7 +409,7 @@ class API(Node):
         """
         各疊合組合偵測到的交集區塊總數清單。
 
-        每一組 Set 綁定一個顏色類別與一個距離類別，交集即「**顏色符合且距離也符合**」
+        每一組 Set 綁定一個顏色類別與一個距離類別，交集即「**顏色符合且距離也符合**\ 」
         的區域。組合內容在網頁的疊合模式中設定，儲存於各 strategy 的 ``overlap.ini``。
 
         * **組合索引對照表**\ ：\ ``api.SET1`` ~ ``api.SET8``\ （即 0 ~ 7）
@@ -481,7 +482,7 @@ class API(Node):
         歸零請呼叫 :meth:`sendZedSensorReset`\ 。
 
         .. warning::
-           這與 :attr:`imu_rpy`\ （機身上的 Arduino IMU）是**兩顆不同的感測器**，
+           這與 :attr:`imu_rpy`\ （機身上的 Arduino IMU）是**兩顆不同的感測器**\ ，
            且 ZED 安裝在頭部雲台上 —— 只要頭部轉動，即使機身沒動 yaw 也會改變。
            兩者的數值不能直接互相比較。
 
@@ -506,7 +507,7 @@ class API(Node):
 
         self.zed_accel: List[float] = [0.0, 0.0, 0.0]
         """
-        ZED 內建 IMU 的線加速度 [x, y, z]，單位為 **m/s²**，數值含重力。
+        ZED 內建 IMU 的線加速度 [x, y, z]，單位為 **m/s²**\ ，數值含重力。
 
         靜止且水平放置時 z 軸約為 9.81，可作為感測器是否正常運作的快速檢查。
         """
@@ -517,7 +518,7 @@ class API(Node):
         # -------------------- ZED 里程計（驗證用，尚未做頭部補償） -----------
         self.odom_xyz: List[float] = [0.0, 0.0, 0.0]
         """
-        ZED 視覺里程計的位移 [x, y, z]，單位為**公分**。
+        ZED 視覺里程計的位移 [x, y, z]，單位為**公分**\ 。
 
         相對於節點啟動時的位置，或最近一次 :meth:`sendOdomReset` 的位置。
 
@@ -551,6 +552,125 @@ class API(Node):
             10
         )
 
+        # -------------------- 靈巧手 LinkerHand O6 --------------------
+        # 控制走 handpackage 的 /hand/cmd（JSON over String，與
+        # sendLCWalkParameter 用 /walking_params_update 同一種做法）。
+        # 動作序列走 /hand/Sector，與全身的 /package/Sector 對應。
+        self.hand_cmd_pub = self.create_publisher(String, '/hand/cmd', 10)
+        self.hand_sector_pub = self.create_publisher(Int16, '/hand/Sector', 10)
+
+        # 手的狀態（/hand/status 20 Hz）。與 imu 的 self.roll/pitch/yaw 同樣
+        # 是「callback 寫進屬性、策略直接讀」的用法。
+        self.hand_mode: str = 'idle'
+        """
+        手部節點目前的模式。
+
+        * ``'idle'`` 閒置
+        * ``'manual'`` 手動（下過位置、速度或預設動作）
+        * ``'grip'`` 夾持迴路執行中
+        * ``'motion'`` 動作序列播放中
+        """
+
+        self.hand_strategy: str = ''
+        """
+        手部動作檔目前使用的策略資料夾名稱（例如 ``'ar'``\ ）。
+
+        從影像網頁切換策略時會即時跟著變，與 ``strategy.ini`` 一致。
+        """
+
+        self.hand_online: Dict[str, bool] = {'left': False, 'right': False}
+        """
+        兩手是否在線。鍵為 ``'left'`` / ``'right'``\ 。
+
+        判斷依據是「最近一次收到狀態的時間」，手拔掉或沒開機時為 ``False``\ 。
+        """
+
+        self.hand_position: Dict[str, Optional[List[int]]] = {'left': None, 'right': None}
+        """
+        兩手六軸的**實際回讀位置**\ ，每個值 0~255。手離線時為 ``None``\ 。
+
+        關節順序為 1 拇指彎曲、2 拇指橫擺、3 食指、4 中指、5 無名指、6 小指。
+
+        .. note::
+           抓到東西時實際位置會**停在比目標大的地方**\ （被物體擋住），
+           所以不能用「位置是否接近目標」來判斷動作有沒有完成。
+
+        Example:
+            >>> if api.hand_online['left']:
+            >>>     print(api.hand_position['left'])    # [120, 60, 30, 28, 31, 29]
+        """
+
+        self.hand_target: Dict[str, Optional[List[int]]] = {'left': None, 'right': None}
+        """
+        兩手六軸**最後下達的目標位置**\ 。與 :attr:`API.hand_position` 相減就是追隨誤差。
+        """
+
+        self.hand_temperature: Dict[str, Optional[List[int]]] = {'left': None, 'right': None}
+        """
+        兩手六個馬達的溫度（攝氏）。室溫下約 30~45 度。
+
+        夾持迴路內建過溫保護，溫度過高時會自動停止。
+        """
+
+        self.hand_mass: Dict[str, Optional[List[int]]] = {'left': None, 'right': None}
+        """
+        兩手五根手指的觸覺壓力，順序為拇指、食指、中指、無名指、小指。
+
+        數值是該手指 10x4=40 格壓力矩陣的**總和**\ ，範圍 0~10200（不是公克）。
+        實測空載為 0，所以讀到數字就代表真的碰到東西了。
+
+        .. important::
+           **預設是 ``None``。** 訂閱壓感會讓手的控制迴路變鈍，所以節點只在夾持
+           期間才訂閱。要在沒夾持時也讀壓力，先呼叫 :meth:`API.handTouch`\ (True)。
+
+        Example:
+            >>> api.handTouch(True)
+            >>> time.sleep(0.5)                  # 等第一筆資料
+            >>> print(api.hand_mass['left'])     # [0, 0, 0, 0, 0]
+        """
+
+        self.hand_touch_hold: bool = False
+        """壓感是否處於常駐訂閱狀態，由 :meth:`API.handTouch` 控制。"""
+
+        self.hand_grip_active: bool = False
+        """
+        夾持迴路是否還在執行中。
+
+        這是手部動作裡**唯一可靠的「做完了」訊號** —— 它是壓力閉迴路的真實狀態，
+        不是靠時間或位置推估的。所以沒有提供阻塞式的 wait 函式，要等就自己輪詢：
+
+        Example:
+            >>> api.handGrip('left', threshold=250)
+            >>> while api.hand_grip_active:
+            >>>     time.sleep(0.05)
+            >>> print(api.hand_grip_reason)
+        """
+
+        self.hand_grip_reason: str = ''
+        """
+        上一次夾持的結束原因，例如 ``'壓力到門檻（thumb, index）'``\ 、
+        ``'閉合到目標位置'``\ 、``'逾時'``\ 。兩手分別夾持時會同時列出兩手的結果。
+        """
+
+        self.hand_play_active: bool = False
+        """手部動作序列（MotionList）是否還在播放中。"""
+
+        self.hand_status_sub = self.create_subscription(
+            String, '/hand/status', self._hand_status_callback, 10)
+
+        self.hand_presets: dict = self._load_hand_presets()
+        """
+        可用的預設手勢，鍵是手勢名稱，值是 ``{'pos': [6 個位置], 'spd': [6 個速度]}``\ 。
+
+        定義在 ``hurocup_interface/js/hand_presets.js``\ ，**與網頁共用同一份**\ ，
+        在 API 節點啟動時讀入一次。
+
+        Example:
+            >>> print(sorted(api.hand_presets))
+            ['OK', '一', '七', '三', '中指', '九', '二', '五', '八', '六',
+             '四', '張開', '握拳', '搖滾', '蜘蛛人', '點贊']
+        """
+
     def _dio_callback(self, msg: Dio):
         """
         同步硬體實體開關狀態的回呼函式。
@@ -564,8 +684,8 @@ class API(Node):
                        其中 `msg.strategy` 欄位對應機器人背部的物理撥桿開關。
 
         Note:
-            * **邊緣觸發 (Edge Detection)**：僅在狀態與上次不同時才執行記錄與邏輯更新，避免重複處理。
-            * **視覺反饋**：使用 ANSI 轉義序列在終端機輸出彩色日誌（綠色為 START，紅色為 STOP）。
+            * **邊緣觸發 (Edge Detection)**\ ：僅在狀態與上次不同時才執行記錄與邏輯更新，避免重複處理。
+            * **視覺反饋**\ ：使用 ANSI 轉義序列在終端機輸出彩色日誌（綠色為 START，紅色為 STOP）。
         同步狀態 (把硬體的 True/False 給 API)
         """
         if msg.strategy != self.is_start:
@@ -597,7 +717,7 @@ class API(Node):
             None
 
         Note:
-            * **可以給小數**：三個步長皆為浮點數，例如 ``theta=2.5``。
+            * **可以給小數**\ ：三個步長皆為浮點數，例如 ``theta=2.5``。
               整數傳入也沒問題，函式內部會自行轉型。
 
         Example:
@@ -662,9 +782,9 @@ class API(Node):
             None
 
         Note:
-            * **線性映射**：計算公式為 `CENTER + (RATIO * RANGE)`。
-            * **硬體保護**：內部呼叫 `_clamp` 確保輸出位置不會超出 `PAN_RANGE` 或 `TILT_RANGE`。
-            * **分次發布**：函式會依序發布 Pan 與 Tilt 兩個 `HeadPackage` 訊息。
+            * **線性映射**\ ：計算公式為 `CENTER + (RATIO * RANGE)`。
+            * **硬體保護**\ ：內部呼叫 `_clamp` 確保輸出位置不會超出 `PAN_RANGE` 或 `TILT_RANGE`。
+            * **分次發布**\ ：函式會依序發布 Pan 與 Tilt 兩個 `HeadPackage` 訊息。
         """
         pan = self._clamp(pan, -1.0, 1.0)
         tilt = self._clamp(tilt, -1.0, 1.0)
@@ -717,9 +837,9 @@ class API(Node):
             - object_y_min / y_max (list[list]): 物體邊界框的垂直座標極值。
 
         Note:
-            * **資料重置**：每次呼叫時會先清空舊數據，確保統計資訊與當前影像同步。
-            * **容錯機制**：若物體資料格式錯誤（如缺少 bbox），會跳過該物體並發出警告日誌，避免程式崩潰。
-            * **座標轉換**：會自動將寬度 (w) 與高度 (h) 轉換為極值座標（如 x + w = x_max）。
+            * **資料重置**\ ：每次呼叫時會先清空舊數據，確保統計資訊與當前影像同步。
+            * **容錯機制**\ ：若物體資料格式錯誤（如缺少 bbox），會跳過該物體並發出警告日誌，避免程式崩潰。
+            * **座標轉換**\ ：會自動將寬度 (w) 與高度 (h) 轉換為極值座標（如 x + w = x_max）。
         """
         n = len(self.COLORS)
         self.color_counts = [0] * n
@@ -851,10 +971,10 @@ class API(Node):
             label (str): 物體的顏色類別名稱（例如 'orange', 'yellow'）。
 
         Note:
-            * **時序校驗**：呼叫 `_is_newer_stamp` 確保不處理因網路延遲導致的舊封包。
-            * **統計更新**：解析成功後會自動執行 `_recompute_stats` 更新座標清單。
-            * **狀態標記**：將 `new_object_info` 設為 True，通知策略主迴圈有新的視覺資料。
-            * **容錯處理**：包含完整的 JSON 解析例外捕捉，防止格式異常導致節點崩潰。
+            * **時序校驗**\ ：呼叫 `_is_newer_stamp` 確保不處理因網路延遲導致的舊封包。
+            * **統計更新**\ ：解析成功後會自動執行 `_recompute_stats` 更新座標清單。
+            * **狀態標記**\ ：將 `new_object_info` 設為 True，通知策略主迴圈有新的視覺資料。
+            * **容錯處理**\ ：包含完整的 JSON 解析例外捕捉，防止格式異常導致節點崩潰。
         """
         try:
             data = json.loads(msg.data)
@@ -891,9 +1011,9 @@ class API(Node):
             label (str): 遮罩對應的顏色標籤（如 'orange', 'black'）。
 
         Note:
-            * **結構校驗**：函式會檢查佈局維度 (dim) 是否至少包含兩維（列與欄），否則將視為格式錯誤。
-            * **矩陣還原**：利用 `numpy.reshape` 將一維資料轉回影像矩陣空間。
-            * **容錯處理**：若發生陣列大小不匹配或重塑失敗，會輸出錯誤日誌以供除錯。
+            * **結構校驗**\ ：函式會檢查佈局維度 (dim) 是否至少包含兩維（列與欄），否則將視為格式錯誤。
+            * **矩陣還原**\ ：利用 `numpy.reshape` 將一維資料轉回影像矩陣空間。
+            * **容錯處理**\ ：若發生陣列大小不匹配或重塑失敗，會輸出錯誤日誌以供除錯。
         """
         dims = msg.layout.dim
         if len(dims) < 2:
@@ -918,10 +1038,10 @@ class API(Node):
             msg (RosImage): 包含標籤資訊的 ROS 影像訊息，編碼預計為 'mono8'。
 
         Note:
-            * **影像轉換**：使用 `CvBridge` 將 ROS 影像格式轉換為 OpenCV/NumPy 的二維矩陣。
-            * **資料扁平化**：除了存儲二維矩陣 `label_matrix`，也會同步更新一維的 `label_matrix_flatten` 供快速索引。
-            * **效能統計**：採用指數移動平均 (EMA, Alpha=0.2) 平滑化 FPS 數值，避免因單次網路延遲造成數值大幅跳動。
-            * **單位轉換**：將秒與奈秒轉換為純奈秒 (ns) 進行計算，隨後換算為毫秒 (ms)。
+            * **影像轉換**\ ：使用 `CvBridge` 將 ROS 影像格式轉換為 OpenCV/NumPy 的二維矩陣。
+            * **資料扁平化**\ ：除了存儲二維矩陣 `label_matrix`，也會同步更新一維的 `label_matrix_flatten` 供快速索引。
+            * **效能統計**\ ：採用指數移動平均 (EMA, Alpha=0.2) 平滑化 FPS 數值，避免因單次網路延遲造成數值大幅跳動。
+            * **單位轉換**\ ：將秒與奈秒轉換為純奈秒 (ns) 進行計算，隨後換算為毫秒 (ms)。
         """
         try:
             arr = self._bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
@@ -953,8 +1073,8 @@ class API(Node):
                                  `yaw` (偏航角) 的感測器數據包。
 
         Note:
-            * **座標系統**：數據通常以弧度或角度表示，具體取決於底層驅動的定義。
-            * **資料同步**：函式同時更新獨立的 `roll/pitch/yaw` 變數與整合後的 `imu_rpy` 清單。
+            * **座標系統**\ ：數據通常以弧度或角度表示，具體取決於底層驅動的定義。
+            * **資料同步**\ ：函式同時更新獨立的 `roll/pitch/yaw` 變數與整合後的 `imu_rpy` 清單。
         """
         self.roll = msg.roll
         self.pitch = msg.pitch
@@ -978,10 +1098,10 @@ class API(Node):
             None
 
         Note:
-            * **與網頁共用**：這裡送出的值等同於在影像處理介面拉 ZoomIn 滑桿，
+            * **與網頁共用**\ ：這裡送出的值等同於在影像處理介面拉 ZoomIn 滑桿，
               網頁上的數字不會自動跟著跳，但機器人實際吃到的是最後送出的那個。
-            * **不會寫進 ini**：只改當下的執行狀態，重開節點後會回到 ini 裡的設定值。
-            * **視野會變窄**：放大後畫面邊緣的物體會直接消失在視野外，
+            * **不會寫進 ini**\ ：只改當下的執行狀態，重開節點後會回到 ini 裡的設定值。
+            * **視野會變窄**\ ：放大後畫面邊緣的物體會直接消失在視野外，
               追蹤目標時建議搭配頭部轉動使用。
 
         Example:
@@ -1127,7 +1247,7 @@ class API(Node):
             None
 
         Note:
-            * **與 [sendBodyAutoCmd] 的差異**：**[sendBodyAutoCmd]** 會同時更新步長數值並開啟步態；
+            * **與 [sendBodyAutoCmd] 的差異**\ ：**[sendBodyAutoCmd]** 會同時更新步長數值並開啟步態；
               而 **[sendbodyAuto]** 僅單獨發送觸發訊號，不會改變目前的步長數值，並且無法且換行走模式，固定為連續步態。
 
         Example:
@@ -1159,8 +1279,8 @@ class API(Node):
             None
 
         Note:
-            * **依賴性**：呼叫此函式前，通常需要先透過 **[sendbodyAuto(1)]** 啟動步態，機器人才會根據這些參數開始移動。
-            * **可以給小數**：三個步長皆為浮點數，整數傳入也沒問題，函式內部會自行轉型。
+            * **依賴性**\ ：呼叫此函式前，通常需要先透過 **[sendbodyAuto(1)]** 啟動步態，機器人才會根據這些參數開始移動。
+            * **可以給小數**\ ：三個步長皆為浮點數，整數傳入也沒問題，函式內部會自行轉型。
 
         Example:
             >>> # 1.先啟動步態引擎 (原地踏步)
@@ -1186,8 +1306,8 @@ class API(Node):
             None
 
         Note:
-            * **不可中斷性**：啟動一個 Sector 後，通常需要等待該動作序列執行完畢，請在此指令後給足夠的延遲時間，否則可能導致關節衝突。
-            * **與步態解耦**：此函式於執行非步態類型的固定動作，請確保執行 Sector 前，有中止連續步態。
+            * **不可中斷性**\ ：啟動一個 Sector 後，通常需要等待該動作序列執行完畢，請在此指令後給足夠的延遲時間，否則可能導致關節衝突。
+            * **與步態解耦**\ ：此函式於執行非步態類型的固定動作，請確保執行 Sector 前，有中止連續步態。
 
         Example:
             >>> #回到站姿
@@ -1213,9 +1333,9 @@ class API(Node):
             None
 
         Note:
-            * **警告**：此函式不包含軟體保護限制，使用不當可能導致關節超出物理極限而毀損硬體。
+            * **警告**\ ：此函式不包含軟體保護限制，使用不當可能導致關節超出物理極限而毀損硬體。
 
-            * **與SingleAbsolutePosition的差異**： **sendSingleMotor** 是轉動相對刻度，而 **SingleAbsolutePosition** 是轉動絕對刻度
+            * **與SingleAbsolutePosition的差異**\ ： **sendSingleMotor** 是轉動相對刻度，而 **SingleAbsolutePosition** 是轉動絕對刻度
 
         Example:
             >>> # 轉動腰部馬達
@@ -1242,9 +1362,9 @@ class API(Node):
             None
             
         Note:
-            * **警告**：此函式不包含軟體保護限制，使用不當可能導致關節超出物理極限而毀損硬體。
+            * **警告**\ ：此函式不包含軟體保護限制，使用不當可能導致關節超出物理極限而毀損硬體。
 
-            * **與sendSingleMotor的差異**： **sendSingleMotor** 是轉動相對刻度，而 **SingleAbsolutePosition** 是轉動絕對刻度
+            * **與sendSingleMotor的差異**\ ： **sendSingleMotor** 是轉動相對刻度，而 **SingleAbsolutePosition** 是轉動絕對刻度
 
         Example:
             >>> # 腰部馬達回正
@@ -1271,7 +1391,7 @@ class API(Node):
             None
 
         Note:
-            * **無保護機制**：此函式不會自動過濾超出範圍的數值，請在呼叫此函式前在Image網頁界面確認Position是否能到達，以免硬體卡死。
+            * **無保護機制**\ ：此函式不會自動過濾超出範圍的數值，請在呼叫此函式前在Image網頁界面確認Position是否能到達，以免硬體卡死。
 
         Example:
             >>> # 水平馬達回正
@@ -1280,6 +1400,397 @@ class API(Node):
         m = HeadPackage()
         m.id, m.position, m.speed = int(ID), int(Position), int(Speed)
         self.head_motor_pub.publish(m)
+
+    # ======================================================================
+    # 靈巧手 LinkerHand O6
+    # ======================================================================
+    # 位置一律 0~255（0 收到底、255 張到底），速度 10~255。
+    # 關節順序：1 拇指彎曲、2 拇指橫擺、3 食指、4 中指、5 無名指、6 小指。
+    # 兩隻手共用同一組數值，不需要鏡像轉換。
+
+    HAND_SIDES = ('left', 'right')
+
+    @staticmethod
+    def _hand_sides(side: str) -> List[str]:
+        """把 'left'/'right'/'both' 換成實際要下指令的那幾隻手。"""
+        if side == 'both':
+            return ['left', 'right']
+        if side in API.HAND_SIDES:
+            return [side]
+        raise ValueError(f"side 只接受 'left' / 'right' / 'both'，收到 {side!r}")
+
+    HAND_PRESETS_PATH = os.path.join(
+        os.path.expanduser('~'), 'ros2_adult',
+        'hurocup_interface', 'js', 'hand_presets.js')
+
+    def _load_hand_presets(self) -> dict:
+        """讀 hurocup_interface/js/hand_presets.js，與網頁共用同一份定義。
+
+        那是個 .js 而不是 .json —— 網頁用 <script src> 載入（file:// 開也能用，
+        改成 fetch 讀 .json 會被 CORS 擋掉）。檔案裡的物件刻意寫成嚴格 JSON，
+        所以這裡把 `window.HAND_PRESETS = { ... };` 的大括號整段切出來
+        直接 json.loads 就好，不用另外維護一份給 Python 讀。
+
+        讀不到或格式壞掉就回空字典 —— 預設動作用不了（handPreset 會丟 KeyError），
+        但手部其他功能完全不受影響。
+        """
+        path = self.HAND_PRESETS_PATH
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                txt = f.read()
+            i = txt.index('window.HAND_PRESETS')
+            i = txt.index('{', i)
+            # 數大括號找結尾，不要用 rindex —— 以後檔案尾端多加東西就會切錯
+            depth = 0
+            for j in range(i, len(txt)):
+                if txt[j] == '{':
+                    depth += 1
+                elif txt[j] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        return json.loads(txt[i:j + 1])
+            raise ValueError('HAND_PRESETS 的大括號沒有配對')
+        except Exception as e:
+            self.get_logger().warn(f'讀不到手部預設動作 {path}: {e}')
+            return {}
+
+    def _hand_status_callback(self, msg: String) -> None:
+        """/hand/status 的回呼，把手的狀態同步到屬性上。
+
+        handpackage 以 20 Hz 發這一包。壞掉的 JSON 直接忽略，不讓策略掛掉。
+        """
+        try:
+            st = json.loads(msg.data)
+        except Exception:
+            return
+        self.hand_mode = st.get('mode', 'idle')
+        self.hand_strategy = st.get('strategy', '')
+        self.hand_touch_hold = bool(st.get('touch_hold'))
+        for side in API.HAND_SIDES:
+            h = (st.get('hands') or {}).get(side) or {}
+            self.hand_online[side] = bool(h.get('online'))
+            self.hand_position[side] = h.get('position')
+            self.hand_target[side] = h.get('target')
+            self.hand_temperature[side] = h.get('temperature')
+            self.hand_mass[side] = h.get('mass')
+        grip = st.get('grip') or {}
+        self.hand_grip_active = bool(grip.get('active'))
+        if grip.get('reason'):
+            self.hand_grip_reason = grip['reason']
+        self.hand_play_active = bool((st.get('play') or {}).get('active'))
+
+    def _hand_cmd(self, payload: dict) -> None:
+        """把一筆指令發到 /hand/cmd。"""
+        m = String()
+        m.data = json.dumps(payload)
+        self.hand_cmd_pub.publish(m)
+
+    def setHand(self, side: str, positions: List[int],
+                speed: Optional[List[int]] = None) -> None:
+        """一次設定一隻手（或兩隻手）的六個關節位置。
+
+        Args:
+            side (str): `'left'` / `'right'` / `'both'`。
+            positions (List[int]): 六個關節的絕對位置，0~255。
+                * 0 代表收到底、255 代表張到底
+                * 填 **-1** 代表這一軸維持不動
+            speed (List[int], optional): 六個關節的速度，10~255。
+                不給就沿用這隻手目前的速度設定。
+
+        Returns:
+            None
+
+        Note:
+            * **速度會先套用再送位置**\ ，所以同一次呼叫給的速度對這一次就生效。
+            * 速度不要填 0 —— 節點把 0 解讀成「不改速度」，而 SDK 只要收到
+              一個超出 10~255 的值就會把整包速度丟掉。
+            * 這個函式不會等動作完成。手抓到東西時位置永遠到不了目標，
+              所以沒有提供「等到位」的版本。
+
+        Example:
+            >>> # 左手握拳，放慢一點
+            >>> api.setHand('left', [102, 18, 10, 10, 10, 10], [100, 200, 200, 200, 200, 200])
+            >>> # 兩手張開
+            >>> api.setHand('both', [250] * 6)
+        """
+        if len(positions) != 6:
+            raise ValueError(f'positions 要 6 個值，收到 {len(positions)}')
+        for s in self._hand_sides(side):
+            p = {'cmd': 'manual', 'hand': s,
+                 'position': [int(v) for v in positions]}
+            if speed is not None:
+                if len(speed) != 6:
+                    raise ValueError(f'speed 要 6 個值，收到 {len(speed)}')
+                p['speed'] = [int(v) for v in speed]
+            self._hand_cmd(p)
+
+    def sendHandMotor(self, side: str, joint: int, position: int,
+                      speed: Optional[int] = None) -> None:
+        """只動一隻手的其中一個關節，其餘五軸維持不動。
+
+        Args:
+            side (str): `'left'` / `'right'` / `'both'`。
+            joint (int): 關節編號 1~6。
+                * 1 拇指彎曲、2 拇指橫擺、3 食指、4 中指、5 無名指、6 小指
+            position (int): 絕對位置 0~255。
+            speed (int, optional): 這一軸的速度 10~255，不給就沿用目前設定。
+
+        Returns:
+            None
+
+        Note:
+            * 作法是把其他五軸填 **-1**\ （不動），所以不會動到別的手指。
+            * 與全身的 `SingleAbsolutePosition` 對應，但手是 0~255 不是馬達刻度。
+
+        Example:
+            >>> # 只把右手食指收起來
+            >>> api.sendHandMotor('right', 3, 0)
+        """
+        if not 1 <= int(joint) <= 6:
+            raise ValueError(f'joint 要 1~6，收到 {joint}')
+        pos = [-1] * 6
+        pos[int(joint) - 1] = int(position)
+        spd = None
+        if speed is not None:
+            # 速度陣列必須六個都有效，所以沒要改的軸填 0 = 沿用舊值
+            spd = [0] * 6
+            spd[int(joint) - 1] = int(speed)
+        self.setHand(side, pos, spd)
+
+    def setHandSpeed(self, side: str, speeds: List[int]) -> None:
+        """只改速度，不動位置。
+
+        Args:
+            side (str): `'left'` / `'right'` / `'both'`。
+            speeds (List[int]): 六個關節的速度，10~255。填 **0** 代表那一軸沿用舊值。
+
+        Returns:
+            None
+
+        Note:
+            * 速度是「之後的位置指令」才會用到，呼叫當下手不會動。
+
+        Example:
+            >>> api.setHandSpeed('both', [80] * 6)     # 兩手都放慢
+        """
+        if len(speeds) != 6:
+            raise ValueError(f'speeds 要 6 個值，收到 {len(speeds)}')
+        for s in self._hand_sides(side):
+            self._hand_cmd({'cmd': 'speed', 'hand': s,
+                            'speed': [int(v) for v in speeds]})
+
+    def setHandTorque(self, side: str, limits: List[int]) -> None:
+        """設定六個關節的扭矩上限（硬保護）。
+
+        Args:
+            side (str): `'left'` / `'right'` / `'both'`。
+            limits (List[int]): 六個關節的扭矩上限，0~255。
+
+        Returns:
+            None
+
+        Note:
+            * 這是**硬體層**的保護，與 `handGrip` 的壓力門檻（軟體層）互相獨立。
+              要夾易碎的東西建議兩層一起用：扭矩上限調低 + 壓力門檻調低。
+
+        Example:
+            >>> api.setHandTorque('left', [120] * 6)
+        """
+        if len(limits) != 6:
+            raise ValueError(f'limits 要 6 個值，收到 {len(limits)}')
+        for s in self._hand_sides(side):
+            self._hand_cmd({'cmd': 'torque', 'hand': s,
+                            'torque': [int(v) for v in limits]})
+
+    def handPreset(self, name: str, side: str = 'both') -> None:
+        """執行一個預設手勢。
+
+        Args:
+            name (str): 手勢名稱，例如 `'張開'`、`'握拳'`、`'OK'`、`'一'`~`'九'`。
+                可用的名稱見 `api.hand_presets.keys()`。
+            side (str): `'left'` / `'right'` / `'both'`，預設兩手一起。
+
+        Returns:
+            None
+
+        Raises:
+            KeyError: 沒有這個手勢名稱。
+
+        Note:
+            * 位置與速度定義在 `hurocup_interface/js/hand_presets.json`，
+              **與網頁共用同一份**\ 。在網頁上調好的手勢策略這邊直接就能用。
+            * 那份 JSON 是在 API 節點啟動時讀的，改完要重跑策略才會生效。
+
+        Example:
+            >>> api.handPreset('握拳', 'left')
+            >>> api.handPreset('張開')          # 兩手
+        """
+        e = self.hand_presets.get(name)
+        if e is None:
+            raise KeyError(f'沒有這個預設動作 {name!r}，'
+                           f'可用的有 {sorted(self.hand_presets)}')
+        self.setHand(side, e['pos'], e.get('spd'))
+
+    def handGrip(self, side: str, threshold: int, mode: str = 'each',
+                 target: Optional[List[int]] = None, timeout: float = 10.0,
+                 step: int = 4, release_margin: int = 80) -> None:
+        """夾持到指定的觸覺壓力為止。
+
+        手會慢慢往閉合方向走，壓力到門檻就停住。這是**唯一真正閉迴路**的手部
+        動作，所以 `api.hand_grip_active` 轉 False 是可靠的「做完了」訊號。
+
+        Args:
+            side (str): `'left'` / `'right'` / `'both'`。兩手各夾各的，互不影響。
+            threshold (int): 壓力門檻 1~10200（五指矩陣 40 格的總和，不是公克）。
+                實測空載是 0，所以讀到數字就是真的碰到了：
+
+                * 50~150 輕觸
+                * 200~400 輕握
+                * 600~1000 紮實
+                * 2000 以上 夾死
+            mode (str): 停止條件。
+
+                * `'each'` 每根手指各自到門檻各自停（拇指兩軸一起）
+                * `'any'` 任一指到就整隻手停
+                * `'anyhand'` 任一手到就兩手一起停
+                * `'hold'` 到門檻後持續維持（會一直微調到逾時）
+            target (List[int], optional): 六軸的閉合目標位置，預設全 0（握到底）。
+                夾到東西就會提前停，所以這只是「最多收到哪裡」。
+            timeout (float): 逾時秒數。夾不到東西就到這個時間為止。
+            step (int): 每個控制週期（1/30 秒）往內收幾刻度，3~60。
+                越小越輕柔但越慢，4 大約是 120 刻度/秒。
+            release_margin (int): 只有 `'hold'` 模式用得到。壓力掉到
+                「門檻 − 此值」以下才會再夾緊，用來防止在門檻附近抖動。
+
+        Returns:
+            None
+
+        Note:
+            * **不會阻塞**\ 。要等就自己輪詢，夾持結束的理由在 `hand_grip_reason`：
+
+              >>> api.handGrip('left', 250)
+              >>> while api.hand_grip_active:
+              ...     time.sleep(0.05)
+              >>> print(api.hand_grip_reason)    # 壓力到門檻（thumb, index）/ 逾時 / ...
+
+            * 手離線或沒有壓力感測器時節點會拒絕啟動，`hand_grip_active` 不會變 True。
+            * 夾持期間節點會自動訂閱壓感，結束後退訂（除非你開了 `handTouch`）。
+
+        Example:
+            >>> # 左手輕輕抓住，最多 5 秒
+            >>> api.handGrip('left', threshold=250, mode='each', timeout=5)
+        """
+        if mode not in ('each', 'any', 'anyhand', 'hold'):
+            raise ValueError(f"mode 只接受 each / any / anyhand / hold，收到 {mode!r}")
+        p = {
+            'cmd': 'grip', 'action': 'start', 'hand': side, 'mode': mode,
+            'threshold': int(threshold),
+            'target': [int(v) for v in (target if target is not None else [0] * 6)],
+            'timeout': float(timeout),
+            'step': int(step),
+            'release_margin': int(release_margin),
+        }
+        if len(p['target']) != 6:
+            raise ValueError(f"target 要 6 個值，收到 {len(p['target'])}")
+        self._hand_cmd(p)
+
+    def handTouch(self, on: bool = True) -> None:
+        """開 / 關觸覺壓力的常駐讀取。
+
+        平常 `api.hand_mass` 只有在夾持期間才有值 —— 訂閱壓感會讓手的控制迴路
+        變鈍，所以節點用完就退訂。想在沒夾持的時候也讀壓力就先開這個。
+
+        Args:
+            on (bool): True 開、False 關。
+
+        Returns:
+            None
+
+        Note:
+            * 開著的時候夾持結束也不會被退訂。
+            * `api.hand_touch_hold` 可以確認目前是不是開著。
+
+        Example:
+            >>> api.handTouch(True)
+            >>> time.sleep(0.5)                       # 等第一筆資料進來
+            >>> print(api.hand_mass['left'])          # [thumb, index, middle, ring, little]
+        """
+        self._hand_cmd({'cmd': 'touch', 'on': bool(on)})
+
+    def handStop(self) -> None:
+        """停下手上正在做的事。
+
+        停掉夾持與動作序列播放，回到手動模式。手**保持在最後下達的位置**\ ，
+        不會彈回去，也不需要解除。
+
+        Returns:
+            None
+
+        Example:
+            >>> api.handStop()
+        """
+        self._hand_cmd({'cmd': 'stop'})
+
+    def sendHandSector(self, sector: int) -> None:
+        """執行一個手部動作磁區（Sector）。
+
+        與全身的 `sendBodySector` 對應，但走的是 `/hand/Sector`，
+        **編號空間與身體完全獨立**\ 。
+
+        Args:
+            sector (int): 手部動作編號。要先用 HandMotion 網頁的 Send 存進節點。
+
+        Returns:
+            None
+
+        Note:
+            * 不會等動作完成。
+            * 如果那個 sector 帶了停止條件（夾持步驟），執行後
+              `hand_grip_active` 會變 True，可以輪詢它等夾持結束。
+
+        Example:
+            >>> api.sendHandSector(5)
+        """
+        m = Int16()
+        m.data = int(sector)
+        self.hand_sector_pub.publish(m)
+
+    def handPlay(self, left: Optional[int] = None, right: Optional[int] = None,
+                 loop: int = 1) -> None:
+        """播放手部動作序列（MotionList）。
+
+        Args:
+            left (int, optional): 左手要播的序列 ID，不給就左手不動。
+            right (int, optional): 右手要播的序列 ID，不給就右手不動。
+            loop (int): 重複次數，0 代表無限循環。
+
+        Returns:
+            None
+
+        Note:
+            * 左右手是**各自獨立的時間軸**\ ，可以同時播不同的序列。
+            * 不會阻塞。要等就輪詢 `api.hand_play_active`。
+
+        Example:
+            >>> api.handPlay(left=10, loop=1)
+            >>> while api.hand_play_active:
+            ...     time.sleep(0.05)
+        """
+        if left is None and right is None:
+            raise ValueError('left 與 right 至少要給一個')
+        self._hand_cmd({'cmd': 'play', 'action': 'start',
+                        'left': left, 'right': right, 'loop': int(loop)})
+
+    def handPlayStop(self) -> None:
+        """停止手部動作序列的播放。
+
+        Returns:
+            None
+
+        Example:
+            >>> api.handPlayStop()
+        """
+        self._hand_cmd({'cmd': 'play', 'action': 'stop'})
 
     def drawImageFunction(self, cnt: int, mode: int,
                           xmin: int, xmax: int, ymin: int, ymax: int,
@@ -1306,7 +1817,7 @@ class API(Node):
             None
 
         Note:
-            **圓形模式**：注意圓形模式參數代表含意不同。
+            **圓形模式**\ ：注意圓形模式參數代表含意不同。
 
         Example:
             >>> # 畫直線

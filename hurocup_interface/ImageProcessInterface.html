@@ -55,6 +55,9 @@
 			document.getElementById("color_image").style.display = 'inline';
 			// document.getElementById("filter_image").style.display = 'inline';
 
+			// 重連後 rosbridge 端的訂閱都沒了，溫度要重新訂一次才會繼續進來
+			createZedTempTopic();
+
 			checkConnectionInterval = setInterval(checkConnection, 10);
 		});
 		ros.on('error', function (error) {
@@ -115,6 +118,70 @@
 				changeYUVcolorlabel(document.getElementById("yuv_colorlabel").value);
 			}
 		});
+
+		// ===== 相機溫度 =====
+		// zed_wrapper 只在「有訂閱者」時才發這條 topic，且固定 1Hz；
+		// 網頁一訂閱它才會開始出資料，斷線後 wrapper 也會自動停發，不會多花 CPU。
+		// ZED X Mini 沒有 left/right CMOS 溫度，這條 IMU 溫度就是官方診斷的 Camera Temp.，
+		// wrapper 自己的高溫警告門檻是 70°C，這裡的顏色分級跟著它走。
+		var ZedTempLastMsgTime = 0;
+
+		function updateZedTemp(celsius) {
+			var el = document.getElementById("ZedTemp");
+			if (!el) { return; }
+
+			if (celsius === null) {
+				el.innerHTML = "-- &deg;C";
+				el.style.color = "#AAA";
+				return;
+			}
+
+			el.innerHTML = celsius.toFixed(1) + " &deg;C";
+			if (celsius > 70) {
+				el.style.color = "#FF5555";		// 超過 wrapper 警告門檻
+			} else if (celsius > 60) {
+				el.style.color = "#FFD24D";		// 偏高，注意散熱
+			} else {
+				el.style.color = "#7FFF7F";
+			}
+		}
+
+		// enterAddress() 會把 websocket 關掉再連，roslib 不會自己把訂閱補回來，
+		// 所以跟 WalkingInterface 一樣做成函式，每次 connection 事件重新訂閱一次
+		var ZedTemp_Subscriber = null;
+
+		function createZedTempTopic() {
+			try {
+				if (ZedTemp_Subscriber != null) {
+					ZedTemp_Subscriber.unsubscribe();
+				}
+				ZedTemp_Subscriber = new ROSLIB.Topic({
+					ros: ros,
+					name: '/zed/zed_node/temperature/imu',
+					messageType: 'sensor_msgs/msg/Temperature'
+				});
+				ZedTemp_Subscriber.subscribe(function (msg) {
+					// 溫度只是附加顯示，出問題不該影響同一條 websocket 上的其他 topic
+					try {
+						ZedTempLastMsgTime = Date.now();
+						updateZedTemp(msg.temperature);
+					} catch (e) {
+						console.warn("ZedTemp 更新失敗:", e);
+					}
+				});
+			} catch (e) {
+				console.warn("ZedTemp 訂閱失敗:", e);
+			}
+		}
+		// 不在這裡先訂一次：ros 連上時 connection 事件一定會觸發並呼叫本函式，
+		// 提早訂會讓 roslib 把那次 subscribe 排進佇列、連上後變成重複訂閱
+
+		// 相機沒開或連線斷掉時 topic 會停，超過 5 秒沒訊息就回到灰色的 "--"
+		setInterval(function () {
+			if (Date.now() - ZedTempLastMsgTime > 5000) {
+				updateZedTemp(null);
+			}
+		}, 2000);
 
 		var ColorModelForm_Topic = new ROSLIB.Topic({
 			ros: ros,
@@ -611,6 +678,22 @@
 				}
 			});
 		}
+		// 頭部三顆 (ID 28, 29, 30) 回到 2048。speed 不能給 0，driver 寫入 Profile Velocity 時 0 代表全速。
+		var HEAD_CENTER_POS = 2048;
+		var HEAD_CENTER_SPEED = 50;
+		function HeadCenter() {
+			['Horizontal', 'Vertical', 'Roll'].forEach(function (axis, i) {
+				HeadPackagecmd.id = i + 1;
+				HeadPackagecmd.position = HEAD_CENTER_POS;
+				HeadPackagecmd.speed = HEAD_CENTER_SPEED;
+				Head_Topic.publish(HeadPackagecmd);
+
+				// 拉條跟著歸位，免得畫面顯示的位置與實際不符
+				document.getElementById(axis + "PositionValue").value = HEAD_CENTER_POS;
+				document.getElementById(axis + "PositionRange").value = HEAD_CENTER_POS;
+			});
+			console.log("[Head] Center -> " + HEAD_CENTER_POS);
+		}
 		function HeadTorqueSwitch() {
 			// 1. 切換狀態 (Toggle)
 			isHeadTorqueOn = !isHeadTorqueOn;
@@ -630,18 +713,24 @@
 				data: [29, state]
 			});
 
-			// 3. 發送指令 (連發兩次，分別給兩顆馬達)
+			// 針對 ID 30
+			var msg_m30 = new ROSLIB.Message({
+				data: [30, state]
+			});
+
+			// 3. 發送指令 (連發三次，分別給三顆馬達)
 			Torque_Topic.publish(msg_pan);
 			Torque_Topic.publish(msg_tilt);
+			Torque_Topic.publish(msg_m30);
 
 			// 4. UI 與 Log 回饋
 			if (isHeadTorqueOn) {
-				console.log("[Head Torque] ON (ID 22, 23)");
+				console.log("[Head Torque] ON (ID 28, 29, 30)");
 				// 如果你有按鈕的文字要改，可以解開下面這行
 				// document.getElementById("你的按鈕ID").value = "Torque OFF"; 
 				// document.getElementById("你的按鈕ID").style.backgroundColor = "green";
 			} else {
-				console.log("[Head Torque] OFF (ID 22, 23)");
+				console.log("[Head Torque] OFF (ID 28, 29, 30)");
 				// 如果你有按鈕的文字要改，可以解開下面這行
 				// document.getElementById("你的按鈕ID").value = "Torque ON";
 				// document.getElementById("你的按鈕ID").style.backgroundColor = "red";
@@ -934,9 +1023,63 @@
 			return "http://" + myAddress + ":8080/stream?topic=" + topic;
 		}
 
+		// ================= Topic Hz helper =================
+		// 指令的 topic 跟著目前顯示的畫面走，由 changeLeftView / changeRightView 呼叫
+		function updateHzCmd(inputId, topic) {
+			const el = document.getElementById(inputId);
+			if (el) { el.value = "ros2 topic hz " + topic; }
+		}
+
+		function toggleTopicHz() {
+			const p = document.getElementById("topic-hz-float");
+			p.style.display = (p.style.display === "block") ? "none" : "block";
+		}
+
+		function selectCmd(el) {
+			el.focus();
+			el.select();
+			// iOS Safari 不吃 select()，要用 setSelectionRange 才選得起來
+			if (el.setSelectionRange) { el.setSelectionRange(0, el.value.length); }
+		}
+
+		function copyCmd(inputId, btn) {
+			const el = document.getElementById(inputId);
+			if (!el) { return; }
+			selectCmd(el);
+
+			const done = function (ok) {
+				const original = btn.textContent;
+				btn.textContent = ok ? "Copied" : "Ctrl+C";
+				setTimeout(function () { btn.textContent = original; }, 1200);
+			};
+
+			// 這頁是用 http://IP:9999 或 file:// 開的，兩者都不是 secure context，
+			// navigator.clipboard 在那裡根本不存在（不是呼叫失敗），所以主路留給 execCommand。
+			// 有寫 clipboard 那條是為了將來真的改走 https 時不用再回來改。
+			if (navigator.clipboard && window.isSecureContext) {
+				navigator.clipboard.writeText(el.value).then(
+					function () { done(true); },
+					function () { done(legacyCopy()); }
+				);
+			} else {
+				done(legacyCopy());
+			}
+
+			function legacyCopy() {
+				try {
+					return document.execCommand("copy");
+				} catch (e) {
+					// 兩條路都不通時欄位仍是全選狀態，使用者可以直接 Ctrl+C
+					console.warn("複製失敗，請直接 Ctrl+C:", e);
+					return false;
+				}
+			}
+		}
+
 		function changeLeftView(value) {
 			const topic = (value === "depth") ? "/depth_view" : "/zoom_in";
 			document.getElementById("orign_image").src = streamUrl(topic);
+			updateHzCmd("thz-cmd-left", topic);
 			console.log("left view ->", topic);
 		}
 
@@ -949,6 +1092,7 @@
 			};
 			const [topic, panel] = map[value] || map.overlap;
 			document.getElementById("color_image").src = streamUrl(topic);
+			updateHzCmd("thz-cmd-right", topic);
 			for (const id of ["HSV_Range", "Depth_Range", "Overlap_Range"]) {
 				document.getElementById(id).style.display = (id === panel) ? "inline" : "none";
 			}
@@ -1120,8 +1264,7 @@
 
 		// ==== 最終極簡版：滑桿直通馬達 ====
 		function updateHeadMotion(axis, val) {
-			var isHorizontal = (axis === 'Horizontal');
-			var web_id = isHorizontal ? 1 : 2; 
+			var web_id = { 'Horizontal': 1, 'Vertical': 2, 'Roll': 3 }[axis]; 
 
 			// 更新網頁顯示
 			var posInput = document.getElementById(axis + "PositionValue");
@@ -1181,6 +1324,16 @@
 			document.getElementById("VerticalSpeedValue").value = newValue;
 		}
 
+		// 歪頭 Roll (ID 30)
+		function showRollPosition(newValue) { updateHeadMotion('Roll', newValue); }
+		function rangeRollPosition(newValue) { updateHeadMotion('Roll', newValue); }
+		function showRollSpeed(newValue) {
+			document.getElementById("RollSpeedValue").value = newValue;
+		}
+		function rangeRollSpeed(newValue) {
+			document.getElementById("RollSpeedValue").value = newValue;
+		}
+
 		function changeCamera() {
 			CameraId_msg.data = Number(document.getElementById("Camera_Select").value);
 			CameraId_Topic.publish(CameraId_msg);
@@ -1219,7 +1372,9 @@
 			background-color: #333;
 			border: 2px black solid;
 			width: 1000px;
-			height: 840px;
+			/* 頭部多了 Roll 拉條，改成隨內容長高；flow-root 讓外框包住裡面的 float */
+			min-height: 840px;
+			display: flow-root;
 			margin: 20px auto;
 			overflow: visible;
 			color: white;
@@ -1250,6 +1405,25 @@
 			width: 480px;
 			height: 300px;
 			border: 1px #FFF solid;
+			/* 讓 #ZedTemp 這類 HUD 能以這個框為基準做絕對定位 */
+			position: relative;
+		}
+
+		/* 相機溫度 HUD：疊在左眼畫面右上角，不佔版面。
+		   資料來自 /zed/zed_node/temperature/imu（1Hz），顏色由 updateZedTemp() 決定 */
+		#ZedTemp {
+			position: absolute;
+			top: 4px;
+			right: 4px;
+			padding: 2px 6px;
+			background-color: rgba(0, 0, 0, 0.55);
+			border-radius: 4px;
+			font-family: monospace;
+			font-size: 14px;
+			line-height: 18px;
+			color: #AAA;
+			pointer-events: none;
+			z-index: 2;
 		}
 
 		#div_color_image {
@@ -1281,7 +1455,8 @@
 
 		#select {
 			width: 480px;
-			height: 490px;
+			/* 頭部多了 Roll 拉條，改成隨內容長高 */
+			min-height: 490px;
 			margin: 10px 6px 0px 6px;
 			float: left;
 			display: inline;
@@ -1319,22 +1494,27 @@
 
 		}
 
-		/* 480px 的面板：Torque 佔左半，Clear Draw 與 Camera Save 平分右半。
+		/* 480px 的面板：Hz 只放「☰ Hz」給 10%，其餘四顆平分 22.5%（表格 table-layout: fixed），按鈕撐滿各自的格子。
+		   瀏覽器預設左右 padding 約 6px，字比按鈕寬時會靠左溢出，所以 padding 縮小並明確置中。
 		   .Button 的 margin-left 在這裡會造成溢出，所以歸零。 */
 		#B_ColorModelForm,
+		#B_HeadCenter,
+		#B_TopicHz,
 		#B_ClearDraw,
 		#B_Camera {
 			height: 25px;
 			margin: 0;
+			padding: 0 4px;
+			width: 100%;
+			box-sizing: border-box;
+			text-align: center;
+			white-space: nowrap;
 		}
 
-		#B_ColorModelForm {
-			width: 232px;
-		}
-
-		#B_ClearDraw,
-		#B_Camera {
-			width: 112px;
+		/* Horizontal 與 Roll 的馬達正方向跟畫面相反：只把拉條左右翻過來，數值不變。 */
+		#HorizontalPositionRange,
+		#RollPositionRange {
+			direction: rtl;
 		}
 
 		#Camera {
@@ -1343,6 +1523,81 @@
 
 		#B_Start {
 			width: 50px;
+		}
+
+		/* ===== Floating topic-hz helper（沿用 MotionControlInterface 計算機那套外觀） ===== */
+		#topic-hz-float {
+			display: none;
+			position: fixed;
+			top: 120px;
+			right: 20px;
+			width: 380px;
+			z-index: 9999;
+			background: rgba(8, 16, 18, 0.97);
+			border: 1px solid #03e9f4;
+			border-radius: 5px;
+			box-shadow: 0 0 20px rgba(3, 233, 244, 0.3);
+		}
+
+		#topic-hz-drag {
+			background: rgba(3, 233, 244, 0.12);
+			color: #03e9f4;
+			padding: 5px 8px;
+			cursor: move;
+			border-radius: 5px 5px 0 0;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			user-select: none;
+			font-size: 13px;
+			letter-spacing: 2px;
+		}
+
+		.thz-row {
+			display: flex;
+			align-items: center;
+			gap: 5px;
+			margin-bottom: 5px;
+		}
+
+		.thz-row:last-child {
+			margin-bottom: 0;
+		}
+
+		.thz-label {
+			width: 38px;
+			flex: none;
+			color: #03e9f4;
+			font-size: 12px;
+		}
+
+		.thz-input {
+			flex: 1;
+			min-width: 0;
+			box-sizing: border-box;
+			background: #000;
+			color: #ddd;
+			font-family: monospace;
+			font-size: 13px;
+			padding: 3px 6px;
+			border: 1px solid #03e9f4;
+		}
+
+		.thz-btn {
+			width: 56px;
+			flex: none;
+			height: 26px;
+			font-size: 12px;
+			cursor: pointer;
+			background: rgba(46, 58, 61, 0.9);
+			color: #03e9f4;
+			border: 1px solid #444;
+			border-radius: 3px;
+		}
+
+		.thz-btn:hover {
+			background: rgba(3, 233, 244, 0.25);
+			border-color: #03e9f4;
 		}
 	</style>
 	<title>HumanoidInterface</title>
@@ -1378,31 +1633,12 @@
 		LoadCamera();
 	});
 	</script>
+<script src="./js/nav.js"></script>
 </head>
 
 <body>
 	<!-- NAV BAR -->
-    <ul>
-        <li class="logo" style="width: 226px;">
-            <a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
-        </li>
-        <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
-        <li><a target="_blank" class="navbarright" style="text-decoration:underline;" href="ImageProcessInterface.html">ImageProcess</a></li>
-        <li class="dropdown">
-            <a class="navbarright" href="#">Tools ▾</a>
-            <ul class="dropdown-menu">
-                <li><a target="_blank" href="RecordInterface.html">RecordInterface</a></li>
-                <li><a target="_blank" href="NodeMonitor.html">NodeMonitor</a></li>
-                <li><a target="_blank" href="MotorMonitor.html">MotorMonitor</a></li>
-                <li><a target="_blank" href="API.html">ROS2API</a></li>                
-                <li><a target="_blank" href="miniDRC.html">miniDRC</a></li>
-                <li><a target="_blank" href="RobotViewer.html">RobotViewer</a></li>
-				<li><a target="_blank" href="WaveformMonitor.html">WaveformMonitor</a></li>
-                <li><a target="_blank" href="arm_control.html">arm_control</a></li>
-            </ul>
-        </li>
-    </ul>
+    <ul id="mainnav"></ul>
 	<br />
 	<p id="connected" style="color:#00D600; display:none; font-size: 20px;">
 		Connected
@@ -1464,6 +1700,8 @@
 						style="width:480px; height:300px; display:inline-block;"
 						src=""
 					/>
+					<!-- 相機溫度（ZED X Mini 的 IMU 溫度即官方診斷的 Camera Temp.） -->
+					<span id="ZedTemp" title="ZED camera temperature (/zed/zed_node/temperature/imu)">-- &deg;C</span>
 				</div>
 			</div>
 			<!-- </div> -->
@@ -1731,20 +1969,29 @@
 
 			<div id="select">
 				<div>
-					<table width="480">
+					<table width="480" style="table-layout: fixed;">
 						<tr>
 							<!-- <td>
 								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_Start" value="Start" onClick="WebStart()"></input>
 							</td> -->
-							<td align="center" style="width:50%">
-								<input type="button" class="Button" id="B_ColorModelForm" value=" No Torque?  Push me ʕ•ᴥ•ʔ  "
-								 onClick="HeadTorqueSwitch()"></input>
+							<!-- Hz 10%，其餘四顆平分。寬度不夠放熊，No Torque? 的完整字串與熊留在 title。 -->
+							<td align="center" style="width:22.5%">
+								<input type="button" class="Button" id="B_ColorModelForm" value="No Torque?"
+								 title=" No Torque?  Push me ʕ•ᴥ•ʔ  " onClick="HeadTorqueSwitch()"></input>
 							</td>
-							<td align="center" style="width:25%">
+							<td align="center" style="width:22.5%">
+								<input type="button" class="Button" id="B_HeadCenter" value="Head 2048"
+								 title="頭部三顆 (ID 28, 29, 30) 回到 2048" onClick="HeadCenter()"></input>
+							</td>
+							<td align="center" style="width:10%">
+								<input type="button" class="Button" id="B_TopicHz" value="☰ Hz"
+								 title="Show ros2 topic hz commands for the streams on screen" onClick="toggleTopicHz()"></input>
+							</td>
+							<td align="center" style="width:22.5%">
 								<input type="button" class="Button" id="B_ClearDraw" value="Clear Draw"
 								 onClick="ClearDrawImage()"></input>
 							</td>
-							<td align="center" style="width:25%">
+							<td align="center" style="width:22.5%">
 								<input type="button" class="Button" id="B_Camera" value="Camera Save"
 								 onClick="CameraSave()"></input>
 							</td>
@@ -1775,13 +2022,28 @@
 						</tr>
 						<tr>
 							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="VerticalPositionValue" size="12" value="2048" onchange="rangeVerticalPosition(this.value)" /></td>
-							<td><input class="Range" id="VerticalPositionRange" name="VerticalPositionRange" type="range" min="1450" max="2900"
+							<td><input class="Range" id="VerticalPositionRange" name="VerticalPositionRange" type="range" min="850" max="2400"
 								 value="2048" oninput="showVerticalPosition(this.value)" /></td>
 							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="VerticalSpeedValue" size="12" value="1" onchange="rangeVerticalSpeed(this.value)" /></td>
 						</tr>
 						<tr>
 							<td><input class="Range" id="VerticalSpeedRange" name="VerticalSpeedRange" type="range" min="1" max="200" value="1"
 								 oninput="showVerticalSpeed(this.value)" /></td>
+						</tr>
+						<tr>
+							<td colspan="3">
+								<p class="text" style="font-size: 15px;">Roll:</p>
+							</td>
+						</tr>
+						<tr>
+							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="RollPositionValue" size="12" value="2048" onchange="rangeRollPosition(this.value)" /></td>
+							<td><input class="Range" id="RollPositionRange" name="RollPositionRange" type="range" min="1024" max="3072"
+								 value="2048" oninput="showRollPosition(this.value)" /></td>
+							<td rowspan="2"><input style="width: 39px;" type="text" class="ValueText" id="RollSpeedValue" size="12" value="1" onchange="rangeRollSpeed(this.value)" /></td>
+						</tr>
+						<tr>
+							<td><input class="Range" id="RollSpeedRange" name="RollSpeedRange" type="range" min="1" max="200" value="1"
+								 oninput="showRollSpeed(this.value)" /></td>
 						</tr>
 					</table>
 				</div>
@@ -1863,6 +2125,53 @@
 		</div>
 
 	</form>
+
+	<!-- Floating topic-hz helper (outside form to avoid submit).
+	     The topic names follow the two view selectors, so you never have to
+	     remember whether it is /depth_processed_image or /depth_processed. -->
+	<div id="topic-hz-float">
+		<div id="topic-hz-drag">
+			<span>TOPIC HZ</span>
+			<span onclick="toggleTopicHz()" style="cursor:pointer; padding:0 4px; font-size:16px;">✕</span>
+		</div>
+		<div style="padding:8px;">
+			<div class="thz-row">
+				<span class="thz-label">Left</span>
+				<input type="text" id="thz-cmd-left" class="thz-input" readonly value="ros2 topic hz /zoom_in" onclick="selectCmd(this)">
+				<button type="button" class="thz-btn" onclick="copyCmd('thz-cmd-left', this)">Copy</button>
+			</div>
+			<div class="thz-row">
+				<span class="thz-label">Right</span>
+				<input type="text" id="thz-cmd-right" class="thz-input" readonly value="ros2 topic hz /overlap_image" onclick="selectCmd(this)">
+				<button type="button" class="thz-btn" onclick="copyCmd('thz-cmd-right', this)">Copy</button>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		// Drag support for the floating topic-hz panel（同 MotionControlInterface 的計算機）
+		(function () {
+			var dragging = false, ox, oy, ex, ey;
+			var handle = document.getElementById('topic-hz-drag');
+			var panel = document.getElementById('topic-hz-float');
+			if (!handle || !panel) { return; }
+
+			handle.addEventListener('mousedown', function (e) {
+				dragging = true;
+				ox = e.clientX; oy = e.clientY;
+				ex = panel.offsetLeft; ey = panel.offsetTop;
+				e.preventDefault();
+			});
+			document.addEventListener('mousemove', function (e) {
+				if (!dragging) return;
+				panel.style.left = (ex + e.clientX - ox) + 'px';
+				panel.style.top = (ey + e.clientY - oy) + 'px';
+				// 面板原本靠 right 定位，開始拖之後改成 left 主導，否則會左右都被釘住而變形
+				panel.style.right = 'auto';
+			});
+			document.addEventListener('mouseup', function () { dragging = false; });
+		})();
+	</script>
 </body>
 
 </html>
